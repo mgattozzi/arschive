@@ -1,0 +1,610 @@
+From dherman at mozilla.com  Sat Oct  2 14:14:07 2010
+From: dherman at mozilla.com (David Herman)
+Date: Sat, 2 Oct 2010 14:14:07 -0700
+Subject: [rust-dev] effect vs. stratum
+In-Reply-To: <4CA4E43C.8050803@mozilla.com>
+References: <4CA4E43C.8050803@mozilla.com>
+Message-ID: <8C195132-EF0B-4C49-957E-079460D4F302@mozilla.com>
+
+> Effects would retain the qualifiers "io" and "unsafe". Users could continue to lie about the effect of a function using "auth" clauses in the crate file. Writing to a non-local mutable field would be considered an io action for the sake of effect calculation -- after all, mutating a PRNG is more or less observationally indistinguishable from "doing IO" -- but effects would strictly describe *code*, not data. If you make a function into a first class value, of course, that value will have a function type and that function type will have an effect. But the type as a whole won't have an effect; only a function has an effect, and the effect occurs when you *call* the function. You can pass the type around all you want without worrying about its effect. Effect checking would remain useful for helping users enforce purity and safety in their code, of course.
+
+I think what you're describing here is roughly the difference between saying "types have effects" and "function types have effects". In the effect system literature, effects are placed above the arrow of a function type to indicate this distinction, e.g.:
+
+        io
+    int --> bool
+
+It sounds right to me that effects are a property of function and method types, rather than all types.
+
+And IIUC, it sounds like the other concept you're introducing, which is a property of all types, is something like a memory storage classifier, and a property of all types. Yes?
+
+> ...users would not be allowed to lie about the stratum of a type. This is important, because as it stands presently the ability to lie about state means that *everything* that touches a mis-classified stateful value is not only "likely unsafe" (in the "crash the system" sense) but also very difficult -- almost impossible -- to make safe: you would have to co-ordinate with every other reader and writer in manipulating refcounts and malloc/realloc/free actions, and ensure that everyone agreed on statefulness any time critical combinations of those actions occurred. This is not something likely achievable on a whole-program basis.
+
+This sounds right to me. Rust isn't about disallowing all unsafe constructs, it's about keeping them in a reasonably well-contained box.
+
+> Part #2 of the proposal is a bit juicier: add a third stratum back in, "gc". We had this briefly a year or so ago, called "cyclic" back then, but I think "gc" is a pithier qualifier. We merged the concept into "state" when devising the current effect system, but I suspect that was a mistake.
+> 
+> Under proposal-part-#2, the state and gc strata would both still be task-local, but splitting state from gc would have three interesting implications:
+> 
+>  - State values could be frozen and thawed, reasonably, to and from
+>    stateless values. State means acyclic-and-mutable, after all, so
+>    in the singly-referenced case this would even wind up a no-op. This
+>    is the easy case of freeze/thaw, and it'd be formally denoted in
+>    the type system. This would provide a great utility for two idioms
+>    we currently have no good way to support: freeze-and-apply-predicate
+>    and freeze-and-transmit-over-channel.
+
+I've been meaning to ask about freeze and thaw. Both of them require some kind of restriction to be safe, and I was wondering what you had in mind. In particular:
+
+- I think typestate can ensure that after you freeze something, you don't make local mutations to it, but how do you enforce that you haven't leaked the alias to someone non-local who might retain a mutable view of the data?
+
+- Similarly, if non-local code has references to something immutable and you thaw it, their belief that the data is immutable is violated.
+
+If you do have restrictions in mind that make these operations safe, in what situations can you usefully use freeze and thaw?
+
+As for the idioms you mention, the second one sounds compelling, but I'm not sure about the freeze-and-apply-predicate. That seems sort of question-begging -- the only reason you'd use freeze-and-apply-predicate is if you were already going to freeze anyway, because you were all done mutating the data.
+
+>  - State values could also have a our structural comparison definition
+>    extended to them. Again, acyclicality wins here.[2]
+
+Same question as Patrick: how do you enforce acyclic stateful types?
+
+>  - State objects could have destructors. Acyclicality, again. Yay!
+>    No more telling users to make artificial immutable sub-objects :)
+
+Ditto Patrick again: sounds good, if you really can enforce lack of cycles.
+
+> [1] Does anyone have a better term than "stratum" to describe the storage category of a type? I'm almost partial to "heap" or "pool", but that is both slightly misleading and also makes for sentences with strange grammar: "the heap of a type". Yuck.
+
+Stratum is pretty stilted, yeah. No brilliant ideas ATM, though.
+
+> [2] we could even extend comparison to gc types if we say "gc types are compared by address". It would be a little unpredictable though; I'm tempted to define a "std.util.addrcmp[gc T](&T a, &T b) -> order" that compares anything by address, along with a memcmp that compares by memory-content, and make the "built-in" operators <, =, etc. structural on acyclic types and errors when applied to a gc type. Safer, no?
+
+What would == do for gc types? Fail dynamically? Fail to type check?
+
+Dave
+
+
+From graydon at mozilla.com  Sat Oct  2 15:02:54 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 02 Oct 2010 15:02:54 -0700
+Subject: [rust-dev] effect vs. stratum
+In-Reply-To: <8C195132-EF0B-4C49-957E-079460D4F302@mozilla.com>
+References: <4CA4E43C.8050803@mozilla.com>
+	<8C195132-EF0B-4C49-957E-079460D4F302@mozilla.com>
+Message-ID: <4CA7AC0E.3090706@mozilla.com>
+
+On 02/10/2010 2:14 PM, David Herman wrote:
+> I think what you're describing here is roughly the difference between saying "types have effects" and "function types have effects". In the effect system literature, effects are placed above the arrow of a function type to indicate this distinction, e.g.:
+>
+>          io
+>      int -->  bool
+>
+> It sounds right to me that effects are a property of function and method types, rather than all types.
+
+Yes.
+
+> And IIUC, it sounds like the other concept you're introducing, which is a property of all types, is something like a memory storage classifier, and a property of all types. Yes?
+
+Yup.
+
+> - I think typestate can ensure that after you freeze something, you don't make local mutations to it, but how do you enforce that you haven't leaked the alias to someone non-local who might retain a mutable view of the data?
+
+Same as when transmitting immutable values across domains (that is, 
+between threads): the frozen version is a "detached" value. IOW the 
+operation ensures that you're singly-referenced all the way down, making 
+copies anywhere you're not. This would be a slightly modified version of 
+detachment that only applies to the stateful substructures, but the idea 
+is the same.
+
+> If you do have restrictions in mind that make these operations safe, in what situations can you usefully use freeze and thaw?
+
+Hopefully all contexts. I don't have any other restrictions in mind; did 
+you have any you were thinking of?
+
+> As for the idioms you mention, the second one sounds compelling, but I'm not sure about the freeze-and-apply-predicate. That seems sort of question-begging -- the only reason you'd use freeze-and-apply-predicate is if you were already going to freeze anyway, because you were all done mutating the data.
+
+Yes. Perhaps we're talking across purposes? The predicate classifies the 
+frozen datum into a narrower type than the un-qualified one, but can't 
+be applied to stateful data. Consider:
+
+   let tup(mutable int, mutable int) m_foo = bar();
+   m_foo._0 += 10;
+
+   let tup(int,int) foo = freeze m_foo;
+
+   // Ordered_pair makes foo narrower than tup(int, int)
+   // but could not be applied to m_foo, since it's stateful.
+   check ordered_pair(frozen);
+
+   // So now you can make this call:
+   subsystem.that.only.wants.ordered_pairs(foo);
+
+>>   - State values could also have a our structural comparison definition
+>>     extended to them. Again, acyclicality wins here.[2]
+>
+> Same question as Patrick: how do you enforce acyclic stateful types?
+
+Cyclic types are recursive types where one of the recursive edges is 
+mutable. We can identify both those facts -- mutable fields are denoted, 
+and recursion has to go through tags -- so I don't really see the hard 
+part. Why wouldn't we be able to identify them?
+
+> Stratum is pretty stilted, yeah. No brilliant ideas ATM, though.
+
+K. Keep your ears open for one :)
+
+> What would == do for gc types? Fail dynamically? Fail to type check?
+
+Fail to type check.
+
+-Graydon
+
+From graydon at mozilla.com  Sat Oct  2 20:02:31 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 02 Oct 2010 20:02:31 -0700
+Subject: [rust-dev] effect vs. stratum
+In-Reply-To: <4CA7AC0E.3090706@mozilla.com>
+References: <4CA4E43C.8050803@mozilla.com>	<8C195132-EF0B-4C49-957E-079460D4F302@mozilla.com>
+	<4CA7AC0E.3090706@mozilla.com>
+Message-ID: <4CA7F247.8000604@mozilla.com>
+
+On 02/10/2010 3:02 PM, Graydon Hoare wrote:
+
+>> If you do have restrictions in mind that make these operations safe,
+>> in what situations can you usefully use freeze and thaw?
+>
+> Hopefully all contexts. I don't have any other restrictions in mind; did
+> you have any you were thinking of?
+
+Sigh. Of course there are complications:
+
+     state obj mem(mutable int x) {
+         fn get() -> int {
+             ret x;
+         }
+         fn set(int i) {
+             x = i;
+         }
+     }
+
+     auto cell = mem(10);
+     let chan[mem] c = ...;
+     auto surprise = freeze cell;
+     c <| surprise;
+     surprise.set(11); // oops.
+
+Guess you can't freeze state objs or fns (closures), only state *data* 
+that happens to contain already-immutable objs and fns. Unless the 
+freeze operator is going to go rewriting their state-mutating code!
+
+(I mean, I guess you could implicitly have a
+
+     check sys.is_still_thawed(self);
+
+as the first statement of every method on a state-mutating object, and 
+therefore have it fail when you try to execute such a method on its 
+frozen form. But that sounds a bit too cutesy. I think I'd prefer the 
+type system tell me I'm making a mistake here.)
+
+Oh well. Sometimes code and data are just a bit too different.
+
+-Graydon
+
+From graydon at mozilla.com  Sun Oct  3 13:36:16 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 03 Oct 2010 13:36:16 -0700
+Subject: [rust-dev] effect vs. stratum
+In-Reply-To: <AANLkTi=XFbWoj-44LUXR3SnhSLLLZ19KWh=wh28KGPNe@mail.gmail.com>
+References: <4CA4E43C.8050803@mozilla.com>
+	<8C195132-EF0B-4C49-957E-079460D4F302@mozilla.com>
+	<4CA7AC0E.3090706@mozilla.com> <4CA7F247.8000604@mozilla.com>
+	<AANLkTi=XFbWoj-44LUXR3SnhSLLLZ19KWh=wh28KGPNe@mail.gmail.com>
+Message-ID: <4CA8E940.2030703@mozilla.com>
+
+On 03/10/2010 12:27 AM, Jeffrey Yasskin wrote:
+
+> Well, I see two ways to handle this problem, although there may be
+> more subtle problems lurking:
+>
+> 1) C++'s const qualifier on methods, which says that such methods
+> stick around on frozen versions of objects. Probably not good for
+> Rust.
+
+Yeah, don't really like that one. Equivalent to making it illegal to lie 
+about the state-mutation effect; if we're going to do that, might as 
+well just bite the bullet. But I think users would prefer a less-perfect 
+'freeze' operator to an un-bendable effect. At least I would. Maybe I'm 
+imagining that preference.
+
+> 2) Recursively remove "mutable" from the frozen object's arguments,
+> and then re-typecheck the methods. Methods that fail are removed from
+> the frozen type. Since surprise.set would fail to typecheck if 'x'
+> weren't mutable, it would give a "method not found" error at your
+> "oops" line. Similarly for captured arguments in frozen functions.
+
+Nope, object method bodies are opaque at the point we're doing the 
+freeze; we don't know which methods implement the interface.
+
+-Graydon
+
+From jyasskin at gmail.com  Sun Oct  3 00:27:32 2010
+From: jyasskin at gmail.com (Jeffrey Yasskin)
+Date: Sun, 3 Oct 2010 00:27:32 -0700
+Subject: [rust-dev] effect vs. stratum
+In-Reply-To: <4CA7F247.8000604@mozilla.com>
+References: <4CA4E43C.8050803@mozilla.com>
+	<8C195132-EF0B-4C49-957E-079460D4F302@mozilla.com>
+	<4CA7AC0E.3090706@mozilla.com> <4CA7F247.8000604@mozilla.com>
+Message-ID: <AANLkTi=XFbWoj-44LUXR3SnhSLLLZ19KWh=wh28KGPNe@mail.gmail.com>
+
+On Sat, Oct 2, 2010 at 8:02 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+> On 02/10/2010 3:02 PM, Graydon Hoare wrote:
+>
+>>> If you do have restrictions in mind that make these operations safe,
+>>> in what situations can you usefully use freeze and thaw?
+>>
+>> Hopefully all contexts. I don't have any other restrictions in mind; did
+>> you have any you were thinking of?
+>
+> Sigh. Of course there are complications:
+>
+> ? ?state obj mem(mutable int x) {
+> ? ? ? ?fn get() -> int {
+> ? ? ? ? ? ?ret x;
+> ? ? ? ?}
+> ? ? ? ?fn set(int i) {
+> ? ? ? ? ? ?x = i;
+> ? ? ? ?}
+> ? ?}
+>
+> ? ?auto cell = mem(10);
+> ? ?let chan[mem] c = ...;
+> ? ?auto surprise = freeze cell;
+> ? ?c <| surprise;
+> ? ?surprise.set(11); // oops.
+>
+> Guess you can't freeze state objs or fns (closures), only state *data* that
+> happens to contain already-immutable objs and fns. Unless the freeze
+> operator is going to go rewriting their state-mutating code!
+
+Well, I see two ways to handle this problem, although there may be
+more subtle problems lurking:
+
+1) C++'s const qualifier on methods, which says that such methods
+stick around on frozen versions of objects. Probably not good for
+Rust.
+2) Recursively remove "mutable" from the frozen object's arguments,
+and then re-typecheck the methods. Methods that fail are removed from
+the frozen type. Since surprise.set would fail to typecheck if 'x'
+weren't mutable, it would give a "method not found" error at your
+"oops" line. Similarly for captured arguments in frozen functions.
+
+> (I mean, I guess you could implicitly have a
+>
+> ? ?check sys.is_still_thawed(self);
+>
+> as the first statement of every method on a state-mutating object, and
+> therefore have it fail when you try to execute such a method on its frozen
+> form. But that sounds a bit too cutesy. I think I'd prefer the type system
+> tell me I'm making a mistake here.)
+>
+> Oh well. Sometimes code and data are just a bit too different.
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+From peterhull90 at gmail.com  Sun Oct 10 13:23:50 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Sun, 10 Oct 2010 21:23:50 +0100
+Subject: [rust-dev] OCaml 3.12 ?
+Message-ID: <AANLkTinf-WnkvEkYG_SHkkO-yGCsMzGv0dBV6kHN86AO@mail.gmail.com>
+
+I've suddenly started getting compile errors for rustboot and I think
+it was after I updated OCaml to 3.12 (via 'port upgrade outdated').
+What I see is,
+
+compile: boot/fe/cexp.ml
+File "boot/fe/cexp.ml", line 347, characters 15-24:
+Warning 9: the following labels are not bound in this record pattern:
+id
+Either bind these labels explicitly or add `; _' to the pattern.
+File "boot/fe/cexp.ml", line 361, characters 15-24:
+Warning 9: the following labels are not bound in this record pattern:
+id
+Either bind these labels explicitly or add `; _' to the pattern.
+File "boot/fe/cexp.ml", line 1, characters 0-1:
+Error: Error-enabled warnings (2 occurrences)
+make: *** [boot/fe/cexp.cmx] Error 2
+
+Is this something that changed in OCaml?
+
+Pete
+
+From graydon at mozilla.com  Tue Oct 12 12:20:05 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 12 Oct 2010 12:20:05 -0700
+Subject: [rust-dev] OCaml 3.12 ?
+In-Reply-To: <AANLkTinf-WnkvEkYG_SHkkO-yGCsMzGv0dBV6kHN86AO@mail.gmail.com>
+References: <AANLkTinf-WnkvEkYG_SHkkO-yGCsMzGv0dBV6kHN86AO@mail.gmail.com>
+Message-ID: <4CB4B4E5.8020207@mozilla.com>
+
+On 10-10-10 01:23 PM, Peter Hull wrote:
+
+> Is this something that changed in OCaml?
+
+Yeah, they changed pattern syntax again.
+
+I've absorbed your changes -- thanks! -- and also modified them so that 
+they don't break the existing ocaml toolchains (I think). The change 
+they made is not backward-compatible, so the use of trailing _ can't 
+really stand. I just started with your change, and went through and 
+expanded-out patterns one way or another until my version of ocaml 
+stopped complaining about syntax errors.
+
+Let me know if you find more for us to do here. We regularly stumble on 
+ocaml version drift in pattern-matching.
+
+-Graydon
+
+From graydon at mozilla.com  Tue Oct 12 12:30:59 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 12 Oct 2010 12:30:59 -0700
+Subject: [rust-dev] OCaml 3.12 ?
+In-Reply-To: <4CB4B4E5.8020207@mozilla.com>
+References: <AANLkTinf-WnkvEkYG_SHkkO-yGCsMzGv0dBV6kHN86AO@mail.gmail.com>
+	<4CB4B4E5.8020207@mozilla.com>
+Message-ID: <4CB4B773.4030001@mozilla.com>
+
+On 10-10-12 12:20 PM, Graydon Hoare wrote:
+> On 10-10-10 01:23 PM, Peter Hull wrote:
+>
+>> Is this something that changed in OCaml?
+>
+> Yeah, they changed pattern syntax again.
+>
+> I've absorbed your changes -- thanks!
+
+Also for reasons unclear to me Git decided I wrote the first part of 
+this patch instead of you. Presumably I passed the wrong flag. Sorry. 
+One of these days I will stop shooting my feet with it.
+
+-Graydon
+
+From peterhull90 at gmail.com  Tue Oct 12 12:47:58 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Tue, 12 Oct 2010 20:47:58 +0100
+Subject: [rust-dev] OCaml 3.12 ?
+In-Reply-To: <4CB4B773.4030001@mozilla.com>
+References: <AANLkTinf-WnkvEkYG_SHkkO-yGCsMzGv0dBV6kHN86AO@mail.gmail.com>
+	<4CB4B4E5.8020207@mozilla.com> <4CB4B773.4030001@mozilla.com>
+Message-ID: <AANLkTik8smNjECJZk5qOrNWkGkM7W5hfMowd+eXeixKA@mail.gmail.com>
+
+On Tue, Oct 12, 2010 at 8:30 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+> Also for reasons unclear to me Git decided I wrote the first part of this
+> patch instead of you. Presumably I passed the wrong flag. Sorry. One of
+> these days I will stop shooting my feet with it.
+
+Ah, "to labour and not to ask for any reward"... no, don't worry!
+
+After the discussion on issue #169 I thought the trailing _ was OK,
+sorry about that.
+
+I pulled the latest changes and did 'make clean && make check' - that
+was fine with no errors. So #169 and #172 can be closed now.
+
+Not that I'm an update junkie or anything, but LLVM has recently
+released 2.8 and bumped the current SVN to 2.9svn, so I had to hack
+the makefile to suit. Presumably anyone with the released version 2.8
+would be fine to build rust, and, for now, 2.9svn is OK too. This
+might change as more work is done on LLVM, of course. I can try and
+make a more robust change to Makefile if you want?
+
+Pete
+
+From graydon at mozilla.com  Thu Oct 21 14:40:56 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 21 Oct 2010 14:40:56 -0700
+Subject: [rust-dev] unit testing
+Message-ID: <4CC0B368.1060104@mozilla.com>
+
+Hi,
+
+Rust presently has no "standard" mechanism for unit testing. I'd like to 
+adopt one, or at least move towards having one. We're getting enough 
+library written-in-rust code now that it makes sense.
+
+I'm interested in pursuing a slightly-structured technique, and have 
+been considering a mechanism similar to the D 'version' and 'unittest' 
+system(s).
+
+The idea has three parts:
+
+1. Add a command-line flag to specify a set of configuration flags to 
+enable during a particular build. say -cfg win32 or such. These are not 
+structured values, just opaque strings.
+
+2. Add a syntax extension also called cfg that marks an item as 
+to-be-included only if one of its arguments appears in the set of 
+configuration flags.
+
+With 1 and 2, we'd be at the point where a module marked as, say, 
+"#cfg(test) mod test { ... }" would wind up conditionally compiled only 
+if you ran the compiler with -cfg test. (This would also double as a 
+mechanism for including modules on a per-platform basis, including debug 
+code, that sort of thing.) But programmers are lazy. So let's go one 
+step further:
+
+3. Add a *further* command-line flag called '-test' that does two things:
+
+   - Adds #cfg(test) to the set of config flags, so all test-conditional
+     code gets included.
+
+   - Changes the target the compiler's building. Instead of groveling
+     for a main function, or just building a library (as in -shared),
+     the -test target is a synthetic target that runs every function
+     marked with #test, passing in a value of type std.test.harness,
+     a basic xUnit-ish test harness.
+
+     (should also provide runtime subset-selection of tests in the
+      harness, etc, etc., but you get the idea)
+
+If this works out nicely, we can expand the interface a bit in the 
+future to include specifying a test harness rather than hard-wiring it 
+to the one in std. For the time being I'd be happy to have any sort of 
+structured system, and I'd prefer to err on the side of "discoverable" 
+rather than "configurable" for testing.
+
+(Also, this way we increase the odds of the standard-library one 
+maturing along with community needs, rather than rotting away. Nothing 
+sadder than a standard library component nobody uses!)
+
+Comments? Preferences?
+
+-Graydon
+
+From johan.torp at gmail.com  Sat Oct 23 03:24:34 2010
+From: johan.torp at gmail.com (Johan Torp)
+Date: Sat, 23 Oct 2010 12:24:34 +0200
+Subject: [rust-dev] unit testing (Graydon Hoare)
+Message-ID: <AANLkTikaRjGMJv4LA23vo1k-smspFMRUMvVh23OP+DWH@mail.gmail.com>
+
+I've haven't looked at rust for some time so I have trouble giving good
+feedback on the suggestions you have. I thought I'd share some general
+thoughts I have on unit tests tho :)
+
+In general, I think unit tests are important enough to deserve tight
+integration into the language and build system.
+
+I think iterations time are extremely important when working with unit
+tests. In particular two use cases are crucial:
+- Edit a single test, recompile, run just that one
+- Edit implementation, recompile, run a specific test
+
+If these iterations time take more than a second you immediately start
+losing cases where it's economical to write unit tests. If you keep both
+these iteration times sub-second unit tests can serve some of the purposes
+an interpreter does - and that's something really valuable.
+
+Here are my thoughts on how to acheive this;
+If you're testing code in a large module, that module must either
+incrementally rebuild superfast or each test file could be built as a
+separate module. In that case you'd only include the source files that it
+actually needs. These files could either be specified manually or inferred
+from the imports.
+
+Please consider making a framework that scales to really large projects :)
+
+Being able to test things that shouldn't compile becomes more important the
+more compile time/macro features a language has. It would also be nice if
+compile time tests looked similar to runtime ones.
+
+
+Cheers, Johan Torp
+
+On Fri, Oct 22, 2010 at 9:00 PM, <rust-dev-request at mozilla.org> wrote:
+
+> Send Rust-dev mailing list submissions to
+>        rust-dev at mozilla.org
+>
+> To subscribe or unsubscribe via the World Wide Web, visit
+>        https://mail.mozilla.org/listinfo/rust-dev
+> or, via email, send a message with subject or body 'help' to
+>        rust-dev-request at mozilla.org
+>
+> You can reach the person managing the list at
+>        rust-dev-owner at mozilla.org
+>
+> When replying, please edit your Subject line so it is more specific
+> than "Re: Contents of Rust-dev digest..."
+>
+>
+> Today's Topics:
+>
+>   1.  unit testing (Graydon Hoare)
+>
+>
+> ----------------------------------------------------------------------
+>
+> Message: 1
+> Date: Thu, 21 Oct 2010 14:40:56 -0700
+> From: Graydon Hoare <graydon at mozilla.com>
+> To: rust-dev at mozilla.org
+> Subject: [rust-dev] unit testing
+> Message-ID: <4CC0B368.1060104 at mozilla.com>
+> Content-Type: text/plain; charset=ISO-8859-1; format=flowed
+>
+> Hi,
+>
+> Rust presently has no "standard" mechanism for unit testing. I'd like to
+> adopt one, or at least move towards having one. We're getting enough
+> library written-in-rust code now that it makes sense.
+>
+> I'm interested in pursuing a slightly-structured technique, and have
+> been considering a mechanism similar to the D 'version' and 'unittest'
+> system(s).
+>
+> The idea has three parts:
+>
+> 1. Add a command-line flag to specify a set of configuration flags to
+> enable during a particular build. say -cfg win32 or such. These are not
+> structured values, just opaque strings.
+>
+> 2. Add a syntax extension also called cfg that marks an item as
+> to-be-included only if one of its arguments appears in the set of
+> configuration flags.
+>
+> With 1 and 2, we'd be at the point where a module marked as, say,
+> "#cfg(test) mod test { ... }" would wind up conditionally compiled only
+> if you ran the compiler with -cfg test. (This would also double as a
+> mechanism for including modules on a per-platform basis, including debug
+> code, that sort of thing.) But programmers are lazy. So let's go one
+> step further:
+>
+> 3. Add a *further* command-line flag called '-test' that does two things:
+>
+>   - Adds #cfg(test) to the set of config flags, so all test-conditional
+>     code gets included.
+>
+>   - Changes the target the compiler's building. Instead of groveling
+>     for a main function, or just building a library (as in -shared),
+>     the -test target is a synthetic target that runs every function
+>     marked with #test, passing in a value of type std.test.harness,
+>     a basic xUnit-ish test harness.
+>
+>     (should also provide runtime subset-selection of tests in the
+>      harness, etc, etc., but you get the idea)
+>
+> If this works out nicely, we can expand the interface a bit in the
+> future to include specifying a test harness rather than hard-wiring it
+> to the one in std. For the time being I'd be happy to have any sort of
+> structured system, and I'd prefer to err on the side of "discoverable"
+> rather than "configurable" for testing.
+>
+> (Also, this way we increase the odds of the standard-library one
+> maturing along with community needs, rather than rotting away. Nothing
+> sadder than a standard library component nobody uses!)
+>
+> Comments? Preferences?
+>
+> -Graydon
+>
+>
+> ------------------------------
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+> End of Rust-dev Digest, Vol 4, Issue 6
+> **************************************
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101023/c1a27c7a/attachment.html>
+

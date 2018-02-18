@@ -1,0 +1,112 @@
+From mark.s.baranowski at gmail.com  Mon Jan 22 20:42:39 2018
+From: mark.s.baranowski at gmail.com (Mark S. Baranowski)
+Date: Mon, 22 Jan 2018 13:42:39 -0700
+Subject: [rust-dev] Is there a way to disable struct to integer?
+Message-ID: <6de79be6-835b-514d-2350-55515da03156@gmail.com>
+
+Hello,
+
+I am working on a verifier for Rust, based on the generated LLVM code. I 
+am having an issue with code generated similar to the following
+
+struct Point {
+ ? pub x: u32,
+ ? pub y: u32
+}
+fn double_point(p: Point) -> Point {
+ ? Point { x: 2*p.x, y: 2*p.y }
+}
+fn main() {
+ ? let p = Point { x: 2, y: 3 };
+ ? let q = double_point(p);
+ ? assert!(q.x == 4 && q.y == 6);
+}
+
+The call to the double_point function is what causes the issue, as shown 
+in the following generated llvm-ir code
+
+%8 = bitcast %Point* %arg to i64*
+%9 = load i64, i64* %8, align 4
+%10 = call i64 @_ZN5point12double_point17h4b5ca79567fdc22dE(i64 %9)
+store i64 %10, i64* %abi_cast
+
+In the verifier's default mode, reads from the i64 don't work correctly, 
+giving an assertion violation. This code works if the Point structure 
+uses 64-bit ints instead, since no packing occurs.
+
+My question is: is there is a way to prevent the compiler from 
+bit-casting the structure to an integer? I am using a December 2016 
+nightly compiler, and have tried disabling all optimizations.
+
+Thanks,
+
+Mark
+
+
+From malte.schuetze at fgms.de  Mon Jan 22 20:46:22 2018
+From: malte.schuetze at fgms.de (Malte Schuetze)
+Date: Mon, 22 Jan 2018 21:46:22 +0100
+Subject: [rust-dev] Is there a way to disable struct to integer?
+In-Reply-To: <6de79be6-835b-514d-2350-55515da03156@gmail.com>
+References: <6de79be6-835b-514d-2350-55515da03156@gmail.com>
+Message-ID: <cb4fa64f-8a42-be7b-8340-e290a1f4a1ae@fgms.de>
+
+Hi Mark,
+
+this list has been dead for a while now. You are probably looking for
+https://users.rust-lang.org/ or https://internals.rust-lang.org/
+
+- ?
+
+Am 22/01/2018 um 21:42 schrieb Mark S. Baranowski:
+> Hello,
+> 
+> I am working on a verifier for Rust, based on the generated LLVM code. I
+> am having an issue with code generated similar to the following
+> 
+> struct Point {
+> ? pub x: u32,
+> ? pub y: u32
+> }
+> fn double_point(p: Point) -> Point {
+> ? Point { x: 2*p.x, y: 2*p.y }
+> }
+> fn main() {
+> ? let p = Point { x: 2, y: 3 };
+> ? let q = double_point(p);
+> ? assert!(q.x == 4 && q.y == 6);
+> }
+> 
+> The call to the double_point function is what causes the issue, as shown
+> in the following generated llvm-ir code
+> 
+> %8 = bitcast %Point* %arg to i64*
+> %9 = load i64, i64* %8, align 4
+> %10 = call i64 @_ZN5point12double_point17h4b5ca79567fdc22dE(i64 %9)
+> store i64 %10, i64* %abi_cast
+> 
+> In the verifier's default mode, reads from the i64 don't work correctly,
+> giving an assertion violation. This code works if the Point structure
+> uses 64-bit ints instead, since no packing occurs.
+> 
+> My question is: is there is a way to prevent the compiler from
+> bit-casting the structure to an integer? I am using a December 2016
+> nightly compiler, and have tried disabling all optimizations.
+> 
+> Thanks,
+> 
+> Mark
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20180122/a0791f6b/attachment.sig>
+

@@ -1,0 +1,3859 @@
+From marijnh at gmail.com  Wed Sep  7 06:32:18 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 7 Sep 2011 15:32:18 +0200
+Subject: [rust-dev] We can do without (immutable) by-alias parameters
+Message-ID: <CAJnHWXsJE+30r-xM0XDVwLxAnwTXd37tZKJfnNo62fWaJ6HF9w@mail.gmail.com>
+
+Now that structural types are always passed by reference, we can pass
+all values conceptually by alias (i.e., without doing a take/drop on
+them). The current alias analysis can be used to insert a refcount
+bump or explicit copy on the caller side in those cases where it can't
+prove the aliasing is safe.
+
+For structurally mutable types, where the value itself, not a shared
+box hanging off it, is mutable (i.e. {mutable x: int}, but not {x:
+@mutable int}), implicit copying is unsafe, so the old behaviour
+applies -- you get an error if you try to unsafely pass it to a
+function.
+
+For big structural types, where implicit copying is a silent
+performance hazard, the compiler should warn. We can come up with some
+heuristic for what counts as big. Copying a few words or
+bumping/decrementing a refcount or two can be done implicitly -- the
+cases where the copy is needed are rare (see our experiences with the
+current alias system), and the solution would have been to make a copy
+anyway. For bigger structurals, you can insert an explicit copy
+operations (currently written {x}, but let's introduce a more explicit
+syntax for that) to suppress the warning.
+
+You can still pass structural types by copy if you want to, but you'll
+have to explicitly copy it on the caller side. Needing to pass
+structurals by copy is rarely what you want my experience, so this
+seems an acceptable burden. If it turns out it's not, we can introduce
+a copying argument mode.
+
+I have a branch where this is working. We were not relying on
+pass-by-value to copy structurally mutable values in our current
+codebase, but always passing them by alias. So apart from changing the
+way arguments are translated, no other parts of the compiler had to be
+adjusted.
+
+The way this would look in code is that you simply drop the ampersands
+from your function signatures.
+
+ * This makes them a lot less ugly
+ * And this improves function interoperability -- no longer do you
+have to remember which arguments are by alias and which aren't when
+writing functions against an interface (say, AST visitors).
+
+Mutable aliases serve a different purpose. They stay. I'd like to
+write them by prepending the ampersand before the argument name, not
+the type, so you'll say 'fn(&x: int)' for a function that takes its
+first argument by mutable alias.
+
+Further ahead, I want to do the same kind of auto-copying for
+destructuring by pattern. So alt clauses remain, by default, aliasing.
+When aliasing isn't safe, you get an error for structurally mutable
+values, a warning for big structural values, and an auto-copy
+otherwise. Same with destructuring let clauses (which currently copy).
+The alias analysis is already well suited to check those.
+
+My proposal for functions-returning-an-alias will have to be revised
+if we adopt this change -- you will have to annotate explicitly which
+argument you're going to alias into. This is probably an improvement
+anyway.
+
+I'm going to keep working on my experimental branch for a bit and see
+if anything else comes up (the size and speed of the compiler are
+improved by this change, so it's looking promising). If you see a
+problem with this proposal, speak now or watch it being merged in
+somewhere next week.
+
+From pwalton at mozilla.com  Wed Sep  7 07:11:17 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 07 Sep 2011 07:11:17 -0700
+Subject: [rust-dev] We can do without (immutable) by-alias parameters
+In-Reply-To: <CAJnHWXsJE+30r-xM0XDVwLxAnwTXd37tZKJfnNo62fWaJ6HF9w@mail.gmail.com>
+References: <CAJnHWXsJE+30r-xM0XDVwLxAnwTXd37tZKJfnNo62fWaJ6HF9w@mail.gmail.com>
+Message-ID: <4E677B85.1000708@mozilla.com>
+
+I'm a little concerned that no other language I know of does this. 
+"Value types are copied, except when structural value types are passed 
+as a parameter to a function" seems like a more subtle rule than "value 
+types are always copied".
+
+I don't really see this as doing *without* by-alias parameters per se; 
+it's just making the mode (copy vs. alias) of a parameter implicit, 
+chosen based on the type. While this is attractive from the perspective 
+of having the right defaults, it also makes the semantics of the code at 
+a glance more subtle.
+
+I think I'd be more comfortable with adding an explicit sigil for copy 
+mode (* or =, say), and having the automatic default kick in if and only 
+if the sigil is left off. That way, the vast majority of the time, 
+programmers can leave off the sigils and get the right default, but if 
+the programmer needs explicit control the sigil can be supplied.
+
+In any case, I'm in favor of changing |x : &T| to |&x : T|.
+
+Patrick
+
+From marijnh at gmail.com  Wed Sep  7 07:18:10 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 7 Sep 2011 16:18:10 +0200
+Subject: [rust-dev] We can do without (immutable) by-alias parameters
+In-Reply-To: <4E677B85.1000708@mozilla.com>
+References: <CAJnHWXsJE+30r-xM0XDVwLxAnwTXd37tZKJfnNo62fWaJ6HF9w@mail.gmail.com>
+	<4E677B85.1000708@mozilla.com>
+Message-ID: <CAJnHWXtW-HQ4UxTycxMhwxJfcVz7GwcNjrA9gD5iz9qa3iuRyQ@mail.gmail.com>
+
+> While this is attractive from the perspective of having the
+> right defaults, it also makes the semantics of the code at a glance more
+> subtle.
+
+The semantics are not effected at all -- both with 'structurally
+immutable' and with immediate values, it is not observable whether the
+parameter was passed by value or by reference.
+
+But if you ignore the actual binary calling convention, you can think
+of this proposal as passing everything by reference. Immediates will
+in fact be passed by value, since this is more efficient, but the
+difference is not observable in regular, safe code.
+
+From pwalton at mozilla.com  Wed Sep  7 09:08:31 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 07 Sep 2011 09:08:31 -0700
+Subject: [rust-dev] We can do without (immutable) by-alias parameters
+In-Reply-To: <CAJnHWXtW-HQ4UxTycxMhwxJfcVz7GwcNjrA9gD5iz9qa3iuRyQ@mail.gmail.com>
+References: <CAJnHWXsJE+30r-xM0XDVwLxAnwTXd37tZKJfnNo62fWaJ6HF9w@mail.gmail.com>
+	<4E677B85.1000708@mozilla.com>
+	<CAJnHWXtW-HQ4UxTycxMhwxJfcVz7GwcNjrA9gD5iz9qa3iuRyQ@mail.gmail.com>
+Message-ID: <4E6796FF.50608@mozilla.com>
+
+On 09/07/2011 07:18 AM, Marijn Haverbeke wrote:
+>> While this is attractive from the perspective of having the
+>> right defaults, it also makes the semantics of the code at a glance more
+>> subtle.
+>
+> The semantics are not effected at all -- both with 'structurally
+> immutable' and with immediate values, it is not observable whether the
+> parameter was passed by value or by reference.
+
+Yeah, I'm more concerned about mutable structural values (e.g. records 
+with one or more mutable fields). In that case it does matter 
+semantically whether the parameter is passed by value or by alias.
+
+There aren't many languages I know of that have mutable value types -- I 
+only know of C, C++, and C# (though I wouldn't be surprised if Fortran, 
+Pascal, COBOL, or Ada had them too). To my knowledge, in all of them, 
+passing a value type as a parameter results in a copy. In C++, where 
+mutable structural value types are commonest, this often gets criticized 
+for leading to subtle bugs, so I agree we need a solution there. It may 
+well be a question of having the default mode be alias.
+
+To be clear, I'm not opposed to your proposal. I just have two concerns: 
+(a) that we are getting dangerously close to violating programmers' 
+assumptions regarding what a mutable structural value type means, and 
+(b) that we are making the ABI more difficult to predict. These concerns 
+are why I advanced the suggestion earlier: make no sigil mean "immutable 
+alias semantics, but the compiler may choose to promote to value if the 
+value is immutable and small", but have an explicit copy sigil mean 
+"always copy".
+
+Follow-up thought: If we had an explicit copy sigil, that might mean we 
+could use this function:
+
+	fn copy<T>(*x : T) -> T { x }
+
+as our copy operator...
+
+Patrick
+
+From marijnh at gmail.com  Wed Sep  7 09:30:12 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 7 Sep 2011 18:30:12 +0200
+Subject: [rust-dev] We can do without (immutable) by-alias parameters
+In-Reply-To: <4E6796FF.50608@mozilla.com>
+References: <CAJnHWXsJE+30r-xM0XDVwLxAnwTXd37tZKJfnNo62fWaJ6HF9w@mail.gmail.com>
+	<4E677B85.1000708@mozilla.com>
+	<CAJnHWXtW-HQ4UxTycxMhwxJfcVz7GwcNjrA9gD5iz9qa3iuRyQ@mail.gmail.com>
+	<4E6796FF.50608@mozilla.com>
+Message-ID: <CAJnHWXt6LUT_1zD4mrnqWZsr7NX2jw-ze=PSABNtiBuJ2Q6a3Q@mail.gmail.com>
+
+> These concerns are why I advanced
+> the suggestion earlier: make no sigil mean "immutable alias semantics, but
+> the compiler may choose to promote to value if the value is immutable and
+> small", but have an explicit copy sigil mean "always copy".
+
+I see. This is what I meant when I said " we can introduce a copying
+argument mode" -- it'd be like move-mode, but force a copy instead. I
+suggest, however, that this is so useless that it's not worth the
+added complexity.
+
+> Follow-up thought: If we had an explicit copy sigil, that might mean we
+> could use this function:
+>
+> ? ? ? ?fn copy<T>(*x : T) -> T { x }
+>
+> as our copy operator...
+
+Actually, by our current semantics, 'fn<T>(x: &T) -> T { x }' is
+already a copy operation, since ret always copies. (In my proposal,
+you would drop the &, it'd still work) Unfortunately, we generate so
+much dynamic-size cruft for such a function that it's not a very
+efficient copy operation, even when inlined. Once we have
+specializing, guaranteed-inline library function, this would be a good
+option.
+
+From graydon at mozilla.com  Wed Sep  7 10:54:51 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 07 Sep 2011 10:54:51 -0700
+Subject: [rust-dev] We can do without (immutable) by-alias parameters
+In-Reply-To: <CAJnHWXtW-HQ4UxTycxMhwxJfcVz7GwcNjrA9gD5iz9qa3iuRyQ@mail.gmail.com>
+References: <CAJnHWXsJE+30r-xM0XDVwLxAnwTXd37tZKJfnNo62fWaJ6HF9w@mail.gmail.com>	<4E677B85.1000708@mozilla.com>
+	<CAJnHWXtW-HQ4UxTycxMhwxJfcVz7GwcNjrA9gD5iz9qa3iuRyQ@mail.gmail.com>
+Message-ID: <4E67AFEB.9050106@mozilla.com>
+
+On 11-09-07 07:18 AM, Marijn Haverbeke wrote:
+
+> But if you ignore the actual binary calling convention, you can think
+> of this proposal as passing everything by reference. Immediates will
+> in fact be passed by value, since this is more efficient, but the
+> difference is not observable in regular, safe code.
+
+I'm mostly ok with this change, subject to some caveats and preferences:
+
+The key phrase in your message is "safe code". Unsafe code can observe 
+it. I want the addr-vs-copy distinction clearly spelled out in either:
+
+   - The language semantics, in the manual.
+
+or
+
+   - Something discoverable at compile time and subject to conditional
+     compilation.
+
+A mystery-heuristic that programmers can't depend on is much less 
+attractive. Users are going to write unsafe code that occasionally 
+observes the distinction. I don't want to be hiding this.
+
+Other preferences:
+
+   - I prefer the sigil as + rather than *, matches - for move-mode.
+
+   - I prefer not having a sigil, really, just using the (now existing)
+     unary 'copy' operator (works on caller or callee side).
+
+   - the {x} trick can / should be changed to use 'copy' when it occurs,
+     presently. I think! Assuming 'copy' is being translated properly
+     now.
+
+   - If we can make 'copy' into a library function, all the better; but
+     until then I'm ok with it being in the compiler. De-keywording a
+     keyword in the future is a harmless change.
+
+-Graydon
+
+From pwalton at mozilla.com  Wed Sep  7 11:09:01 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 07 Sep 2011 11:09:01 -0700
+Subject: [rust-dev] We can do without (immutable) by-alias parameters
+In-Reply-To: <4E67AFEB.9050106@mozilla.com>
+References: <CAJnHWXsJE+30r-xM0XDVwLxAnwTXd37tZKJfnNo62fWaJ6HF9w@mail.gmail.com>	<4E677B85.1000708@mozilla.com>
+	<CAJnHWXtW-HQ4UxTycxMhwxJfcVz7GwcNjrA9gD5iz9qa3iuRyQ@mail.gmail.com>
+	<4E67AFEB.9050106@mozilla.com>
+Message-ID: <4E67B33D.8080101@mozilla.com>
+
+On 9/7/11 10:54 AM, Graydon Hoare wrote:
+> On 11-09-07 07:18 AM, Marijn Haverbeke wrote:
+>
+>> But if you ignore the actual binary calling convention, you can think
+>> of this proposal as passing everything by reference. Immediates will
+>> in fact be passed by value, since this is more efficient, but the
+>> difference is not observable in regular, safe code.
+>
+> I'm mostly ok with this change, subject to some caveats and preferences:
+>
+> The key phrase in your message is "safe code". Unsafe code can observe
+> it. I want the addr-vs-copy distinction clearly spelled out in either:
+>
+> - The language semantics, in the manual.
+>
+> or
+>
+> - Something discoverable at compile time and subject to conditional
+> compilation.
+>
+> A mystery-heuristic that programmers can't depend on is much less
+> attractive. Users are going to write unsafe code that occasionally
+> observes the distinction. I don't want to be hiding this.
+
+This makes a lot of sense. +1.
+
+Making copy an explicit operator instead of an argument mode makes it 
+easy to tell where the copy is happening at the call site, which is nice 
+(unless the callee is doing the copying, which seems rare).
+
+Patrick
+
+From marijnh at gmail.com  Wed Sep  7 11:50:13 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 7 Sep 2011 20:50:13 +0200
+Subject: [rust-dev] We can do without (immutable) by-alias parameters
+In-Reply-To: <4E67AFEB.9050106@mozilla.com>
+References: <CAJnHWXsJE+30r-xM0XDVwLxAnwTXd37tZKJfnNo62fWaJ6HF9w@mail.gmail.com>
+	<4E677B85.1000708@mozilla.com>
+	<CAJnHWXtW-HQ4UxTycxMhwxJfcVz7GwcNjrA9gD5iz9qa3iuRyQ@mail.gmail.com>
+	<4E67AFEB.9050106@mozilla.com>
+Message-ID: <CAJnHWXuhe2UeioSBHmhkag4Vxv7qKK6Fjq8OwO+tHxwNaYVZcw@mail.gmail.com>
+
+> A mystery-heuristic that programmers can't depend on is much less
+> attractive. Users are going to write unsafe code that occasionally observes
+> the distinction. I don't want to be hiding this.
+
+The only point where I suggested a heuristic was for when to emit
+warning for implicit copying. The rule for what gets passed by value
+are simple -- everything that we consider a structural type is always
+passed by reference, everything else is passed by value.
+
+From marijnh at gmail.com  Fri Sep  9 09:14:39 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 9 Sep 2011 18:14:39 +0200
+Subject: [rust-dev] We can do without (immutable) by-alias parameters
+In-Reply-To: <CAJnHWXuhe2UeioSBHmhkag4Vxv7qKK6Fjq8OwO+tHxwNaYVZcw@mail.gmail.com>
+References: <CAJnHWXsJE+30r-xM0XDVwLxAnwTXd37tZKJfnNo62fWaJ6HF9w@mail.gmail.com>
+	<4E677B85.1000708@mozilla.com>
+	<CAJnHWXtW-HQ4UxTycxMhwxJfcVz7GwcNjrA9gD5iz9qa3iuRyQ@mail.gmail.com>
+	<4E67AFEB.9050106@mozilla.com>
+	<CAJnHWXuhe2UeioSBHmhkag4Vxv7qKK6Fjq8OwO+tHxwNaYVZcw@mail.gmail.com>
+Message-ID: <CAJnHWXtZHemC=fs3Q04fLYTEn4OXi4FFmqFNPM7UdEwh0RJSkg@mail.gmail.com>
+
+Update: The approach sketched earlier does not work out because it is
+possible for a function to take a parameterized type without the
+caller knowing that it does. (For example, a fn<T>(x: fn(T)), when
+given a function fn(int), will call it with the argument given by
+reference, since it sees it as type T, whereas the function will
+expect it by value.)
+
+The only sane solution seems to be to pass everything by reference.
+This sound awful but, for some obscure reason, actually shrinks our
+(optimized) compiler by 124k. This suggests that llvm wasn't being
+very clever about eliminiating allocas anyway.
+
+So I'm going to continue exploring this idea. Will come back with
+benchmarks when available.
+
+From pwalton at mozilla.com  Fri Sep  9 09:15:43 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 09 Sep 2011 09:15:43 -0700
+Subject: [rust-dev] We can do without (immutable) by-alias parameters
+In-Reply-To: <CAJnHWXtZHemC=fs3Q04fLYTEn4OXi4FFmqFNPM7UdEwh0RJSkg@mail.gmail.com>
+References: <CAJnHWXsJE+30r-xM0XDVwLxAnwTXd37tZKJfnNo62fWaJ6HF9w@mail.gmail.com>
+	<4E677B85.1000708@mozilla.com>
+	<CAJnHWXtW-HQ4UxTycxMhwxJfcVz7GwcNjrA9gD5iz9qa3iuRyQ@mail.gmail.com>
+	<4E67AFEB.9050106@mozilla.com>
+	<CAJnHWXuhe2UeioSBHmhkag4Vxv7qKK6Fjq8OwO+tHxwNaYVZcw@mail.gmail.com>
+	<CAJnHWXtZHemC=fs3Q04fLYTEn4OXi4FFmqFNPM7UdEwh0RJSkg@mail.gmail.com>
+Message-ID: <4E6A3BAF.5060308@mozilla.com>
+
+On 9/9/11 9:14 AM, Marijn Haverbeke wrote:
+> Update: The approach sketched earlier does not work out because it is
+> possible for a function to take a parameterized type without the
+> caller knowing that it does. (For example, a fn<T>(x: fn(T)), when
+> given a function fn(int), will call it with the argument given by
+> reference, since it sees it as type T, whereas the function will
+> expect it by value.)
+>
+> The only sane solution seems to be to pass everything by reference.
+> This sound awful but, for some obscure reason, actually shrinks our
+> (optimized) compiler by 124k. This suggests that llvm wasn't being
+> very clever about eliminiating allocas anyway.
+
+Not with gcroot. gcroot basically turns off mem2reg.
+
+This is why we need to rewrite LLVM's GC handling at some point :)
+
+Patrick
+
+
+From pwalton at mozilla.com  Fri Sep  9 09:18:09 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 09 Sep 2011 09:18:09 -0700
+Subject: [rust-dev] We can do without (immutable) by-alias parameters
+In-Reply-To: <CAJnHWXtZHemC=fs3Q04fLYTEn4OXi4FFmqFNPM7UdEwh0RJSkg@mail.gmail.com>
+References: <CAJnHWXsJE+30r-xM0XDVwLxAnwTXd37tZKJfnNo62fWaJ6HF9w@mail.gmail.com>
+	<4E677B85.1000708@mozilla.com>
+	<CAJnHWXtW-HQ4UxTycxMhwxJfcVz7GwcNjrA9gD5iz9qa3iuRyQ@mail.gmail.com>
+	<4E67AFEB.9050106@mozilla.com>
+	<CAJnHWXuhe2UeioSBHmhkag4Vxv7qKK6Fjq8OwO+tHxwNaYVZcw@mail.gmail.com>
+	<CAJnHWXtZHemC=fs3Q04fLYTEn4OXi4FFmqFNPM7UdEwh0RJSkg@mail.gmail.com>
+Message-ID: <4E6A3C41.2070900@mozilla.com>
+
+On 9/9/11 9:14 AM, Marijn Haverbeke wrote:
+> Update: The approach sketched earlier does not work out because it is
+> possible for a function to take a parameterized type without the
+> caller knowing that it does. (For example, a fn<T>(x: fn(T)), when
+> given a function fn(int), will call it with the argument given by
+> reference, since it sees it as type T, whereas the function will
+> expect it by value.)
+
+Oh, another thing: Monomorphizing fixes this problem, so it's worth 
+keeping this idea in mind for the future, even if it can't be 
+implemented in trans as it currently stands.
+
+Patrick
+
+From banderson at mozilla.com  Sun Sep 11 16:46:20 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Sun, 11 Sep 2011 16:46:20 -0700
+Subject: [rust-dev] LLVM version bump to 139459
+Message-ID: <4E6D484C.3030509@mozilla.com>
+
+I've bumped up the LLVM revision on the tinderboxes to 139459. This has 
+exception handling fixes that we will need for unwinding.
+
+From marijnh at gmail.com  Mon Sep 12 04:10:06 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 12 Sep 2011 13:10:06 +0200
+Subject: [rust-dev] The revised argument-mode system is a fact
+Message-ID: <CAJnHWXuP4aHE2w1uYacKstzML5pY6CBfhbU9xm-bjCY-6dwm4A@mail.gmail.com>
+
+Where you used to write
+
+    fn(by_alias: &some_ty, by_mut_alias: &mutable [int], by_move: -int) { ... }
+
+You now write
+
+    fn(by_reference: some_ty, &by_mut_reference: [int], -by_move: int) { ... }
+
+That is, the mode glyph now comes before the argument name (in
+function types, when there is no argument name, it comes before the
+type as it used to). The & glyph now denotes mutable reference. All
+arguments without explicitly specified mode are now passed by
+reference, with the alias analysis inserting copies when it detects an
+unsafe aliasing that can be copied without a change in semantics.
+You'll still see alias errors when a copy is not possible because the
+value is structurally mutable.
+
+From marijnh at gmail.com  Tue Sep 13 09:11:16 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 13 Sep 2011 18:11:16 +0200
+Subject: [rust-dev] Two small syntax change proposals.
+Message-ID: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+
+Would anyone be opposed to...
+
+A) Marking 'free' blocks (blocks not part of a
+function/loop/if/alt/etc, but used solely for a new scope or to do
+something before an expression) with a more explicit syntax.
+
+This has the advantage of making them easier to spot and parse
+(distinguishing '{ foo; bar; }' from '{mutable foo: bar}' as syntactic
+elements isn't hard, but somewhat clunky) and resolving the obscure
+ambiguity in 'if fail { blah }' (where {blah} could be an argument to
+fail -- or put, or ret). Prefixing these blocks with some keyword
+would make it more obvious that they are being used, introduce some
+symmetry with other kinds of blocks, and solve these issues. Question
+is, which keyword. I wanted to go with 'do' at first, but Brian
+pointed out that this is in fact ambiguous. 'block'? 'begin'? 'run'?
+Some ascii trick like '%{'?
+
+B) Limiting implied-semicolons-after-blocks to blocks that end with a
+trailing semicolon, requiring blocks in loops (where the value is
+discarded anyway) to end in a trailing semicolon, and always treating
+blocks that do end in semicolons as the end of the expression.
+
+Right now, you can say 'while true { 1 }' and starting a line after a
+trailing-block expression (say 'if x { a(); } else { b(); }') with a
+'(' or a '[' will cause the parser to think you're trying to call or
+index the result of the if expression.
+
+From graydon at mozilla.com  Wed Sep 14 07:48:38 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 14 Sep 2011 07:48:38 -0700
+Subject: [rust-dev] Two small syntax change proposals.
+In-Reply-To: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+References: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+Message-ID: <4E70BEC6.2070801@mozilla.com>
+
+On 13/09/2011 9:11 AM, Marijn Haverbeke wrote:
+> Would anyone be opposed to...
+>
+> A) Marking 'free' blocks (blocks not part of a
+> function/loop/if/alt/etc, but used solely for a new scope or to do
+> something before an expression) with a more explicit syntax.
+>
+> This has the advantage of making them easier to spot and parse
+> (distinguishing '{ foo; bar; }' from '{mutable foo: bar}' as syntactic
+> elements isn't hard, but somewhat clunky) and resolving the obscure
+> ambiguity in 'if fail { blah }' (where {blah} could be an argument to
+> fail -- or put, or ret). Prefixing these blocks with some keyword
+> would make it more obvious that they are being used, introduce some
+> symmetry with other kinds of blocks, and solve these issues. Question
+> is, which keyword. I wanted to go with 'do' at first, but Brian
+> pointed out that this is in fact ambiguous. 'block'? 'begin'? 'run'?
+> Some ascii trick like '%{'?
+
+In order of preference (to me):
+
+   - Use 'val'. Newsqueak (a strong influence on Rust) has a 'val'
+     expression form that works this way[1].
+
+   - Use 'do' and remove do-while loops. They're rare anyways and can
+     always be rewritten as a somewhat-clunky break:
+
+     'do { ... } while (cond);'
+
+       turns into
+
+     'while (true) { ...; if (!cond) { break; } }'
+
+   - Use 'begin', though I loathe it.
+
+   - Use an ASCII sigil of some sort. I'm still hoping we can get rid
+     of the wonky 'ident.' random-ASCII-sigil we're using in alts; adding
+     more is pretty unappealing!
+
+-Graydon
+
+[1] This footnote might really interest you! Re-reading the Newsqueak 
+manual (http://swtch.com/~rsc/thread/newsqueak.pdf), I found that their 
+solution to the expr/stmt split is somewhat elegant, and differs from 
+ours. Their approach is that there are statements 'become x' and 'result 
+x', in place of returns and/or expr-stmts. The 'become' statement 
+replaces the entire frame with x (a tail-call-or-return, effectively; we 
+could leave this as 'ret' in absence of tail calls) whereas the 'result' 
+statement stops executing the innermost 'val { ... }' expression and 
+sets its value (as an expression) to x; and it's an error to have a 
+control path in a 'val' block that doesn't have a 'result' statement, 
+same as it would be to fall off the end of a frame.
+
+These two combine in a nice, if chatty, way. The advantages over our 
+scheme are clarity and flexibility: it's not overloading the presence or 
+absence of a semicolon to indicate a block-result value, and you can put 
+'result' statements in unusual places like if-branches-within-loops that 
+are somewhat difficult for us to express.
+
+So for us, for example:
+
+'let x = val { let y = foo(); y*y }'
+
+   turns into
+
+'let x = val { let y = foo(); res y * y; }'
+
+Obviously more verbose, but less syntactically confusing?
+
+-Graydon
+
+From graydon at mozilla.com  Wed Sep 14 08:03:16 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 14 Sep 2011 08:03:16 -0700
+Subject: [rust-dev] Two small syntax change proposals.
+In-Reply-To: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+References: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+Message-ID: <4E70C234.6040406@mozilla.com>
+
+On 13/09/2011 9:11 AM, Marijn Haverbeke wrote:
+
+> B) Limiting implied-semicolons-after-blocks to blocks that end with a
+> trailing semicolon, requiring blocks in loops (where the value is
+> discarded anyway) to end in a trailing semicolon, and always treating
+> blocks that do end in semicolons as the end of the expression.
+>
+> Right now, you can say 'while true { 1 }' and starting a line after a
+> trailing-block expression (say 'if x { a(); } else { b(); }') with a
+> '(' or a '[' will cause the parser to think you're trying to call or
+> index the result of the if expression.
+
+This one is ... a confusing set of rules. I take it empty loops have an 
+implied trailing semi in their body? That is: "while true {}"? I know 
+it's a degenerate case, just trying to clarify.
+
+It seems to me a lot of look-behind / look-inside for a parser to be 
+doing, in order to disambiguate. Might it be easier to say that *all* 
+the ends-in-a-}-expressions represent the end of their enclosing 
+expression? That is, don't parse postfix or binary ops immediately after 
+a }, at all?
+
+This would mean
+
+'if foo { a } else { b } - 10'
+
+   would parse as 2 expr-stmts, the second one being "-10", and
+   must be written the following way to get its binop-meaning:
+
+'(if foo { a } else { b }) - 10'
+
+that doesn't seem a *huge* penalty to me, and is possibly closer to user 
+intuitions about control-flow braces anyways.
+
+Note that some of this muddle might go away if we remove general 
+expr-stmts (as mentioned in footnote of previous email) and went with 
+separate res stmts to "get a value from a block". Though we'd probably 
+need to leave some special cases in for leading-lval forms such as 
+"foo();" or "foo = bar;". Hrm hrm.
+
+-Graydon
+
+From marijnh at gmail.com  Wed Sep 14 08:13:19 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 14 Sep 2011 17:13:19 +0200
+Subject: [rust-dev] Two small syntax change proposals.
+In-Reply-To: <4E70C234.6040406@mozilla.com>
+References: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+	<4E70C234.6040406@mozilla.com>
+Message-ID: <CAJnHWXsvn5eHoR51mkwQaWMz91fyjnPPPa0-afVACJ625jTL8Q@mail.gmail.com>
+
+> This one is ... a confusing set of rules. I take it empty loops have an
+> implied trailing semi in their body? That is: "while true {}"? I know it's a
+> degenerate case, just trying to clarify.
+
+{} is a non-expression block. The phrase 'trailing semicolon' was
+badly picked. The deciding factor is whether there is a trailing
+expression or not.
+
+> It seems to me a lot of look-behind / look-inside for a parser to be doing,
+> in order to disambiguate.
+
+Not really. The two kinds of blocks (expr-block, stmt-block) become
+different syntactic elements. The code to decide which is which is
+already in the parser.
+
+> This would mean
+> 'if foo { a } else { b } - 10'
+> ?would parse as 2 expr-stmts,
+
+I think this is even worse than the current situation. The 'res'
+proposal might be acceptable, but let's please not do this. I think,
+though, that with my proposed changes the current approach should work
+pretty well, and I like it better than having 'res'. Plus, the main
+problem I'm trying to solve here is specifying which elements need a
+trailing semicolon in a sane way. That wouldn't be solved by the 'res'
+keyword.
+
+From marijnh at gmail.com  Wed Sep 14 08:14:22 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 14 Sep 2011 17:14:22 +0200
+Subject: [rust-dev] Two small syntax change proposals.
+In-Reply-To: <4E70BEC6.2070801@mozilla.com>
+References: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+	<4E70BEC6.2070801@mozilla.com>
+Message-ID: <CAJnHWXv9LqDaFDcBLzmAqnDqRrdaHu=5G1MfW5pibh=zR2f5Qg@mail.gmail.com>
+
+> ?- Use 'do' and remove do-while loops
+
+I like this. (But then, I'm always biased towards removing things.)
+
+From pwalton at mozilla.com  Wed Sep 14 10:23:57 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 14 Sep 2011 10:23:57 -0700
+Subject: [rust-dev] Two small syntax change proposals.
+In-Reply-To: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+References: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+Message-ID: <4E70E32D.5010501@mozilla.com>
+
+I have a few ideas that I've been tossing around that may fix some of 
+these issues:
+
+(1) ML-style expression |if|. So |if| as an expression would be written 
+|if cond then expr else expr|, while statement-if would remain the same. 
+The expressions aren't braced and the first is preceded by |then|, which 
+avoids the ambiguity between expression-if and statement-if. 
+CoffeeScript uses the same trick to disambiguate between the two forms. 
+This could replace the ternary as well.
+
+(2) Remove expression-while, expression-do-while and expression-for; 
+make them statements. These don't have useful completion values, except 
+for maybe expression-do-while... but that is a rare construct.
+
+The above two points should eliminate the "statement-that-ends-in-} 
+precedes index or call op" ambiguity. It also makes |while (true) { 1 }| 
+no longer allowed.
+
+(3) Ignore trailing semicolons, just as in OCaml. In other words, the 
+final expression of a block may be followed by a ';'. This avoids a 
+common hazard (the fact that ';' changes the return value) which 
+newcomers to Rust tend to stumble over.
+
+(4) Make |ret| a statement, avoiding the "if ret { ... }" ambiguity.
+
+(5) Make |fail| a function in the standard library, or at least require 
+mandatory parentheses around its argument.
+
+The above two mini-proposals should eliminate the "if 
+expr-that-takes-an-optional-operand {" ambiguity.
+
+Thoughts?
+
+Patrick
+
+From marijnh at gmail.com  Wed Sep 14 10:55:10 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 14 Sep 2011 19:55:10 +0200
+Subject: [rust-dev] Two small syntax change proposals.
+In-Reply-To: <4E70E32D.5010501@mozilla.com>
+References: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+	<4E70E32D.5010501@mozilla.com>
+Message-ID: <CAJnHWXs4hTV3s95YPdcJ64PyzG3Jk95s6ECV2xND669zPS6L6Q@mail.gmail.com>
+
+> Thoughts?
+
+So do you intend to make bracey-if a statement? What about
+expression-alt? That'd still have the current awkwardness when
+followed by '(' or '['.
+
+From pwalton at mozilla.com  Wed Sep 14 10:57:39 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 14 Sep 2011 10:57:39 -0700
+Subject: [rust-dev] Two small syntax change proposals.
+In-Reply-To: <CAJnHWXs4hTV3s95YPdcJ64PyzG3Jk95s6ECV2xND669zPS6L6Q@mail.gmail.com>
+References: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+	<4E70E32D.5010501@mozilla.com>
+	<CAJnHWXs4hTV3s95YPdcJ64PyzG3Jk95s6ECV2xND669zPS6L6Q@mail.gmail.com>
+Message-ID: <4E70EB13.6000502@mozilla.com>
+
+On 9/14/11 10:55 AM, Marijn Haverbeke wrote:
+>> Thoughts?
+>
+> So do you intend to make bracey-if a statement? What about
+> expression-alt? That'd still have the current awkwardness when
+> followed by '(' or '['.
+
+Oh right, alt too. Maybe ML-style alt as well:
+
+	let x = alt y of some(z) { z } | none. { 0 };
+
+Patrick
+
+From graydon at mozilla.com  Wed Sep 14 11:00:45 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 14 Sep 2011 11:00:45 -0700
+Subject: [rust-dev] Two small syntax change proposals.
+In-Reply-To: <4E70E32D.5010501@mozilla.com>
+References: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+	<4E70E32D.5010501@mozilla.com>
+Message-ID: <4E70EBCD.6030406@mozilla.com>
+
+General responses:
+
+  - The if/then/else form of if-exprs will not satisfy ternary users,
+    I imagine, and requires a bunch of lookahead to find the 'then';
+    I don't particularly like the look of it.
+
+  - Doesn't solve 'alt', does it?
+
+  - Still requires the do { ... } block, no?
+
+  - I believe a large measure of the purpose of expr-izing everything
+    was to achieve greater compositionality in the grammar, i.e. for
+    macro uses and whatnot. I think that's still a valid concern,
+    so am hesitant to stmt-ize a grab-bag of exprs as suggested.
+
+  - If we "ignore" trailing semis, don't we force people to write
+    final-"nil" with some frequency, as in ML? I thought we had a pretty
+    hard set of competing forces that pushed us into our current rules.
+
+IOW, I think what marijn's doing is the least-intrusive; it's just a 
+matter of tightening up the rules where we inject final-"nil" on behalf 
+of the user. I think!
+
+-Graydon
+
+From pwalton at mozilla.com  Wed Sep 14 11:10:33 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 14 Sep 2011 11:10:33 -0700
+Subject: [rust-dev] Two small syntax change proposals.
+In-Reply-To: <4E70EBCD.6030406@mozilla.com>
+References: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+	<4E70E32D.5010501@mozilla.com> <4E70EBCD.6030406@mozilla.com>
+Message-ID: <4E70EE19.9070508@mozilla.com>
+
+On 9/14/11 11:00 AM, Graydon Hoare wrote:
+> General responses:
+>
+> - The if/then/else form of if-exprs will not satisfy ternary users,
+> I imagine, and requires a bunch of lookahead to find the 'then';
+> I don't particularly like the look of it.
+>
+> - Doesn't solve 'alt', does it?
+>
+> - Still requires the do { ... } block, no?
+>
+> - I believe a large measure of the purpose of expr-izing everything
+> was to achieve greater compositionality in the grammar, i.e. for
+> macro uses and whatnot. I think that's still a valid concern,
+> so am hesitant to stmt-ize a grab-bag of exprs as suggested.
+
+Fair enough; if others don't like separate expression and statement 
+forms, I'd vote for |val| for block-expression, without the |res| (it's 
+an interesting idea, but I'm not sure it's necessary -- maybe something 
+to think about for future versions?) I suspect |val| will be rare.
+
+> - If we "ignore" trailing semis, don't we force people to write
+> final-"nil" with some frequency, as in ML? I thought we had a pretty
+> hard set of competing forces that pushed us into our current rules.
+
+Only if we expect people to ignore return values a lot. I'd prefer that 
+people didn't, but I guess this is orthogonal to the issue at hand.
+
+Patrick
+
+From pwalton at mozilla.com  Wed Sep 14 12:13:01 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 14 Sep 2011 12:13:01 -0700
+Subject: [rust-dev] Two small syntax change proposals.
+In-Reply-To: <4E70EE19.9070508@mozilla.com>
+References: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+	<4E70E32D.5010501@mozilla.com> <4E70EBCD.6030406@mozilla.com>
+	<4E70EE19.9070508@mozilla.com>
+Message-ID: <4E70FCBD.2000908@mozilla.com>
+
+On 9/14/11 11:10 AM, Patrick Walton wrote:
+> Fair enough; if others don't like separate expression and statement
+> forms, I'd vote for |val| for block-expression, without the |res| (it's
+> an interesting idea, but I'm not sure it's necessary -- maybe something
+> to think about for future versions?) I suspect |val| will be rare.
+
+Come to think of it, this actually solves an ugliness in C++: the 
+"artificial block" pattern used when you want to run a destructor at 
+some specified time. You see stuff like this in C++:
+
+	...
+	{
+	    auto_ptr<some_big_data_structure> ptr =
+	        make_big_data_structure();
+             cout << ptr.to_string();
+	    // I want the pointer immediately destroyed here
+         }
+         ...
+
+But the artificial blocks look pretty ugly. With |val| (or |do|) we 
+could make it nicer:
+
+	...
+	do {
+	    let ptr = ~make_big_data_structure();
+	    log ptr;
+	    // I want the pointer immediately destroyed here
+	}
+	...
+
+Patrick
+
+From marijnh at gmail.com  Thu Sep 15 01:48:03 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Thu, 15 Sep 2011 10:48:03 +0200
+Subject: [rust-dev] Two small syntax change proposals.
+In-Reply-To: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+References: <CAJnHWXsou-nPZf=Fc3KyruU9ZJJpQPjpvs-wGi_SoMO2Q9ZZgQ@mail.gmail.com>
+Message-ID: <CAJnHWXsRV-AHgK9SqFyFufe31frPQZ7d2YRrfQugnUJScJKMUg@mail.gmail.com>
+
+> B) Limiting implied-semicolons-after-blocks to blocks that end with a
+> trailing semicolon, requiring blocks in loops (where the value is
+> discarded anyway) to end in a trailing semicolon, and always treating
+> blocks that do end in semicolons as the end of the expression.
+
+I went ahead and committed this. We'll see how pleasant it is in
+practice, and revise it if people find issues.
+
+From marijnh at gmail.com  Fri Sep 16 14:10:36 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 16 Sep 2011 23:10:36 +0200
+Subject: [rust-dev] The lowdown on return-by-reference
+Message-ID: <CAJnHWXsutnn+o62Wmx+tL_Sg5AdELgS5Krb=yFP5WthXuR_jWA@mail.gmail.com>
+
+The problem: Accessor functions always have to copy their return
+value, so you can't efficiently get at the content of data structures
+(except by duplicating the logic needed to access them).
+
+The original solution proposed was to pass the accessor a block and
+pass the value to that block by reference. This would cause blocks to
+spring up everywhere (with all the indentation and noise that comes
+with it) and be extremely un-composable. A while ago I wrote a message
+to this list proposing a system whereby functions could return
+references. This week, I've finally implemented that. The exact syntax
+and semantics are not yet set in stone, so if you see room for
+improvement, reply.
+
+Feature 1: Let bindings can now bind by reference.
+
+    let &x = foo.bar;
+
+This does not copy the content of foo.bar, but introduces a local that
+references it. The lifetime of this local can not exceed that of foo
+(you can't use it after you've overwritten foo). Currently,
+by-reference locals can not be assigned to at all, and must always be
+initialized right away (this was a complexity tradeoff -- assignment
+which replaces the contents of the referred-to value could be
+implemented).
+
+You can put destructuring patterns after 'let &', but you can't mix
+by-copy and by-reference bindings in a single destructuring pattern.
+
+Feature 2: Return-by-reference.
+
+   fn get<T>(o: option::t<T>) -> &T
+
+Putting an ampersand in front of the return value of a function
+indicates that the function returns a reference pointing into one of
+its arguments. Alias analysis will base the lifetime of the returned
+reference on the lifetime of the argument. It'll also verify, inside
+the reference-returning-function, that the returning happens in a safe
+way. You can then do things like this:
+
+    let x = get(foo).bar; // Access the reference directly.
+    let &y = get(foo); // Or store it in a by-reference argument
+    let z = get(foo); // This will cause the referred-to value to be
+copied, so you don't need two variants of accessors
+
+If your function takes more than one argument, you have to specify
+which argument you are referencing by providing a number after the &
+
+    fn elt<T>(v: [T], n: uint) -> &1 T
+
+This is 1-based, 0 is reserved for later use.
+
+The above assumes the referenced value is immutably rooted in the
+argument (the argument is not mutable in a way that might overwrite
+the reference). When this is not the case, you have to annotate it
+with an !
+
+    fn current_val(c: cell) -> &!content
+
+This will make the resulting reference somewhat less convenient to use
+-- as soon as the value of anything that might alias it (currently by
+simple type-based alias analysis), it is invalidated, since that might
+result in the value being overwritten. Still, for careful use, or for
+immediate consumption, such aliases are much more efficient than
+making a copy.
+
+One major unimplemented part is returning references to the content of
+objs (this is what &0 is reserved for). The opaque nature of object
+types makes this somewhat more tricky to check, but I think I've
+worked out a reasonably convenient way to do it. When I have that,
+I'll be able to make map.get and map.find return aliases (which was
+the motivating example for this whole exercise).
+
+From pwalton at mozilla.com  Fri Sep 16 14:40:35 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 16 Sep 2011 14:40:35 -0700
+Subject: [rust-dev] The lowdown on return-by-reference
+In-Reply-To: <CAJnHWXsutnn+o62Wmx+tL_Sg5AdELgS5Krb=yFP5WthXuR_jWA@mail.gmail.com>
+References: <CAJnHWXsutnn+o62Wmx+tL_Sg5AdELgS5Krb=yFP5WthXuR_jWA@mail.gmail.com>
+Message-ID: <4E73C253.8090407@mozilla.com>
+
+On 9/16/11 2:10 PM, Marijn Haverbeke wrote:
+> The problem: Accessor functions always have to copy their return
+> value, so you can't efficiently get at the content of data structures
+> (except by duplicating the logic needed to access them).
+>
+> The original solution proposed was to pass the accessor a block and
+> pass the value to that block by reference. This would cause blocks to
+> spring up everywhere (with all the indentation and noise that comes
+> with it) and be extremely un-composable. A while ago I wrote a message
+> to this list proposing a system whereby functions could return
+> references. This week, I've finally implemented that. The exact syntax
+> and semantics are not yet set in stone, so if you see room for
+> improvement, reply.
+
+How about having container types in which accessors swap the original 
+with none?
+
+fn get_swap<T>(&mutable option<T> : opt) -> T {
+	let opt2 = none;
+	opt :=: opt2;
+	ret alt opt2 { none. { fail } some(x) { x } }
+}
+
+Rationale: For boxes (option<@T>) get() is fine; it just returns a 
+pointer (maybe bumping an RC; in GC this is free). For interior types 
+(option<large_rec>)... well, programmers are paying a huge 
+performance/memory penalty for these anyway, because |none| is so large, 
+so I'm not sure it's worth optimizing. For unique pointers (vectors, 
+strings too), this is where we get big wins for performance, and it 
+seems to me that we can easily optimize the return statement above to 
+move the pointer.
+
+I've been quite concerned about the complexity of incorporating 
+type-based alias analysis into the language semantics for some time. 
+TBAA is traditionally an optimization, not something necessary for 
+soundness. I'd like to see how far we can go with alias analysis that 
+isn't type-based, but rather layer- (interior/unique/box) and 
+mutability-based.
+
+Patrick
+
+From pwalton at mozilla.com  Fri Sep 16 14:52:05 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 16 Sep 2011 14:52:05 -0700
+Subject: [rust-dev] The lowdown on return-by-reference
+In-Reply-To: <4E73C253.8090407@mozilla.com>
+References: <CAJnHWXsutnn+o62Wmx+tL_Sg5AdELgS5Krb=yFP5WthXuR_jWA@mail.gmail.com>
+	<4E73C253.8090407@mozilla.com>
+Message-ID: <4E73C505.8040307@mozilla.com>
+
+On 9/16/11 2:40 PM, Patrick Walton wrote:
+> fn get_swap<T>(&mutable option<T> : opt) -> T {
+>      let opt2 = none;
+>      opt :=: opt2;
+>      ret alt opt2 { none. { fail } some(x) { x } }
+> }
+
+Sorry, this should read:
+
+fn get_swap<T>(&mutable opt : option<T>) -> T {
+     let opt2 = none;
+     opt :=: opt2;
+     ret alt opt2 { none. { fail } some(x) { x } }
+}
+
+
+From pwalton at mozilla.com  Fri Sep 16 20:28:41 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 16 Sep 2011 20:28:41 -0700
+Subject: [rust-dev] Precedent for our aliases and unique types
+Message-ID: <4E7413E9.9000000@mozilla.com>
+
+I've been reading through some of the literature on unique types. Here's 
+where Rust as it stands today fits into the picture, as far as I can tell.
+
+The traditional implementations of unique types (as implemented in N. 
+Minsky's Eiffel* [1], most notably) follow the logic of Wadler [2], in 
+which reads to the unique pointer null out the pointer. In this 
+scenario, whenever you move a unique pointer, the original gets nulled 
+out, and attempts to access it fail at runtime. This is known as a 
+"destructive read".
+
+Because passing around unique pointers is very inconvenient when 
+destructive reading (or copying) is the only option, Eiffel* includes 
+the concept of "dynamic aliases" to unique pointers, which are basically 
+our aliases minus the recently-introduced ability to return them (but 
+including the ability to store aliases in locals). Taking a dynamic 
+alias to a unique pointer inside a shared object causes the unique 
+pointer to be nulled out for the lifetime of the dynamic alias. This 
+means that Eiffel* manages to do without any static analysis to support 
+aliases for soundness beyond this simple check.
+
+In 2000 John Boyland proposed "alias burying" [3] to avoid destructive 
+reads, which is similar in spirit to the current alias analysis pass in 
+rustc (but not implemented using type-based analysis). Alias burying is 
+a static analysis pass very similar to ours: any read of a unique 
+pointer (more generally: any operation that changes the unique pointer) 
+results in invalidation of all its aliases.
+
+Crucially, however, Boyland did not adequately deal with the biggest 
+problem with our current alias analysis: closures that can close over 
+arbitrary state. It is treated only in a footnote:
+
+"The analysis also uses (but here does not check) an annotation on 
+procedures that indicates what variables it may read. **A listing of 
+fields possibly accessed during the execution of the procedure would 
+serve well and would also be easy to check modularly. We would prefer 
+however to use an approach which permitted better information hiding, 
+such as obtained using our object-oriented effects system or Leino's 
+data groups."
+
+Essentially, as I understand it Boyland proposes making the set of 
+variables that a closure closes over part of the *type* of that closure 
+in some way.
+
+As to how this relates to Rust:
+
+(1) Our alias analysis, at least the part that relates to unique 
+pointers, isn't new; it's known as "alias burying" in the literature. 
+Although we implement it using TBAA, which I'm concerned about, this is 
+good! It has precedent in the literature.
+
+(2) Performing alias burying in an intraprocedural way seems 
+fundamentally opposed to information hiding via closures. This is the 
+biggest thing that was making me nervous about alias analysis. It 
+doesn't seem that the research literature has solved this problem, and I 
+don't think we have either. In our alias burying, calling a closure 
+tends to wildly trash aliases, which leads to a lot of confusing error 
+messages and inexpressivity.
+
+(3) I don't think that Boyland's solution is a good one for Rust. It 
+only really works in languages like C++ and Java, I think, since callees 
+can see the set of fields that a method might have access to (i.e. 
+private fields become part of the interface). It'd also make fn types 
+even more complicated.
+
+(4) Because of (2), I'm honestly starting to warm up to destructive 
+reads -- nulling out pointers while they're moved or borrowed via 
+aliases. It is certainly the simplest solution, although it introduces 
+null pointers to Rust for the first time. There is a silver lining 
+though: there's only a small fixed set of operations (aliasing or move, 
+basically) that can produce the null pointer, and we should be able to 
+track the origins of null quite easily in debug builds and produce much 
+error messages than the dreaded NullPointerExceptions. Besides, swapping 
+with a sentinel "in-use" value is likely to be very common for 
+parallelism anyhow (farming out elements of an array to subtasks) - and 
+that's basically a null pointer in all but name.
+
+Thoughts? I expect push-back on (4) :)
+
+Patrick
+
+[1] Minsky N., "Towards alias-free pointers"
+[2] Wadler P., "Linear types can change the world!"
+[3] Boyland J., "Alias burying: Unique variables without destructive reads"
+
+From marijnh at gmail.com  Sat Sep 17 11:59:08 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 17 Sep 2011 20:59:08 +0200
+Subject: [rust-dev] Move as a unary operator, or, alternatively,
+	as an implicit optimization
+Message-ID: <CAJnHWXsZvEcveffhaBu5W+bDvQCtdx+UEdWPzHffuF=bFV3dZQ@mail.gmail.com>
+
+I've recently opened https://github.com/graydon/rust/issues/917 for
+this, but the mailing list is probably a better channel for
+discussion.
+
+Rust currently spells moving data as 'x <- y' (move y into x). You can
+initialize locals by move, and move into arbitrary lvals with this
+binary op.
+
+Beyond this, there is move mode for function arguments (your value
+will automatically be moved -- its ownership passed to the function)
+when you call such a function. And the compiler will automatically
+replace copies with moves in some cases where it can prove that the
+source value will no longer be used.
+
+But it is not currently possible to move something in when
+initializing a data structure or calling a function that doesn't take
+its argument by move. The specific case in which I had this problem
+was...
+
+    let x = [];
+    for y in big_collection { x += [something(y)]; }
+    ret @x;
+
+The return will *copy* the array, whereas I don't need two copies, I
+just want to box the one I already have.
+
+I see two good solutions to this problem, and I'm wondering which of
+these other people prefer:
+
+- The simple, explicit approach: Introduce an opeator, called 'move',
+or unary '<' if we want to be clever (we'd get 'x =< y' and could get
+rid of '<-'), which tells the compiler the value can be moved. You
+could do 'ret @<x;', 'f(<x)' etcetera.
+
+- The implicit, clever approach: Notice that the only situation where
+you want to do this is when using a local variable (you can't move out
+of data structures) for the last time, and simply make the compiler
+optimize the last use of a variable into a move. We'll probably want
+to do this anyway, but the question is: Is it enough, or do people
+want to 'see' their move operations in front of them?
+
+The observation that the only sane place to use '<-' is the last use
+of a variable also casts doubt on the utility of '<-' as a variable
+initializer -- you'd basically just be renaming a variable.
+
+Note that all this assumes that temporary values are always 'moved'.
+This is currently an optimization in the compiler. Once we implement
+destination-passing style, temporaries will be initialized into the
+right location, so there won't even be a move happening anymore.
+
+From pwalton at mozilla.com  Sat Sep 17 12:10:33 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 17 Sep 2011 12:10:33 -0700
+Subject: [rust-dev] Move as a unary operator, or, alternatively,
+ as an implicit optimization
+In-Reply-To: <CAJnHWXsZvEcveffhaBu5W+bDvQCtdx+UEdWPzHffuF=bFV3dZQ@mail.gmail.com>
+References: <CAJnHWXsZvEcveffhaBu5W+bDvQCtdx+UEdWPzHffuF=bFV3dZQ@mail.gmail.com>
+Message-ID: <4E74F0A9.7010602@mozilla.com>
+
+On 9/17/11 11:59 AM, Marijn Haverbeke wrote:
+> - The implicit, clever approach: Notice that the only situation where
+> you want to do this is when using a local variable (you can't move out
+> of data structures) for the last time, and simply make the compiler
+> optimize the last use of a variable into a move. We'll probably want
+> to do this anyway, but the question is: Is it enough, or do people
+> want to 'see' their move operations in front of them?
+
+If an explicit copy operator is needed for uniques, then this isn't even 
+ambiguous, is it? IOW the only thing that |x = y| with str/vec/unique 
+pointer |y| can possibly mean is "move y", since if you wanted to copy 
+it you'd have to say |x = copy y|.
+
+Patrick
+
+From marijnh at gmail.com  Sat Sep 17 12:18:04 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 17 Sep 2011 21:18:04 +0200
+Subject: [rust-dev] Precedent for our aliases and unique types
+In-Reply-To: <4E7413E9.9000000@mozilla.com>
+References: <4E7413E9.9000000@mozilla.com>
+Message-ID: <CAJnHWXt7TOGBkL0N6kO2U2Z_g2-P2VT_3nVh3umqvRKO7OARsQ@mail.gmail.com>
+
+Three points:
+
+
+> the biggest problem with our current alias analysis: closures that can close over arbitrary state
+
+Our current closures are so neutered (they can only appear as function
+call arguments) that doing reference analysis on them is trivial (just
+descend into the closure during the analysis). Sully is considering an
+extension them which, if I understand it correctly, will still be
+checkable without any acrobatics.
+
+
+You seem to believe that type-based alias analysis is complicated.
+This may be me using the term wrong, but it the thing I'm doing,
+whatever it's called, is entirely trivially easy. Basically, it's the
+45-line function at [1] which, when dealing with references to things
+that might be overwritten in a way that can't be statically seen,
+simply checks whether any value is touched that may include the type
+that has to be mutated to overwrite the referenced value. There's
+nothing hard or complicated about this.
+
+[1] https://github.com/graydon/rust/blob/master/src/comp/middle/alias.rs#L544
+
+
+Lastly, I am really opposed to destructive reads. Making unsafe
+programs fail at run-time is not what I understand to be the goal of
+Rust. Sure, a null-pointer error is better than memory corruption, but
+it's still awful. I am confused about the problem you're trying to
+solve. Same for your proposal in the return-by-reference thread (which
+I'll respond to separately). You seem to believe that there is
+something fundamentally wrong with our current reference-safety
+system.
+
+I, on the other hand, feel that I've hit on a really good solution to
+the problem of safe references. It doesn't put much burden on the
+programmer, doesn't require ridiculous compiler complexity (700 lines,
+in a verbose language like Rust), can be explained, even standardized
+(though I've apparently not been doing a very good job explaining, so
+far) without embarrassment, and imposes no run-time cost at all.
+
+(And, as an aside, it is quite a bit more advanced than the alias
+burying you describe here. We have a few properties in Rust, 'no
+global data' and 'mostly immutable data structures' that make this
+style of analysis possible. I'm going to write up some kind of paper
+when the thing has stabilized. But for now, I'd like everybody to
+realize that they're programming with safe references, and they hardly
+ever have to think about it. This is no mean feat!)
+
+From marijnh at gmail.com  Sat Sep 17 12:21:56 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 17 Sep 2011 21:21:56 +0200
+Subject: [rust-dev] Move as a unary operator, or, alternatively,
+ as an implicit optimization
+In-Reply-To: <4E74F0A9.7010602@mozilla.com>
+References: <CAJnHWXsZvEcveffhaBu5W+bDvQCtdx+UEdWPzHffuF=bFV3dZQ@mail.gmail.com>
+	<4E74F0A9.7010602@mozilla.com>
+Message-ID: <CAJnHWXtd1VWf6YeFeBw0EHV3NznckB-A0MSwU_k=+2ucU=sg-w@mail.gmail.com>
+
+> If an explicit copy operator is needed for uniques, then this isn't even
+> ambiguous, is it?
+
+So I guess you're planning to make vectors and strings (and anything
+containing them) also explicit-copy-only? In that case, I guess we're
+fine. (Though, with strings, I expect this to cause some pain.)
+
+From marijnh at gmail.com  Sat Sep 17 12:30:16 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 17 Sep 2011 21:30:16 +0200
+Subject: [rust-dev] The lowdown on return-by-reference
+In-Reply-To: <4E73C253.8090407@mozilla.com>
+References: <CAJnHWXsutnn+o62Wmx+tL_Sg5AdELgS5Krb=yFP5WthXuR_jWA@mail.gmail.com>
+	<4E73C253.8090407@mozilla.com>
+Message-ID: <CAJnHWXtxOoj0M1NuTvbvtMej997ZR8_X9hpefRD5MAB1g0XjmA@mail.gmail.com>
+
+> How about having container types in which accessors swap the original with
+> none?
+
+- For bigger data structures, you'd still pay the cost of several copies.
+
+- You're destroying your original data structure, which is usually not
+what you want and often not even possible (when it's part of a bigger
+data structure).
+
+- You could of course make those data structures mutable and swap in
+dummy values. This will propagate mutability all over the place and
+lose all of the simplicity and safety benefits that made use make
+immutable the default in the first place.
+
+- For larger data structures (say, maps), moving things out breaks
+invariants. You could code around this by making the data structure
+more complex, and requiring it to be used in a certain way. This would
+be a complexity tax we're putting on all data structure implementers
+(and users).
+
+From pwalton at mozilla.com  Sat Sep 17 12:32:14 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 17 Sep 2011 12:32:14 -0700
+Subject: [rust-dev] The lowdown on return-by-reference
+In-Reply-To: <CAJnHWXtxOoj0M1NuTvbvtMej997ZR8_X9hpefRD5MAB1g0XjmA@mail.gmail.com>
+References: <CAJnHWXsutnn+o62Wmx+tL_Sg5AdELgS5Krb=yFP5WthXuR_jWA@mail.gmail.com>
+	<4E73C253.8090407@mozilla.com>
+	<CAJnHWXtxOoj0M1NuTvbvtMej997ZR8_X9hpefRD5MAB1g0XjmA@mail.gmail.com>
+Message-ID: <4E74F5BE.8050908@mozilla.com>
+
+On 9/17/11 12:30 PM, Marijn Haverbeke wrote:
+> - You're destroying your original data structure, which is usually not
+> what you want and often not even possible (when it's part of a bigger
+> data structure).
+>
+> - You could of course make those data structures mutable and swap in
+> dummy values. This will propagate mutability all over the place and
+> lose all of the simplicity and safety benefits that made use make
+> immutable the default in the first place.
+>
+> - For larger data structures (say, maps), moving things out breaks
+> invariants. You could code around this by making the data structure
+> more complex, and requiring it to be used in a certain way. This would
+> be a complexity tax we're putting on all data structure implementers
+> (and users).
+
+But you have to do this anyway for concurrency. It'll very often be the 
+case that you have a large array and want to farm out the individual 
+elements and operate on them in parallel. Then you have the same issues.
+
+Patrick
+
+From pwalton at mozilla.com  Sat Sep 17 12:38:25 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 17 Sep 2011 12:38:25 -0700
+Subject: [rust-dev] Precedent for our aliases and unique types
+In-Reply-To: <CAJnHWXt7TOGBkL0N6kO2U2Z_g2-P2VT_3nVh3umqvRKO7OARsQ@mail.gmail.com>
+References: <4E7413E9.9000000@mozilla.com>
+	<CAJnHWXt7TOGBkL0N6kO2U2Z_g2-P2VT_3nVh3umqvRKO7OARsQ@mail.gmail.com>
+Message-ID: <4E74F731.4050303@mozilla.com>
+
+On 9/17/11 12:18 PM, Marijn Haverbeke wrote:
+> Three points:
+> Our current closures are so neutered (they can only appear as function
+> call arguments) that doing reference analysis on them is trivial (just
+> descend into the closure during the analysis). Sully is considering an
+> extension them which, if I understand it correctly, will still be
+> checkable without any acrobatics.
+
+I'm less concerned about blocks than I am about @fn (which we still have 
+AFAIK) and objects.
+
+> You seem to believe that type-based alias analysis is complicated.
+> This may be me using the term wrong, but it the thing I'm doing,
+> whatever it's called, is entirely trivially easy. Basically, it's the
+> 45-line function at [1] which, when dealing with references to things
+> that might be overwritten in a way that can't be statically seen,
+> simply checks whether any value is touched that may include the type
+> that has to be mutated to overwrite the referenced value. There's
+> nothing hard or complicated about this.
+
+I don't think this is trivial or easy. Whenever you perform an 
+assignment, you have to think about whether a set of types (the aliases 
+read later in the control flow) is contained within the type you're 
+assigning to. This is a cognitive burden and is also action-at-a-distance.
+
+Additionally, there's still the problem of @fn and obj.
+
+> (And, as an aside, it is quite a bit more advanced than the alias
+> burying you describe here. We have a few properties in Rust, 'no
+> global data' and 'mostly immutable data structures' that make this
+> style of analysis possible. I'm going to write up some kind of paper
+> when the thing has stabilized. But for now, I'd like everybody to
+> realize that they're programming with safe references, and they hardly
+> ever have to think about it. This is no mean feat!)
+
+But I do keep hitting issues with the alias analysis. Every so often I 
+have to make copies to satisfy the alias checker, usually after calling 
+a closure. It's hard for me to predict.
+
+Patrick
+
+From marijnh at gmail.com  Sat Sep 17 13:50:15 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 17 Sep 2011 22:50:15 +0200
+Subject: [rust-dev] Precedent for our aliases and unique types
+In-Reply-To: <4E74F731.4050303@mozilla.com>
+References: <4E7413E9.9000000@mozilla.com>
+	<CAJnHWXt7TOGBkL0N6kO2U2Z_g2-P2VT_3nVh3umqvRKO7OARsQ@mail.gmail.com>
+	<4E74F731.4050303@mozilla.com>
+Message-ID: <CAJnHWXuKMaXx+YV_yDNkfTmWvycW_t7YWQA1Qr-oDqdcQBPPyQ@mail.gmail.com>
+
+> I'm less concerned about blocks than I am about @fn (which we still have
+> AFAIK) and objects.
+
+To recap, immutably rooted references (which is most of them) are safe
+as long as their root isn't touched. So closures and objects don't
+cause a problem there. Mutably rooted references are the problematic
+kind, and those do indeed have to be invalidated as soon as an object
+or closure is touched.
+
+> But I do keep hitting issues with the alias analysis. Every so often I have
+> to make copies to satisfy the alias checker, usually after calling a
+> closure.
+
+Of course, the current analysis is by no means a magic bullet. But I
+stand by the opinion that it is much less painful (and complicated) to
+program with than the schemes you are proposing here.
+
+From graydon at mozilla.com  Sat Sep 17 14:34:23 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 17 Sep 2011 14:34:23 -0700
+Subject: [rust-dev] The lowdown on return-by-reference
+In-Reply-To: <CAJnHWXsutnn+o62Wmx+tL_Sg5AdELgS5Krb=yFP5WthXuR_jWA@mail.gmail.com>
+References: <CAJnHWXsutnn+o62Wmx+tL_Sg5AdELgS5Krb=yFP5WthXuR_jWA@mail.gmail.com>
+Message-ID: <4E75125F.2050006@mozilla.com>
+
+On 16/09/2011 2:10 PM, Marijn Haverbeke wrote:
+
+> The original solution proposed was to pass the accessor a block and
+> pass the value to that block by reference. This would cause blocks to
+> spring up everywhere (with all the indentation and noise that comes
+> with it) and be extremely un-composable. A while ago I wrote a message
+> to this list proposing a system whereby functions could return
+> references. This week, I've finally implemented that. The exact syntax
+> and semantics are not yet set in stone, so if you see room for
+> improvement, reply.
+
+Ok. summary (mostly aesthetic) response: reading this experiment so far, 
+even if it's semantically valid, it looks to me like it's not worth the 
+price of admission.
+
+When you proposed exploring this in mid-jul, I was hesitant and came 
+around to a modest "might as well try and see if any interesting cases 
+are legal, if you're interested"; but the discussion there was based on 
+analysis of types only, and even then I was pretty nervous.
+
+Since multiple arguments (and especially the hidden-type 'self' 
+argument, and closure environments) seem to require this &0 .. &n 
+annotation scheme, I think that sort of violates the 
+aesthetic-preference argument motivating you here. To my eyes, blocks 
+*definitely* look better, and make more sense. This has no precedent 
+I've heard of in other languages, and will be consistently warty and 
+hard to explain to anyone using the language.
+
+Could you elaborate on why accessors-by-blocks are un-composable? I 
+think they're actually a *relatively* tidy technique, since they 
+syntactically denote stack-discipline reference lifetimes (by 
+indentation / brace boundaries). They seem to work well in languages 
+that use them, no?
+
+-Graydon
+
+From marijnh at gmail.com  Sat Sep 17 14:49:57 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 17 Sep 2011 23:49:57 +0200
+Subject: [rust-dev] The lowdown on return-by-reference
+In-Reply-To: <4E75125F.2050006@mozilla.com>
+References: <CAJnHWXsutnn+o62Wmx+tL_Sg5AdELgS5Krb=yFP5WthXuR_jWA@mail.gmail.com>
+	<4E75125F.2050006@mozilla.com>
+Message-ID: <CAJnHWXtZ5qs7Wt-Dxc8oEj-+6rrqKFFwwkjujPysKfsK5vQvpQ@mail.gmail.com>
+
+> Since multiple arguments (and especially the hidden-type 'self' argument,
+> and closure environments) seem to require this &0 .. &n annotation scheme, I
+> think that sort of violates the aesthetic-preference argument motivating you
+> here. To my eyes, blocks *definitely* look better,
+
+So here we have an &, or a &1, in the accessor definition (once),
+versus wrapping your computation in a block, on every single use of
+the accessor.
+
+> Could you elaborate on why accessors-by-blocks are un-composable?
+
+Calling them uncomposable was too strong, I guess. If you need to
+access two data structures, you'll be passing a block that closes over
+A to the accessor of B, and then calling the accessor of A inside that
+block with yet another block.
+
+Let's leave my code in for now, and play with both approaches. I am
+quite confident that access-by-reference will prove to be more
+pleasant.
+
+> They seem to work well in languages that use them, no?
+
+I've never used a language that does this. Examples?
+
+From graydon at mozilla.com  Sun Sep 18 12:08:27 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 18 Sep 2011 12:08:27 -0700
+Subject: [rust-dev] The lowdown on return-by-reference
+In-Reply-To: <CAJnHWXtZ5qs7Wt-Dxc8oEj-+6rrqKFFwwkjujPysKfsK5vQvpQ@mail.gmail.com>
+References: <CAJnHWXsutnn+o62Wmx+tL_Sg5AdELgS5Krb=yFP5WthXuR_jWA@mail.gmail.com>
+	<4E75125F.2050006@mozilla.com>
+	<CAJnHWXtZ5qs7Wt-Dxc8oEj-+6rrqKFFwwkjujPysKfsK5vQvpQ@mail.gmail.com>
+Message-ID: <4E7641AB.6030508@mozilla.com>
+
+On 17/09/2011 2:49 PM, Marijn Haverbeke wrote:
+
+> So here we have an&, or a&1, in the accessor definition (once),
+> versus wrapping your computation in a block, on every single use of
+> the accessor.
+
+Yeah. To an extent. You also have a & let-binding that is connected -- 
+via rules that I feel are getting well-beyond obvious -- to the 
+underlying hashtable. The user has little clue in their code why the 
+hashtable is connected to the value they got out. They can guess, or go 
+look at the signature ... it feels like it'll surprise.
+
+> Let's leave my code in for now, and play with both approaches. I am
+> quite confident that access-by-reference will prove to be more
+> pleasant.
+
+Ok.
+
+>> They seem to work well in languages that use them, no?
+>
+> I've never used a language that does this. Examples?
+
+I suppose I'm thinking of those languages that use blocks primarily for 
+iteration rather than single-element access: functional and OO languages 
+(MLs, lisps, smalltalks, etc.) that use the pass-a-closure-down style of 
+iteration.
+
+I'm extending -- perhaps unfairly -- the idea in that feature to 
+single-element accessors on the grounds that few languages have *any* 
+strategy handle safe reference-to-interior-allocation lifetimes other 
+than "allocate everything in the heap and gc when you can". Which 
+obviously feels even worse to me. We're already desugaring the for-loop 
+form as another way of composing a block and passing it in (I think!); 
+would you consider a block form of let?
+
+let v = accessor(x) in {
+...
+}
+
+as an alternative sugar for:
+
+accessor(x, {|v| ... });
+
+I'm sorry to have sounded dismissive; am certainly not vetoing the 
+concept, was just providing an initial gut feeling of "it feels kinda 
+wrong or overcomplex". I'm ok with "leave it in and play with both, see 
+which works best", as you say. Or tinker with the syntax and rules some.
+
+-Graydon
+
+From marijnh at gmail.com  Sun Sep 18 12:21:54 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sun, 18 Sep 2011 21:21:54 +0200
+Subject: [rust-dev] The lowdown on return-by-reference
+In-Reply-To: <4E7641AB.6030508@mozilla.com>
+References: <CAJnHWXsutnn+o62Wmx+tL_Sg5AdELgS5Krb=yFP5WthXuR_jWA@mail.gmail.com>
+	<4E75125F.2050006@mozilla.com>
+	<CAJnHWXtZ5qs7Wt-Dxc8oEj-+6rrqKFFwwkjujPysKfsK5vQvpQ@mail.gmail.com>
+	<4E7641AB.6030508@mozilla.com>
+Message-ID: <CAJnHWXuoP3sD1L8vh4zU4ywarPRpMqy4Zax1w754V9ZFp0u8ew@mail.gmail.com>
+
+> Yeah. To an extent. You also have a & let-binding that is connected -- via
+> rules that I feel are getting well-beyond obvious -- to the underlying
+> hashtable.
+
+The let& binding is orthogonal to return-by-reference. You can see a
+return-by-reference accessor as behaving analogous to dot operator
+field access -- you get a reference to the contents of the thing
+you're accessing. You can then, if you're not particularly concerned
+about efficiency, simply copy that into a local. Or you can directly
+access it or pass it to a function, in which case nothing complicated
+happens either. When you want to refer to it multiple times, you have
+the choice of storing it in a by-reference local variable (the
+compiler will tell you when that's not safe), or simply calling the
+accessor multiple times (which, for simple accessors, can be easier).
+
+Now, consider the access-by-block solution. We're only using this for
+str::as_buf* right now, but it's already jumping out as an eyesore:
+
+    let llfn: ValueRef =
+        str::as_buf(name, {|buf| llvm::LLVMAddFunction(llmod, buf, llty) });
+
+Compare
+
+    let x = option::get(option::get(optopt));
+    let x = option::get(optopt, {|opt| option::get(opt, {|x| x})});
+
+We can put some syntactic sugar on that, but the fact remains that
+more concepts are being thrown around (and the generated code will be
+more complex). Having those blocks in the code is, for programmers who
+are anything like me, a major turn off. You'll often have to provide
+two forms of an accessor, a simple one which returns the value, and an
+efficient one which works by block. In the by-reference approach, a
+single accessor serves both roles.
+
+* About str::as_buf -- the return-value-depends-on-an-argument
+notation could be extended to also cover this case... though I'm not
+sure such functions (unsafely accessing value contents) are common
+enough to merit that.
+
+From pwalton at mozilla.com  Sun Sep 18 12:23:07 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sun, 18 Sep 2011 12:23:07 -0700
+Subject: [rust-dev] The lowdown on return-by-reference
+In-Reply-To: <4E7641AB.6030508@mozilla.com>
+References: <CAJnHWXsutnn+o62Wmx+tL_Sg5AdELgS5Krb=yFP5WthXuR_jWA@mail.gmail.com>
+	<4E75125F.2050006@mozilla.com>
+	<CAJnHWXtZ5qs7Wt-Dxc8oEj-+6rrqKFFwwkjujPysKfsK5vQvpQ@mail.gmail.com>
+	<4E7641AB.6030508@mozilla.com>
+Message-ID: <4E76451B.9050903@mozilla.com>
+
+On 9/18/11 12:08 PM, Graydon Hoare wrote:
+> I'm extending -- perhaps unfairly -- the idea in that feature to
+> single-element accessors on the grounds that few languages have *any*
+> strategy handle safe reference-to-interior-allocation lifetimes other
+> than "allocate everything in the heap and gc when you can". Which
+> obviously feels even worse to me.
+
+Well, it is a hard problem, and one that the research literature has not 
+solved. The road we're going down is nontrivial static analysis for 
+memory management, and I'm uncomfortable with baking static analysis 
+that isn't well-studied into a language definition, even independent of 
+the fact that I think the static analysis that's implemented is too 
+difficult for programmers to reason about.
+
+I'm actually fine with programmers having to use a few extra levels of 
+indirection here and there to maintain safety. If you have to add ~ or @ 
+here and there, so be it. I'd rather see us spend our efforts on 
+developing a fast allocator.
+
+If the allocation overhead is really unacceptable, well, we have an 
+unsafe sublanguage is there. We can layer the static analysis on top of 
+that at a later date if we want to.
+
+To me, safe no-copy references to interiors are less interesting than 
+getting move semantics right (destructive reads vs. alias burying).
+
+Patrick
+
+From marijnh at gmail.com  Mon Sep 19 07:16:33 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 19 Sep 2011 16:16:33 +0200
+Subject: [rust-dev] Stack traces on Linux
+Message-ID: <CAJnHWXsmt-U_7ti9xyDd901qZ4dpFS5oth=QnDBKqiEEtiACoQ@mail.gmail.com>
+
+In gdb, I can get stack traces from inside rust and from upcalls just
+fine. But when an assertion in LLVM is hit, gdb gets confused a nd
+just shows me the LLVM funtions on the stack, and then below that
+bogus addresses labeled with '???'. Doing 'ret' to get out of the LLVM
+functions doesn't help -- it'll enter the bogus addresses and get lost
+there.
+
+Patrick mentioned that this works on his Mac set-up. Are other Linux
+users seeing a similar problem? Has anyone found a workaround? When
+working on trans, having to do acrobatics with log statements to
+narrow down the place where an assert is firing is completely fatal
+for productivity.
+
+From respindola at mozilla.com  Mon Sep 19 12:30:22 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Mon, 19 Sep 2011 15:30:22 -0400
+Subject: [rust-dev] stack growth
+In-Reply-To: <4E77874C.6000501@mozilla.com>
+References: <4E77874C.6000501@mozilla.com>
+Message-ID: <4E77984E.6010301@mozilla.com>
+
+On 09/19/2011 02:17 PM, Graydon Hoare wrote:
+> Can you do a bit of a what-you-know dump about the stack growth code to
+> a wiki page and/or mailing list post? It's a bug that blocks any sort of
+> public release, we need to have it working on at least *some* platforms.
+
+Sure. Probably the best high level description is the original proposal:
+
+http://pastebin.com/e9JMZNCE
+
+ From what is described, the LTO pass and varargs have not been 
+implemented yet. On the other hand, draggonegg has been patched to 
+support Go.
+
+An executive summary of what is done:
+
+*) LLVM is able to produce code that uses the API provided by newer 
+libgcc versions:
+
+   *) On entering a function, a check for available stack space is done 
+and if that fails __morestack is used to allocate more.
+   *) Calls to alloca are lowered in a similar way, but if the check 
+fails the function called is __morestack_allocate_stack_space.
+
+The lowering is done in a way that is compatible with the pattern 
+matching gold does for interfacing code with and without segmented 
+stacks, but I don't think we currently mark the files. In any case, for 
+rust some other way must be implemented to not depend on gold. Adding 
+attributes to the functions is probably reasonable.
+
+I *think* the libgcc functions release any allocated memory on return, 
+but I am not sure.
+
+So probably the smallest effort option is to try to build a current 
+libgcc in the 3 platforms and use it. A quick hack to calling external 
+functions might be to go back to a trampoline written in assembly, but 
+this time it calls __morestack instead of swapping stacks as we did before.
+
+> Thanks,
+>
+> -Graydon
+
+Cheers,
+Rafael
+
+From banderson at mozilla.com  Tue Sep 20 17:06:52 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Tue, 20 Sep 2011 17:06:52 -0700
+Subject: [rust-dev] Stack traces on Linux
+In-Reply-To: <CAJnHWXsmt-U_7ti9xyDd901qZ4dpFS5oth=QnDBKqiEEtiACoQ@mail.gmail.com>
+References: <CAJnHWXsmt-U_7ti9xyDd901qZ4dpFS5oth=QnDBKqiEEtiACoQ@mail.gmail.com>
+Message-ID: <4E792A9C.80704@mozilla.com>
+
+On 09/19/2011 07:16 AM, Marijn Haverbeke wrote:
+> In gdb, I can get stack traces from inside rust and from upcalls just
+> fine. But when an assertion in LLVM is hit, gdb gets confused a nd
+> just shows me the LLVM funtions on the stack, and then below that
+> bogus addresses labeled with '???'. Doing 'ret' to get out of the LLVM
+> functions doesn't help -- it'll enter the bogus addresses and get lost
+> there.
+>
+> Patrick mentioned that this works on his Mac set-up. Are other Linux
+> users seeing a similar problem? Has anyone found a workaround? When
+> working on trans, having to do acrobatics with log statements to
+> narrow down the place where an assert is firing is completely fatal
+> for productivity.
+
+Yeah this is really annoying. You should be able to get backtraces by 
+compiling LLVM with -fno-omit-frame-pointer. Note that I couldn't figure 
+out how to configure LLVM's build correctly and just had to run make 
+with CXXFLAGS=-fno-omit-frame-pointer.
+
+
+From pwalton at mozilla.com  Tue Sep 20 22:29:31 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Tue, 20 Sep 2011 22:29:31 -0700
+Subject: [rust-dev] Purpose of |put;|?
+Message-ID: <4E79763B.1050005@mozilla.com>
+
+Minor thing: What is the purpose of |put;| (with no arguments)?
+
+Just curious.
+
+Patrick
+
+From marijnh at gmail.com  Tue Sep 20 23:15:03 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 21 Sep 2011 08:15:03 +0200
+Subject: [rust-dev] Purpose of |put;|?
+In-Reply-To: <4E79763B.1050005@mozilla.com>
+References: <4E79763B.1050005@mozilla.com>
+Message-ID: <CAJnHWXvAJ9pnkD6ACF6xQqyWRyR99z2V8CLDSQBoqNPjs017QA@mail.gmail.com>
+
+> Minor thing: What is the purpose of |put;| (with no arguments)?
+
+It's equivalent to 'put ()', for consistency with 'ret;'. We should
+probably remove support for this, since it's too rare to abbreviate.
+
+From marijnh at gmail.com  Wed Sep 21 03:42:41 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 21 Sep 2011 12:42:41 +0200
+Subject: [rust-dev] Stack traces on Linux
+In-Reply-To: <4E792A9C.80704@mozilla.com>
+References: <CAJnHWXsmt-U_7ti9xyDd901qZ4dpFS5oth=QnDBKqiEEtiACoQ@mail.gmail.com>
+	<4E792A9C.80704@mozilla.com>
+Message-ID: <CAJnHWXs_fczSgcuubOy6GWoe7sa+hQ3Syi36u_e1h_=Oth-_iQ@mail.gmail.com>
+
+> Yeah this is really annoying. You should be able to get backtraces by
+> compiling LLVM with -fno-omit-frame-pointer.
+
+Great, that did the trick! I'll add a note to the 'gettting started'
+page on the wiki.
+
+From graydon at mozilla.com  Sat Sep 24 16:45:14 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 24 Sep 2011 16:45:14 -0700
+Subject: [rust-dev] [graydon/rust] 976297: Add tests for swapping unique
+	boxes
+In-Reply-To: <mailman.147519.1316894524.15846.rust-commits@mozilla.org>
+References: <mailman.147519.1316894524.15846.rust-commits@mozilla.org>
+Message-ID: <4E7E6B8A.5080607@mozilla.com>
+
+On 24/09/2011 1:02 PM, rust-commits at mozilla.org wrote:
+
+> This test tries to swap unique boxes containing resources, which is not
+> allowed.
+
+Hi. I know I'm officially on break now but I did see this go past while 
+checking on other things, and wanted to point out that (though it's 
+counter-intuitive) I think this is not quite right. In particular, if 
+you look at the comment in kind.rs you'll see that it says:
+
+MOVE + NOSEND  =  "Shared": structures containing @, fixed to the local
+                             task heap/pool; or ~ structures pointing to
+                             pinned values.
+
+That is, a ~ box containing pinned-kind lowers to shared-kind, not to 
+pinned itself. This is to prevent it moving over channels (localizing it 
+to the current heap) but not prevent swapping pointer-to-resource, which 
+seems to be the only useful way to make a resource have indefinite 
+extent (live as long as a data structure).
+
+I realize that "~resource" doesn't "look shared" in an intuitive sense, 
+but it's a bit of a corner case and I think it's the right rule; other 
+rules involve having move/swap/copy discriminate by type constructor 
+first ("is this a box? if so, look at content-kind, else look at 
+total-kind") which feels clunkier.
+
+I know It's even probably counter-intuitive overall that ~ is the "most 
+capable" kind, and that @ is lower than ~, but that's how it seems to 
+work out if you aim for minimal rules :)
+
+It might make more sense if we renamed the kinds to their heaps: 
+"exchange", "local", "pinned", or something like that? I'm pretty easy 
+on that point.
+
+-Graydon
+
+From jruderman at gmail.com  Sat Sep 24 17:32:49 2011
+From: jruderman at gmail.com (Jesse Ruderman)
+Date: Sat, 24 Sep 2011 17:32:49 -0700
+Subject: [rust-dev] "pure once it stops failing"
+Message-ID: <CAB-YmG1hwkqNXp5gMb8VxDhSoxyLKVK2mF_Pag3_0vqegK9WWg@mail.gmail.com>
+
+I marked interner::get as "pure" on the basis that once it succeeds,
+it always succeeds and always returns the same thing. I hope this is
+reasonable.
+
+The key typestate guarantee still holds: once you've checked it, you
+can rely on it. But you can't hoist the check arbitrarily far like you
+can with most preds.
+
+https://github.com/graydon/rust/commit/3b5b29c7ec2c28c53bf480a77472f39d939cc72b
+
+I also noticed that the compiler incorrectly accepted a version
+without "unchecked", and filed
+https://github.com/graydon/rust/issues/975.
+
+From banderson at mozilla.com  Sat Sep 24 17:36:19 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Sat, 24 Sep 2011 17:36:19 -0700
+Subject: [rust-dev] [graydon/rust] 976297: Add tests for swapping unique
+ boxes
+In-Reply-To: <4E7E6B8A.5080607@mozilla.com>
+References: <mailman.147519.1316894524.15846.rust-commits@mozilla.org>
+	<4E7E6B8A.5080607@mozilla.com>
+Message-ID: <4E7E7783.1040405@mozilla.com>
+
+On 09/24/2011 04:45 PM, Graydon Hoare wrote:
+> On 24/09/2011 1:02 PM, rust-commits at mozilla.org wrote:
+>
+>> This test tries to swap unique boxes containing resources, which is not
+>> allowed.
+>
+> Hi. I know I'm officially on break now but I did see this go past 
+> while checking on other things, and wanted to point out that (though 
+> it's counter-intuitive) I think this is not quite right. In 
+> particular, if you look at the comment in kind.rs you'll see that it 
+> says:
+
+Hi Graydon. Sorry for pulling you out of your vacation on day one! Sadly 
+I don't understand kinds.
+
+>
+> MOVE + NOSEND  =  "Shared": structures containing @, fixed to the local
+>                             task heap/pool; or ~ structures pointing to
+>                             pinned values.
+>
+> That is, a ~ box containing pinned-kind lowers to shared-kind, not to 
+> pinned itself. This is to prevent it moving over channels (localizing 
+> it to the current heap) but not prevent swapping pointer-to-resource, 
+> which seems to be the only useful way to make a resource have 
+> indefinite extent (live as long as a data structure).
+
+My motivation for lowering uniques kinds containing pinned kinds to 
+pinned was an intuition that shared kinds are copyable, but on further 
+review of the comments in kind.rs, copyability doesn't seem to be a 
+direct property of a type's kind.
+
+>
+> I realize that "~resource" doesn't "look shared" in an intuitive 
+> sense, but it's a bit of a corner case and I think it's the right 
+> rule; other rules involve having move/swap/copy discriminate by type 
+> constructor first ("is this a box? if so, look at content-kind, else 
+> look at total-kind") which feels clunkier.
+
+I think that according to guidance in kind.rs that copy rules do have to 
+discriminate by type constructor:
+
+*   A copy is made any time you pass-by-value or execute the = operator in a
+*   non-init expression.
+*
+*   @ copies shallow, is always legal
+*   ~ copies deep, is only legal if pointee is unique.
+*     pinned values (pinned resources, alias-closures) can't be copied
+*     all other unique (eg. interior) values copy shallow
+*
+*   Note this means that only type parameters constrained to ~T can be 
+copied.
+
+So, the ability to copy a unique box is based on the kind in the box, 
+regardless of the unique box's kind. A unique box of resource (shared 
+kind) is not copyable; a unique box of int (unique kind) is copyable.
+
+The comments in kind.rs frame the kind system in terms of move and send. 
+I have a hard time understanding the role that send plays here, since 
+send is not a concept in the rust language. There is a definition of 
+send as 'sending is accomplished by calling a move-in operator on 
+something constrained to a unique type ~T' (and I assume this should 
+read 'unique kind ~T'). This seems sort of tautological as send is used 
+in defining what a unique kind is.
+
+Copying seems to be a big concern here and I feel like the kind system 
+would be easier to grasp if it were defined in terms of move and copy 
+instead of move and send.
+
+I also don't understand why resources can't be moved, and to me it seems 
+like the key property of pinned things is that they can't be copied.
+
+Regards,
+Brian
+
+
+
+From banderson at mozilla.com  Sat Sep 24 17:58:00 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Sat, 24 Sep 2011 17:58:00 -0700
+Subject: [rust-dev] "pure once it stops failing"
+In-Reply-To: <CAB-YmG1hwkqNXp5gMb8VxDhSoxyLKVK2mF_Pag3_0vqegK9WWg@mail.gmail.com>
+References: <CAB-YmG1hwkqNXp5gMb8VxDhSoxyLKVK2mF_Pag3_0vqegK9WWg@mail.gmail.com>
+Message-ID: <4E7E7C98.3090206@mozilla.com>
+
+On 09/24/2011 05:32 PM, Jesse Ruderman wrote:
+> I marked interner::get as "pure" on the basis that once it succeeds,
+> it always succeeds and always returns the same thing. I hope this is
+> reasonable.
+>
+> The key typestate guarantee still holds: once you've checked it, you
+> can rely on it. But you can't hoist the check arbitrarily far like you
+> can with most preds.
+Hi Jesse,
+
+We have an 'if checked ... ' form which just takes a different path if 
+the predicate is false, so it seems to me that predicates should be 
+expected not to fail. I think a predicate based on interner::get should 
+have to do an unchecked validation of the length of interner's vector 
+and not just let interner::get fail.
+
+What do you mean by 'can't hoist the check arbitrarily far'?
+
+Regards,
+Brian
+
+From banderson at mozilla.com  Sat Sep 24 21:48:29 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Sat, 24 Sep 2011 21:48:29 -0700 (PDT)
+Subject: [rust-dev] [graydon/rust] 976297: Add tests for swapping
+	unique	boxes
+In-Reply-To: <4E7E6B8A.5080607@mozilla.com>
+Message-ID: <1243269996.148818.1316926109579.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+----- Original Message -----
+> From: "Graydon Hoare" <graydon at mozilla.com>
+> To: rust-dev at mozilla.org
+> Sent: Saturday, September 24, 2011 4:45:14 PM
+> Subject: Re: [rust-dev] [graydon/rust] 976297: Add tests for swapping unique boxes
+> On 24/09/2011 1:02 PM, rust-commits at mozilla.org wrote:
+> 
+> That is, a ~ box containing pinned-kind lowers to shared-kind, not to
+> pinned itself. This is to prevent it moving over channels (localizing
+> it
+> to the current heap) but not prevent swapping pointer-to-resource,
+> which
+> seems to be the only useful way to make a resource have indefinite
+> extent (live as long as a data structure).
+
+After further contemplation, I don't understand how the ability to swap pointers to resource is 'the only useful way to make a resource have indefinite extent'.
+
+Regards,
+Brian
+
+From graydon at mozilla.com  Sun Sep 25 12:31:09 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 25 Sep 2011 12:31:09 -0700
+Subject: [rust-dev] [graydon/rust] 976297: Add tests for swapping unique
+ boxes
+In-Reply-To: <4E7E7783.1040405@mozilla.com>
+References: <mailman.147519.1316894524.15846.rust-commits@mozilla.org>
+	<4E7E6B8A.5080607@mozilla.com> <4E7E7783.1040405@mozilla.com>
+Message-ID: <4E7F817D.4000506@mozilla.com>
+
+On 24/09/2011 5:36 PM, Brian Anderson wrote:
+
+> Hi Graydon. Sorry for pulling you out of your vacation on day one! Sadly
+> I don't understand kinds.
+
+No problem. Still kinda on semi-vacation; haven't left yet, still doing 
+chores and prep.
+
+> My motivation for lowering uniques kinds containing pinned kinds to
+> pinned was an intuition that shared kinds are copyable, but on further
+> review of the comments in kind.rs, copyability doesn't seem to be a
+> direct property of a type's kind.
+
+Yeah. Copy is the complicated one that I think has to discriminate by 
+constructor. Because it has a deep/shallow question to answer. That 
+doesn't occur with move or swap, thankfully.
+
+>> I realize that "~resource" doesn't "look shared" in an intuitive
+>> sense, but it's a bit of a corner case and I think it's the right
+>> rule; other rules involve having move/swap/copy discriminate by type
+>> constructor first ("is this a box? if so, look at content-kind, else
+>> look at total-kind") which feels clunkier.
+>
+> I think that according to guidance in kind.rs that copy rules do have to
+> discriminate by type constructor:
+>
+> * A copy is made any time you pass-by-value or execute the = operator in a
+> * non-init expression.
+> *
+> * @ copies shallow, is always legal
+> * ~ copies deep, is only legal if pointee is unique.
+> * pinned values (pinned resources, alias-closures) can't be copied
+> * all other unique (eg. interior) values copy shallow
+> *
+> * Note this means that only type parameters constrained to ~T can be
+> copied.
+
+Sigh. Looks like that comment is a bit unclear still (also unclear 
+whether it means ~ boxes or ~ kinds). Actually the whole comment block 
+seems like it needs a bit of improvement. Sorry :(
+
+I'll revise and expand the comment-block momentarily. This is important 
+stuff to get right (also sadly requires revising a ton of library code 
+when you perturb it). I notice a lot lot lot of our libraries assume 
+that you can copy @-kind typarams. This is wrong; the kind checker gets 
+it wrong (see next paragraph in reply).
+
+> So, the ability to copy a unique box is based on the kind in the box,
+> regardless of the unique box's kind. A unique box of resource (shared
+> kind) is not copyable; a unique box of int (unique kind) is copyable.
+
+Yes. I notice that the rules in the kind checker don't actually do this 
+discrimination; shame on me, sorry. They permit copying anything 
+shared-kind. That's too loose; permits copying ~resource deeply. Dammit.
+
+ty::type_kind calculates the kind of ~resource incorrectly too. Yuck all 
+around. This is not going to be fun to fix. Might require algorithmic 
+changes to much of the code in std::vec to avoid copies it thinks it can 
+get away with.
+
+> The comments in kind.rs frame the kind system in terms of move and send.
+> I have a hard time understanding the role that send plays here, since
+> send is not a concept in the rust language. There is a definition of
+> send as 'sending is accomplished by calling a move-in operator on
+> something constrained to a unique type ~T' (and I assume this should
+> read 'unique kind ~T'). This seems sort of tautological as send is used
+> in defining what a unique kind is.
+
+"Send" is a concept *expressed by* the kind system. IOW it's not that 
+the kind system is defined solely in terms of "some other operator"; the 
+kind system exists in order to *encode* a few concepts that are not 
+otherwise linguistically encoded: no-send and no-move. Despite the fact 
+that no "language level" constructs correspond to these motivations, 
+there are *very real* pragmatic safety considerations requiring us to 
+prohibit those in 2 cases:
+
+   - no-send is required to prohibit data racing between tasks; tasks
+     don't exist at a language level but they very much do exist in
+     the runtime and in the minds of every user looking at the language.
+
+   - no-move is required to prohibit &-closures (blocks) from
+     escaping to the heap, thus pointing to dead stack frames.
+
+> Copying seems to be a big concern here and I feel like the kind system
+> would be easier to grasp if it were defined in terms of move and copy
+> instead of move and send.
+
+I tried this; it really doesn't work since we're trying to encode 
+something that is orthogonal to copy-ability. Copy-ability is a subset 
+of move-ability but neither adequately encodes send-ability.
+
+> I also don't understand why resources can't be moved, and to me it seems
+> like the key property of pinned things is that they can't be copied.
+
+Because &-closures are pinned and they must not escape to the heap.
+
+Also, as a minor (but potentially very important) corner case, often 
+when you interface with C you need stable pointers to a value you reuse. 
+Being sure that a resource hasn't moved to a new address is helpful in 
+these cases.
+
+Finally, argument from minimality: you can prohibit copy by prohibiting 
+move -- which you have to do anyways for &-closures -- and your kind 
+system winds up with fewer moving parts if you only have 2 bits.
+
+I realize all this is quite subtle, and apologize for that. I did a lot 
+of napkin-drawing and hair-tearing-out to get it reduced to the size 
+that it is there while still covering (I think) all the important parts. 
+Apparently I didn't actually get the notes expressed properly in code. 
+This makes me feel awful as I'm not sure it will hold together after 
+all. I apologize. Please give the rules as-described in the comment a 
+try before giving up.
+
+If you need to revise it, be really really careful, make lots of notes, 
+try to make sure you enumerate all important cases.
+
+-Graydon
+
+From graydon at mozilla.com  Sun Sep 25 12:41:01 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 25 Sep 2011 12:41:01 -0700
+Subject: [rust-dev] [graydon/rust] 976297: Add tests for swapping unique
+ boxes
+In-Reply-To: <1243269996.148818.1316926109579.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+References: <1243269996.148818.1316926109579.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+Message-ID: <4E7F83CD.3050700@mozilla.com>
+
+On 24/09/2011 9:48 PM, Brian Anderson wrote:
+
+> After further contemplation, I don't understand how the ability to swap pointers to resource is 'the only useful way to make a resource have indefinite extent'.
+
+Not swap per se, but the ability to construct a resource into a box and 
+then move that out of the current frame somehow (move it into an 
+existing longer-lived data structure, move it into a passed-in &, return 
+it, etc.)
+
+Shallow-copying a @-box holding a resource also works, though can't be 
+done type-opaquely. In any case, without the ability to do *one* of 
+those, you can't make a resource that outlives the frame it was 
+constructed in.
+
+-Graydon
+
+From banderson at mozilla.com  Sun Sep 25 15:15:27 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Sun, 25 Sep 2011 15:15:27 -0700
+Subject: [rust-dev] [graydon/rust] 976297: Add tests for swapping unique
+ boxes
+In-Reply-To: <4E7F817D.4000506@mozilla.com>
+References: <mailman.147519.1316894524.15846.rust-commits@mozilla.org>	<4E7E6B8A.5080607@mozilla.com>
+	<4E7E7783.1040405@mozilla.com> <4E7F817D.4000506@mozilla.com>
+Message-ID: <4E7FA7FF.9060204@mozilla.com>
+
+On 09/25/2011 12:31 PM, Graydon Hoare wrote:
+> On 24/09/2011 5:36 PM, Brian Anderson wrote:
+>
+>> So, the ability to copy a unique box is based on the kind in the box,
+>> regardless of the unique box's kind. A unique box of resource (shared
+>> kind) is not copyable; a unique box of int (unique kind) is copyable.
+>
+> Yes. I notice that the rules in the kind checker don't actually do 
+> this discrimination; shame on me, sorry. They permit copying anything 
+> shared-kind. That's too loose; permits copying ~resource deeply. Dammit.
+>
+> ty::type_kind calculates the kind of ~resource incorrectly too. Yuck 
+> all around. This is not going to be fun to fix. Might require 
+> algorithmic changes to much of the code in std::vec to avoid copies it 
+> thinks it can get away with.
+
+I added the calculation for unique box of pinned recently so that 
+shouldn't be too hard to change; just need to make sure unique box of 
+resource is non-copyable. Incidentally, I'm finding the overloading of ~ 
+and 'unique' to be quite difficult to communicate about - I think you're 
+refering to unique boxes of resource. I also changed [resource] to be 
+pinned (from shared), assuming that the old calculation was valid for 
+evecs, not ivecs. Is that correct?
+
+>
+>> The comments in kind.rs frame the kind system in terms of move and send.
+>> I have a hard time understanding the role that send plays here, since
+>> send is not a concept in the rust language. There is a definition of
+>> send as 'sending is accomplished by calling a move-in operator on
+>> something constrained to a unique type ~T' (and I assume this should
+>> read 'unique kind ~T'). This seems sort of tautological as send is used
+>> in defining what a unique kind is.
+>
+> "Send" is a concept *expressed by* the kind system. IOW it's not that 
+> the kind system is defined solely in terms of "some other operator"; 
+> the kind system exists in order to *encode* a few concepts that are 
+> not otherwise linguistically encoded: no-send and no-move. Despite the 
+> fact that no "language level" constructs correspond to these 
+> motivations, there are *very real* pragmatic safety considerations 
+> requiring us to prohibit those in 2 cases:
+>
+>   - no-send is required to prohibit data racing between tasks; tasks
+>     don't exist at a language level but they very much do exist in
+>     the runtime and in the minds of every user looking at the language.
+>
+>   - no-move is required to prohibit &-closures (blocks) from
+>     escaping to the heap, thus pointing to dead stack frames.
+>
+Why can't no-move just be no-send, and then make shared types 
+un-movable? Is there something useful that can be done by moving shared 
+types (besides saving some refcounting)? The entire (maybe? at least the 
+biggest) motivation for move is send, and it would be easier to think of 
+them as the same thing.
+>
+>> I also don't understand why resources can't be moved, and to me it seems
+>> like the key property of pinned things is that they can't be copied.
+>
+> Because &-closures are pinned and they must not escape to the heap.
+
+It seems like resource and fn& are different kind, or at least the kind 
+system doesn't fully express what can be done with each. For example, 
+~resource becomes a shared kind which can escape, ~fn& can't be a shared 
+kind.
+
+Regards,
+Brian
+
+
+
+From graydon at mozilla.com  Sun Sep 25 17:17:50 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 25 Sep 2011 17:17:50 -0700
+Subject: [rust-dev] [graydon/rust] 976297: Add tests for swapping unique
+ boxes
+In-Reply-To: <4E7FA7FF.9060204@mozilla.com>
+References: <mailman.147519.1316894524.15846.rust-commits@mozilla.org>	<4E7E6B8A.5080607@mozilla.com>
+	<4E7E7783.1040405@mozilla.com> <4E7F817D.4000506@mozilla.com>
+	<4E7FA7FF.9060204@mozilla.com>
+Message-ID: <4E7FC4AE.2000401@mozilla.com>
+
+On 25/09/2011 3:15 PM, Brian Anderson wrote:
+
+> I added the calculation for unique box of pinned recently so that
+> shouldn't be too hard to change; just need to make sure unique box of
+> resource is non-copyable. Incidentally, I'm finding the overloading of ~
+> and 'unique' to be quite difficult to communicate about - I think you're
+> refering to unique boxes of resource. I also changed [resource] to be
+> pinned (from shared), assuming that the old calculation was valid for
+> evecs, not ivecs. Is that correct?
+
+Yes, when I am saying "~resource" I mean "unique box of resource". Sorry.
+
+And yes, [resource] -- that is "ivec of resource" -- should be the same 
+as "unique box of resource".
+
+Both should be shared though, not pinned. That's what the comment says, 
+for the reason that we want to be able to move them. That is, we want to 
+be able to move a pointer-to-a-resource -- not the resource itself -- if 
+the resource lives in the heap. That's what I meant in the second email 
+about "indefinite extent". When a resource lives in the heap we should 
+be able to:
+
+    - Move around a unique-pointer to it, if it's uniquely owned
+    - Shallow-copy around a shared-pointer to it, if it's shared-owned
+
+This is the counter-intuitive corner case I keep mentioning. It doesn't 
+*seem* like unique-box-of-resource should be shared -- there's nothing 
+"shared" about it, no refcounts in sight -- but it's correct for it to 
+be "MOVE + NOSEND" in terms of kind-restrictions, which happens to be 
+the same as "shared kind".
+
+> Why can't no-move just be no-send, and then make shared types
+> un-movable? Is there something useful that can be done by moving shared
+> types (besides saving some refcounting)? The entire (maybe? at least the
+> biggest) motivation for move is send, and it would be easier to think of
+> them as the same thing.
+
+If I read correctly, you're suggesting a change so that we have no-move 
+and no-copy bits, and:
+
+   - fn& anywhere, or interior-resource, makes no-copy
+   - @, or fn& anywhere, or interior-resource, makes no-move
+
+This seems backwards to me; I consider move to be indivisible "copy + 
+drop", so it's weird that you can't move something if you can copy it.
+
+Further, if you do this, you can't write type-parametric algorithms 
+(say, vec::*) in terms of move if you want them to work on @, so you 
+have to write in terms of copy, which means deep-copy on ~, and failure 
+to work at all on ~resource; exterior resources you want to do anything 
+with parametrically have to be @resource. Deep copying all ~ on library 
+APIs is expensive and unlikely the semantics most callers have in mind; 
+we should be minimizing deep copies and using move/swap as much as 
+possible. In addition to all the refcount traffic on @ by making shallow 
+copies.
+
+Our "heaviest" use of move-semantics is surely to protect against racing 
+by modeling the message-passing system in it; but efficiency is a close 
+second, and not to be ignored.
+
+I'm also not convinced there are not other restrictions inexpressible in 
+this scheme, but haven't done the full list to check..
+
+> It seems like resource and fn& are different kind, or at least the kind
+> system doesn't fully express what can be done with each. For example,
+> ~resource becomes a shared kind which can escape, ~fn& can't be a shared
+> kind.
+
+~fn& can't be constructed. We syntactically restrict the construction 
+forms of fn&. Or at least we're supposed to be. I'm not sure if we're 
+doing so presently.
+
+I hear what you're saying -- the rules in kind.rs are certainly not 
+"perfectly obvious" -- just, as I said earlier, if you're going to try 
+to revise these rules, be very careful to cover *all* cases. Make an 
+exhaustive list of restrictions to be-able-to-encode first, and make 
+sure you have a way of expressing all those restrictions simultaneously 
+as you work through different ways of expressing the rules. It's tricky.
+
+-Graydon
+
+From lindsey at rockstargirl.org  Mon Sep 26 09:55:41 2011
+From: lindsey at rockstargirl.org (Lindsey Kuper)
+Date: Mon, 26 Sep 2011 12:55:41 -0400
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+Message-ID: <CALnXJipoRNT8Kha7MUw7cqoFvdEd36vjmBDoZLGb0GK911T4mg@mail.gmail.com>
+
+On Sun, Jul 31, 2011 at 4:55 PM, Marijn Haverbeke <marijnh at gmail.com> wrote:
+> I've been throwing around some ideas about a simpler way to 'alias'
+> (non-owning reference) things with Patrick, and am in the process of
+> working out some ideas. A bunch of the possible directions, and the
+> ones that seem most promising to me at the moment, work poorly with
+> tail calls. Having the ownership management (take/drop) of parameters
+> happen entirely on the caller side means that the caller can optimize
+> them away in some situations. Supporting tail calls means that the
+> take must happen in the caller, but the drop in the callee.
+
+I want to make sure I understand this.  Suppose you have a function f
+that passes a box (which is reference-counted) to a function g.  g now
+has ownership of the box, so a refcount has to be incremented, then
+decremented again when g returns.  But if you have tail calls, and f
+made a tail call to g, then the decrement must happen in g, because
+f's frame might no longer be around.
+
+Marijn's point was that we would rather have both the increment and
+the decrement happen on f's side, because apparently that makes it
+possible to optimize away the
+increment/decrement in some situations.   What about having both the
+increment and decrement happen on g's side?  Is that possible, and if
+so, would it do any you any good with respect to optimizability?
+
+Lindsey
+
+From marijnh at gmail.com  Mon Sep 26 10:04:29 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 26 Sep 2011 19:04:29 +0200
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <CALnXJipoRNT8Kha7MUw7cqoFvdEd36vjmBDoZLGb0GK911T4mg@mail.gmail.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+	<CALnXJipoRNT8Kha7MUw7cqoFvdEd36vjmBDoZLGb0GK911T4mg@mail.gmail.com>
+Message-ID: <CAJnHWXvJQOKc4j6mx3Mmva0Zme6c_WXKAHRuX5Y3J4PtJJNNJw@mail.gmail.com>
+
+>? What about having both the
+> increment and decrement happen on g's side? ?Is that possible, and if
+> so, would it do any you any good with respect to optimizability?
+
+Not really. The caller would have to give up its lease on the box as
+it passes it to the callee (if you want to support tail calls). The
+refcount might hit zero at this point, freeing the box. Also, the
+opportunities for optimization are much slimmer here -- you're getting
+the arguments out the blue, so there are no situations where you can
+see that you're holding on the value in some other way, like there are
+on the caller side.
+
+From pwalton at mozilla.com  Wed Sep 28 15:27:37 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 28 Sep 2011 15:27:37 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+Message-ID: <4E839F59.4030608@mozilla.com>
+
+It would be nice if we could figure out what to do about iterators for 
+0.1. I was thinking that we could make them Java-style iterators -- that 
+is, objects with has_next() : bool and next() : T methods. |for each| 
+would simply be syntactic sugar.
+
+This form:
+
+	for each (x in iter()) {
+		...
+	}
+
+Would desugar (in trans) into:
+
+	let _i = iter();
+	while (_i.has_next()) {
+		let x = _i.next();
+		...
+	}
+
+This has the following advantages:
+
+* Easy to implement.
+* Easy for LLVM to optimize. Simple SROA and inlining should make this 
+as efficient as a for loop.
+* Simple performance model.
+* Familiar to programmers.
+* Allows us to support |break|, |cont|, and early |ret| easily.
+* Allows |break| and |ret| to be efficient. They simply throw away the 
+iterator object. No special stack discipline necessary.
+* Makes upvars (outer variables referenced from the loop body) free in 
+terms of performance.
+* Generator-like patterns can be achieved by making the iterator 
+implementation use tasks internally.
+* Allows us to eliminate |put|.
+
+But it has these disadvantages:
+
+* Tasks can be more syntactically heavyweight than sequential-style 
+iteration using |put|.
+* Data sharing between tasks is restrictive, which can make 
+generator-like patterns awkward to use.
+
+Thoughts?
+
+Patrick
+
+From brendan at mozilla.org  Wed Sep 28 17:27:45 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Wed, 28 Sep 2011 17:27:45 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E839F59.4030608@mozilla.com>
+References: <4E839F59.4030608@mozilla.com>
+Message-ID: <912F4ADD-66B8-4298-B4BC-DC95F3650D5E@mozilla.org>
+
+On principle I do not want us to go down this path, even if we change later. It adds risk that we won't change. It imposes a stateful model on iterators where has_next and next must be coherent, and you have to write two methos (not one as in Python or JS.next). And, Java.
+
+/be
+
+On Sep 28, 2011, at 3:27 PM, Patrick Walton wrote:
+
+> It would be nice if we could figure out what to do about iterators for 0.1. I was thinking that we could make them Java-style iterators -- that is, objects with has_next() : bool and next() : T methods. |for each| would simply be syntactic sugar.
+> 
+> This form:
+> 
+> 	for each (x in iter()) {
+> 		...
+> 	}
+> 
+> Would desugar (in trans) into:
+> 
+> 	let _i = iter();
+> 	while (_i.has_next()) {
+> 		let x = _i.next();
+> 		...
+> 	}
+> 
+> This has the following advantages:
+> 
+> * Easy to implement.
+> * Easy for LLVM to optimize. Simple SROA and inlining should make this as efficient as a for loop.
+> * Simple performance model.
+> * Familiar to programmers.
+> * Allows us to support |break|, |cont|, and early |ret| easily.
+> * Allows |break| and |ret| to be efficient. They simply throw away the iterator object. No special stack discipline necessary.
+> * Makes upvars (outer variables referenced from the loop body) free in terms of performance.
+> * Generator-like patterns can be achieved by making the iterator implementation use tasks internally.
+> * Allows us to eliminate |put|.
+> 
+> But it has these disadvantages:
+> 
+> * Tasks can be more syntactically heavyweight than sequential-style iteration using |put|.
+> * Data sharing between tasks is restrictive, which can make generator-like patterns awkward to use.
+> 
+> Thoughts?
+> 
+> Patrick
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From pwalton at mozilla.com  Wed Sep 28 17:53:14 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 28 Sep 2011 17:53:14 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <912F4ADD-66B8-4298-B4BC-DC95F3650D5E@mozilla.org>
+References: <4E839F59.4030608@mozilla.com>
+	<912F4ADD-66B8-4298-B4BC-DC95F3650D5E@mozilla.org>
+Message-ID: <4E83C17A.9030704@mozilla.com>
+
+On 9/28/11 5:27 PM, Brendan Eich wrote:
+> On principle I do not want us to go down this path, even if we change later. It adds risk that we won't change. It imposes a stateful model on iterators where has_next and next must be coherent, and you have to write two methos (not one as in Python or JS.next). And, Java.
+
+I'd be fine with a single-method solution too: iterators could just be a 
+closure that returns option::t, with none used to indicate the end of 
+iteration.
+
+Patrick
+
+
+From brendan at mozilla.org  Wed Sep 28 17:54:01 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Wed, 28 Sep 2011 17:54:01 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E83C17A.9030704@mozilla.com>
+References: <4E839F59.4030608@mozilla.com>
+	<912F4ADD-66B8-4298-B4BC-DC95F3650D5E@mozilla.org>
+	<4E83C17A.9030704@mozilla.com>
+Message-ID: <6143D868-7668-405B-97F9-0364C9905600@mozilla.org>
+
+On Sep 28, 2011, at 5:53 PM, Patrick Walton wrote:
+
+> On 9/28/11 5:27 PM, Brendan Eich wrote:
+>> On principle I do not want us to go down this path, even if we change later. It adds risk that we won't change. It imposes a stateful model on iterators where has_next and next must be coherent, and you have to write two methos (not one as in Python or JS.next). And, Java.
+> 
+> I'd be fine with a single-method solution too: iterators could just be a closure that returns option::t, with none used to indicate the end of iteration.
+
+Now you are talking.
+
+/be
+
+From tellrob at gmail.com  Wed Sep 28 19:11:28 2011
+From: tellrob at gmail.com (Rob Arnold)
+Date: Wed, 28 Sep 2011 19:11:28 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <6143D868-7668-405B-97F9-0364C9905600@mozilla.org>
+References: <4E839F59.4030608@mozilla.com>
+	<912F4ADD-66B8-4298-B4BC-DC95F3650D5E@mozilla.org>
+	<4E83C17A.9030704@mozilla.com>
+	<6143D868-7668-405B-97F9-0364C9905600@mozilla.org>
+Message-ID: <CAPe5QEZdA8oSSAfS0QQVGMBkbmYsEa8=TjcPZG4UecWHsLo9xw@mail.gmail.com>
+
++1 This is nice. Should make iterating over ML-style lists very natural. Not
+sure how you would write a closure for an array, could you post a sample for
+that?
+
+-Rob
+
+On Wed, Sep 28, 2011 at 5:54 PM, Brendan Eich <brendan at mozilla.org> wrote:
+
+> On Sep 28, 2011, at 5:53 PM, Patrick Walton wrote:
+>
+> > On 9/28/11 5:27 PM, Brendan Eich wrote:
+> >> On principle I do not want us to go down this path, even if we change
+> later. It adds risk that we won't change. It imposes a stateful model on
+> iterators where has_next and next must be coherent, and you have to write
+> two methos (not one as in Python or JS.next). And, Java.
+> >
+> > I'd be fine with a single-method solution too: iterators could just be a
+> closure that returns option::t, with none used to indicate the end of
+> iteration.
+>
+> Now you are talking.
+>
+> /be
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110928/1fd07cb8/attachment.html>
+
+From graydon at mozilla.com  Wed Sep 28 21:17:47 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 28 Sep 2011 21:17:47 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E839F59.4030608@mozilla.com>
+References: <4E839F59.4030608@mozilla.com>
+Message-ID: <4E83F16B.7020506@mozilla.com>
+
+On 28/09/2011 3:27 PM, Patrick Walton wrote:
+
+> Thoughts?
+
+- Tasks-as-generators style works regardless, is orthogonal.
+
+- Inlining should work with closure-passing form as well, no?
+   the identity of the inlinees are all module-local constants
+
+- Both models require "externalizing" (in a separate variable +
+   function call per iteration) some state while loop-optimizing
+   some other. Not clear to me there's any perf advantage, or a
+   substantial one.
+
+- I prefer the closure-passing form:
+
+   - Already implemented, modulo possibly throwing out the "each"
+     keyword when we sink the range-loops into iters, and adding support
+     for break/cont/ret, but I'm ok deferring those anyways.
+
+   - We have no mechanism for "desugaring" at present and I don't really
+     want to make one up; but even if you do, you're giving magic-name
+     status to "has_next" and "next" rather than the magic-name "loopctl"
+     type we were discussing to make break/cont/ret work.
+
+   - Expresses the "iteratee is aliased during iteration" fact to the
+     alias-checker, so you don't have to worry about invalidating
+     externalized iterators. This is important; particularly if you want
+     to exploit next part ...
+
+   - Affords its own optimization opportunities, just elsewhere;
+     consider:
+
+     for (elt in vec::each(v)) { ... }
+
+     iter each<T>([T] v) -> T {
+         unsafe {
+             let p = ptr::addr_of(v[0]);
+             let e = p + vec::len(v);
+             while (p != e) {
+                 put *p;
+             }
+         }
+     }
+
+     We can't do this with exterior iters.
+
+I agree it should be mopped up before 0.1, but I prefer the path of just 
+finishing up loopctl and removing the 'for' / 'for each' distinction.
+
+-Graydon
+
+From marijnh at gmail.com  Thu Sep 29 00:10:41 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Thu, 29 Sep 2011 09:10:41 +0200
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E839F59.4030608@mozilla.com>
+References: <4E839F59.4030608@mozilla.com>
+Message-ID: <CAJnHWXv9B67D42iRuGCPXciNodLxXRwvQNLPg_247DX5NcASLw@mail.gmail.com>
+
+I see two potential problems with this... We can't use references for
+the yielded values, which might be a major penalty in some cases. And
+I somewhat doubt that it is easy to optimize. Firstly, our objects are
+heap-allocated, so you have a malloc/free for every loop, and
+secondly, inlining things from vtables is not trivial (and not
+currently happening, I think). Even if the object is defined in the
+same crate, and the object constructor is inlined, there's some rather
+obtuse pointer arithmetic and casting used to fetch the code pointer
+from the vtable. LLVM doesn't currently see through that.
+
+I was thinking in another direction. We could do what Python does and
+compile the stack frames for iter functions in a special way. Instead
+of a function pointer, an iterator would be given a pointer to space
+it can use for its frame. Allocas within the iterator would go there.
+The body would have to be split up into several functions, where each
+'put' starts a new function (some non-trivial transformations would be
+needed, but nothing hard, as far as I can see). A 'put' would involve
+storing the next function into the frame and returning. LLVM rather
+gets in our way here, but I think we could pull it off. Cleanup of
+such frames is tricky, but also doable (a 'current cleanup glue' would
+have to be stored in the frame, and updated at every 'put').
+
+The user of an iterator could choose to allocate it on the stack (in a
+for-each style construct), or on the heap if it wants to use the
+iterator as a first-class value. The size of an iter's frame would
+have to be exported along with the iter, because the code that
+allocates it has to be generated on the side of the user.
+
+I agree this sounds pretty scary. It'd make for versatile, efficient
+iterators though. Also, since their frame would be alive during the
+iteration, values can be yielded by reference, although the loop body
+lives in the function that contains the for-each (and can thus
+return/break/cont as normal).
+
+From pwalton at mozilla.com  Thu Sep 29 05:07:29 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 29 Sep 2011 05:07:29 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <CAJnHWXv9B67D42iRuGCPXciNodLxXRwvQNLPg_247DX5NcASLw@mail.gmail.com>
+References: <4E839F59.4030608@mozilla.com>
+	<CAJnHWXv9B67D42iRuGCPXciNodLxXRwvQNLPg_247DX5NcASLw@mail.gmail.com>
+Message-ID: <4E845F81.40400@mozilla.com>
+
+On 9/29/11 12:10 AM, Marijn Haverbeke wrote:
+> I see two potential problems with this... We can't use references for
+> the yielded values, which might be a major penalty in some cases.
+
+I'm assuming that the issue is that alias analysis will prevent you from 
+returning a reference due to it not being able to see through the 
+closure? Sounds like more of a problem with the alias analysis, if so.
+
+> And I somewhat doubt that it is easy to optimize. Firstly, our objects are
+> heap-allocated, so you have a malloc/free for every loop, and
+> secondly, inlining things from vtables is not trivial (and not
+> currently happening, I think). Even if the object is defined in the
+> same crate, and the object constructor is inlined, there's some rather
+> obtuse pointer arithmetic and casting used to fetch the code pointer
+> from the vtable. LLVM doesn't currently see through that.
+
+We really shouldn't be casting that much, but yeah. Having iterators 
+just be a closure would fix this.
+
+> I was thinking in another direction. We could do what Python does and
+> compile the stack frames for iter functions in a special way. Instead
+> of a function pointer, an iterator would be given a pointer to space
+> it can use for its frame. Allocas within the iterator would go there.
+> The body would have to be split up into several functions, where each
+> 'put' starts a new function (some non-trivial transformations would be
+> needed, but nothing hard, as far as I can see). A 'put' would involve
+> storing the next function into the frame and returning. LLVM rather
+> gets in our way here, but I think we could pull it off. Cleanup of
+> such frames is tricky, but also doable (a 'current cleanup glue' would
+> have to be stored in the frame, and updated at every 'put').
+>
+> The user of an iterator could choose to allocate it on the stack (in a
+> for-each style construct), or on the heap if it wants to use the
+> iterator as a first-class value. The size of an iter's frame would
+> have to be exported along with the iter, because the code that
+> allocates it has to be generated on the side of the user.
+>
+> I agree this sounds pretty scary. It'd make for versatile, efficient
+> iterators though. Also, since their frame would be alive during the
+> iteration, values can be yielded by reference, although the loop body
+> lives in the function that contains the for-each (and can thus
+> return/break/cont as normal).
+
+This is the kind of complexity that I was hoping to avoid. I would 
+prefer to do some sort of stack-jumping protocol (i.e. just jump back to 
+the previous frame on a |put|) before this. Most iterators are going to 
+be used for very simple things, like vec::iteri, int::range, and so 
+forth, and the #1 goal is for LLVM to be able to optimize these into 
+something as efficient as a for loop.
+
+Patrick
+
+From peterhull90 at gmail.com  Thu Sep 29 05:20:49 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Thu, 29 Sep 2011 13:20:49 +0100
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E83F16B.7020506@mozilla.com>
+References: <4E839F59.4030608@mozilla.com>
+	<4E83F16B.7020506@mozilla.com>
+Message-ID: <CAK9Gx1eCJS28fG2b2_srB_q6cYCjLhmiYFv1=i5NFi0_FyGjDg@mail.gmail.com>
+
+On Thu, Sep 29, 2011 at 5:17 AM, Graydon Hoare <graydon at mozilla.com> wrote:
+> - I prefer the closure-passing form:
+With this form, would it be possible to extract more than one value
+per loop - for example if I had a sequence of numbers that I wanted to
+pair up to make a sequence of (x, y) coordinates, such as 0, 0, 0, 1,
+1, 1, 1, 0 -> (0,0), (0,1), (1,1), (1,0)?
+
+Pete
+
+From pwalton at mozilla.com  Thu Sep 29 05:21:19 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 29 Sep 2011 05:21:19 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <CAK9Gx1eCJS28fG2b2_srB_q6cYCjLhmiYFv1=i5NFi0_FyGjDg@mail.gmail.com>
+References: <4E839F59.4030608@mozilla.com> <4E83F16B.7020506@mozilla.com>
+	<CAK9Gx1eCJS28fG2b2_srB_q6cYCjLhmiYFv1=i5NFi0_FyGjDg@mail.gmail.com>
+Message-ID: <4E8462BF.1040109@mozilla.com>
+
+On 9/29/11 5:20 AM, Peter Hull wrote:
+> On Thu, Sep 29, 2011 at 5:17 AM, Graydon Hoare<graydon at mozilla.com>  wrote:
+>> - I prefer the closure-passing form:
+> With this form, would it be possible to extract more than one value
+> per loop - for example if I had a sequence of numbers that I wanted to
+> pair up to make a sequence of (x, y) coordinates, such as 0, 0, 0, 1,
+> 1, 1, 1, 0 ->  (0,0), (0,1), (1,1), (1,0)?
+
+Use a tuple.
+
+Patrick
+
+
+From marijnh at gmail.com  Thu Sep 29 05:25:03 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Thu, 29 Sep 2011 14:25:03 +0200
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E845F81.40400@mozilla.com>
+References: <4E839F59.4030608@mozilla.com>
+	<CAJnHWXv9B67D42iRuGCPXciNodLxXRwvQNLPg_247DX5NcASLw@mail.gmail.com>
+	<4E845F81.40400@mozilla.com>
+Message-ID: <CAJnHWXsKnx7aQ2VWdmNkecDpBqT-_SEQ5K53oRgOBoAyr1Xy=w@mail.gmail.com>
+
+> I'm assuming that the issue is that alias analysis will prevent you from
+> returning a reference due to it not being able to see through the closure?
+
+I guess we could use return-by-alias here, yes. I was kind of assuming
+everybody hated that and wanted it to go away. But if we use that we
+can no longer return a tag to indicate end of sequence (you can't
+currently wrap a reference in a data structure -- supporting that
+would get way too hairy).
+
+> This is the kind of complexity that I was hoping to avoid. I would prefer to
+> do some sort of stack-jumping protocol (i.e. just jump back to the previous
+> frame on a |put|) before this.
+
+The problem I was trying to avoid (which your approach would also
+solve) is that our current iterators do not support iterating over
+multiple things at once. This is very awkward (see all the while loops
+we're still using). Having first-class iterators would make it
+possible to use them in more than simple, single-sequence loops.
+
+From pwalton at mozilla.com  Thu Sep 29 05:28:15 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 29 Sep 2011 05:28:15 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E83F16B.7020506@mozilla.com>
+References: <4E839F59.4030608@mozilla.com> <4E83F16B.7020506@mozilla.com>
+Message-ID: <4E84645F.2030808@mozilla.com>
+
+On 9/28/11 9:17 PM, Graydon Hoare wrote:
+> - Expresses the "iteratee is aliased during iteration" fact to the
+> alias-checker, so you don't have to worry about invalidating
+> externalized iterators. This is important; particularly if you want
+> to exploit next part ...
+
+I don't understand this, sorry... could you explain?
+
+> - Affords its own optimization opportunities, just elsewhere;
+> consider:
+>
+> for (elt in vec::each(v)) { ... }
+>
+> iter each<T>([T] v) -> T {
+> unsafe {
+> let p = ptr::addr_of(v[0]);
+> let e = p + vec::len(v);
+> while (p != e) {
+> put *p;
+> }
+> }
+> }
+>
+> We can't do this with exterior iters.
+
+What about:
+
+fn each<T>([T] v) -> fn()->option<T> {
+	let p, e;
+	unsafe {
+		p = @mutable ptr::addr_of(v[0]);
+		e = p + vec::len(v);
+	}
+	
+	ret lambda() {
+		unsafe {
+			if p < e {
+				let rv = *p;
+				*p = ptr::next(*p);
+				ret some(rv);
+			}
+			ret none;
+		}
+	}
+}
+
+> I agree it should be mopped up before 0.1, but I prefer the path of just
+> finishing up loopctl and removing the 'for' / 'for each' distinction.
+
+The complexity of loopctl is what I'm worried about, I guess. It 
+requires a bunch of dynamic "did this loop break? did this loop 
+early-return?" checks. I'm not sure what the precedent for this is.
+
+The thing that makes my proposal possibly problematic is that it ties 
+option::t into the language at a much closer level than it's ever been 
+tied before. I'm quite possibly ok with that, given that there are 
+optimization opportunities for option::t that pretty much no other tags 
+get (specifically, optimizing option::t<~T> and option::t<@T> into null 
+pointers instead of two words). But it does mean that it's probably a 
+post 0.1 feature.
+
+Patrick
+
+From noelgrandin at gmail.com  Thu Sep 29 05:36:28 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Thu, 29 Sep 2011 14:36:28 +0200
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E839F59.4030608@mozilla.com>
+References: <4E839F59.4030608@mozilla.com>
+Message-ID: <4E84664C.4090607@gmail.com>
+
+
+May be of interest to this discussion:
+
+http://www.uop.edu.jo/download/PdfCourses/Cplus/iterators-must-go.pdf
+
+Short presentation on the design of the std.range module in the D language, which is intended to replace iterators.
+
+-- Noel Grandin
+
+Patrick Walton wrote:
+> It would be nice if we could figure out what to do about iterators for 0.1. I was thinking that we could make them
+> Java-style iterators -- that is, objects with has_next() : bool and next() : T methods. |for each| would simply be
+> syntactic sugar.
+>
+> This form:
+>
+>     for each (x in iter()) {
+>         ...
+>     }
+>
+> Would desugar (in trans) into:
+>
+>     let _i = iter();
+>     while (_i.has_next()) {
+>         let x = _i.next();
+>         ...
+>     }
+>
+> This has the following advantages:
+>
+> * Easy to implement.
+> * Easy for LLVM to optimize. Simple SROA and inlining should make this as efficient as a for loop.
+> * Simple performance model.
+> * Familiar to programmers.
+> * Allows us to support |break|, |cont|, and early |ret| easily.
+> * Allows |break| and |ret| to be efficient. They simply throw away the iterator object. No special stack discipline
+> necessary.
+> * Makes upvars (outer variables referenced from the loop body) free in terms of performance.
+> * Generator-like patterns can be achieved by making the iterator implementation use tasks internally.
+> * Allows us to eliminate |put|.
+>
+> But it has these disadvantages:
+>
+> * Tasks can be more syntactically heavyweight than sequential-style iteration using |put|.
+> * Data sharing between tasks is restrictive, which can make generator-like patterns awkward to use.
+>
+> Thoughts?
+>
+> Patrick
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From pwalton at mozilla.com  Thu Sep 29 05:38:34 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 29 Sep 2011 05:38:34 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <CAJnHWXsKnx7aQ2VWdmNkecDpBqT-_SEQ5K53oRgOBoAyr1Xy=w@mail.gmail.com>
+References: <4E839F59.4030608@mozilla.com>
+	<CAJnHWXv9B67D42iRuGCPXciNodLxXRwvQNLPg_247DX5NcASLw@mail.gmail.com>
+	<4E845F81.40400@mozilla.com>
+	<CAJnHWXsKnx7aQ2VWdmNkecDpBqT-_SEQ5K53oRgOBoAyr1Xy=w@mail.gmail.com>
+Message-ID: <4E8466CA.3000902@mozilla.com>
+
+On 9/29/11 5:25 AM, Marijn Haverbeke wrote:
+> I guess we could use return-by-alias here, yes. I was kind of assuming
+> everybody hated that and wanted it to go away. But if we use that we
+> can no longer return a tag to indicate end of sequence (you can't
+> currently wrap a reference in a data structure -- supporting that
+> would get way too hairy).
+
+True, it's a bummer. At some point you just need to start using swap if 
+you want to avoid copies. Or you iterate by index only (probably the 
+least painful solution).
+
+This sort of thing is why I think @ is going to end up being pretty 
+common in real-world code. Not too bad IMHO; optimizing heap allocation 
+is well-studied, after all. We're still leagues better than Java on the 
+memory management front because we support stack allocation.
+
+A bigger issue is when you want to iterate over stuff on the exchange 
+heap, of course. For that we'll just have to see how swap turns out. I 
+foresee having a borrowable pointer type (basically just a sugary 
+mutable option::t) in the standard library.
+
+Patrick
+
+From pwalton at mozilla.com  Thu Sep 29 05:41:34 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 29 Sep 2011 05:41:34 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E84664C.4090607@gmail.com>
+References: <4E839F59.4030608@mozilla.com> <4E84664C.4090607@gmail.com>
+Message-ID: <4E84677E.7030501@mozilla.com>
+
+On 9/29/11 5:36 AM, Noel Grandin wrote:
+>
+> May be of interest to this discussion:
+>
+> http://www.uop.edu.jo/download/PdfCourses/Cplus/iterators-must-go.pdf
+>
+> Short presentation on the design of the std.range module in the D language, which is intended to replace iterators.
+
+Looks basically like a variant of what's being proposed here.
+
+Patrick
+
+From marijnh at gmail.com  Thu Sep 29 05:46:57 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Thu, 29 Sep 2011 14:46:57 +0200
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E8466CA.3000902@mozilla.com>
+References: <4E839F59.4030608@mozilla.com>
+	<CAJnHWXv9B67D42iRuGCPXciNodLxXRwvQNLPg_247DX5NcASLw@mail.gmail.com>
+	<4E845F81.40400@mozilla.com>
+	<CAJnHWXsKnx7aQ2VWdmNkecDpBqT-_SEQ5K53oRgOBoAyr1Xy=w@mail.gmail.com>
+	<4E8466CA.3000902@mozilla.com>
+Message-ID: <CAJnHWXtYWxVdcOWQsuR9rRXE3iC1OkEJcRiHW4krsUCPxLAyLA@mail.gmail.com>
+
+>> I guess we could use return-by-alias here, yes. I was kind of assuming
+>> everybody hated that and wanted it to go away. But if we use that we
+>> can no longer return a tag to indicate end of sequence (you can't
+>> currently wrap a reference in a data structure -- supporting that
+>> would get way too hairy).
+>
+> True, it's a bummer. At some point you just need to start using swap if you
+> want to avoid copies. Or you iterate by index only (probably the least
+> painful solution).
+
+Your remarks about making option::t special do open up a possible road
+here. We could represent optional reference returns as 'return either
+a reference or a null pointer'. That's still pretty ugly, but it'd
+make for both a nice iterater protocol and a way to make
+std::map::lookup return a reference.
+
+I still consider using swap to return things an absolute non-solution.
+Try writing some code in that style. Unless I'm missing some part of
+the way you want to approach this, it's absolutely dreadful to work
+with.
+
+> This sort of thing is why I think @ is going to end up being pretty common
+> in real-world code. Not too bad IMHO; optimizing heap allocation is
+> well-studied, after all.
+
+Sure, but being a heap-centric language is completely opposed to what
+we've been doing so far. A language has shouldn't straddle the fence
+about the style it prefers, or you get a mess. We should either go
+modern-style (allocate everything except immediates, garbage-collect,
+use escape analysis to put some allocations on the stack), or C-style
+(stack is default, go out of our way to provide safe references).
+Doing both seems bad taste.
+
+From pwalton at mozilla.com  Thu Sep 29 05:58:39 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 29 Sep 2011 05:58:39 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <CAJnHWXtYWxVdcOWQsuR9rRXE3iC1OkEJcRiHW4krsUCPxLAyLA@mail.gmail.com>
+References: <4E839F59.4030608@mozilla.com>
+	<CAJnHWXv9B67D42iRuGCPXciNodLxXRwvQNLPg_247DX5NcASLw@mail.gmail.com>
+	<4E845F81.40400@mozilla.com>
+	<CAJnHWXsKnx7aQ2VWdmNkecDpBqT-_SEQ5K53oRgOBoAyr1Xy=w@mail.gmail.com>
+	<4E8466CA.3000902@mozilla.com>
+	<CAJnHWXtYWxVdcOWQsuR9rRXE3iC1OkEJcRiHW4krsUCPxLAyLA@mail.gmail.com>
+Message-ID: <4E846B7F.3020203@mozilla.com>
+
+On 9/29/11 5:46 AM, Marijn Haverbeke wrote:
+> I still consider using swap to return things an absolute non-solution.
+> Try writing some code in that style. Unless I'm missing some part of
+> the way you want to approach this, it's absolutely dreadful to work
+> with.
+
+If swap is unacceptable, then, as I've said before, we need to 
+completely rethink the way we do concurrency. Even if we come up with 
+some reference-based solution for single-threaded iteration, we're still 
+back to swap for parallel iteration. If parallel iteration is too 
+painful, people won't use it, defeating many use cases of Rust.
+
+My point here is that we need to make swap palatable. Whether we do that 
+through integrating borrowable pointers into the language at a deeper 
+level, or through standard library magic, doesn't matter to me. But just 
+saying "swap is a non-solution" is sweeping a problem under the rug.
+
+> Sure, but being a heap-centric language is completely opposed to what
+> we've been doing so far. A language has shouldn't straddle the fence
+> about the style it prefers, or you get a mess. We should either go
+> modern-style (allocate everything except immediates, garbage-collect,
+> use escape analysis to put some allocations on the stack), or C-style
+> (stack is default, go out of our way to provide safe references).
+> Doing both seems bad taste.
+
+I disagree with this dichotomy. There's nothing wrong with having the 
+programmer be explicit about where allocations live; that's part of what 
+makes Rust a systems language. C# has both value types that live on the 
+stack and reference types that live on the heap and are garbage 
+collected. Expand the notion of garbage collection to include reference 
+counting and C++ does too (via shared_ptr and the numerous other 
+reference counted smart pointer templates).
+
+Patrick
+
+From graydon at mozilla.com  Thu Sep 29 11:00:27 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 29 Sep 2011 11:00:27 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E84645F.2030808@mozilla.com>
+References: <4E839F59.4030608@mozilla.com> <4E83F16B.7020506@mozilla.com>
+	<4E84645F.2030808@mozilla.com>
+Message-ID: <4E84B23B.5070804@mozilla.com>
+
+On 29/09/2011 5:28 AM, Patrick Walton wrote:
+> On 9/28/11 9:17 PM, Graydon Hoare wrote:
+>> - Expresses the "iteratee is aliased during iteration" fact to the
+>> alias-checker, so you don't have to worry about invalidating
+>> externalized iterators. This is important; particularly if you want
+>> to exploit next part ...
+>
+> I don't understand this, sorry... could you explain?
+
+Sure. I want to make sure it's clear:
+
+let v = [1,2,3,4];
+let i = vec::iter(v);
+v = [];
+while (i.has_next()) {
+     let e = i.next();
+     foo(e); // crash.
+}
+
+Same thing happens if you mutate an element:
+
+let v = [mutable [0],[1],[2],[3]];
+let i = vec::iter(v);
+let e = i.next();
+v[0] = [];
+e[0]++; // crash.
+
+You're introducing either require-copy or unsafe-alias problems. 
+Closure-passing style tells the alias-analysis system what it needs to 
+keep reference-based iteration safe. You can't touch the vec while 
+you're pointing into it. Statically. Even if you make copies, it's very 
+likely nothing you return *from* the iterator can be a reference either 
+since they'll be hidden state inside the iterator; the alias-analysis 
+system can't make unsafe code safe.
+
+>> We can't do this with exterior iters.
+>
+> What about:
+> ... (lambda holding unsafe pointers) ...
+
+The version I wrote is actually safe (you can't crash it since the vec 
+is kept alive during iteration); the one you wrote is contingent on the 
+programmer "using it right". Alias-analysis problem, as above.
+
+> The complexity of loopctl is what I'm worried about, I guess. It
+> requires a bunch of dynamic "did this loop break? did this loop
+> early-return?" checks. I'm not sure what the precedent for this is.
+
+Lots. Lots and lots. Many functional interfaces define a "return false 
+from thunk to stop the enumerator" style. Early returns from non-total 
+sequence enumerators in side-effecty functional languages have been 
+around at least since common lisp:
+
+http://www.lispworks.com/documentation/HyperSpec/Body/m_dolist.htm
+
+Likewise it's in SRFI-44
+
+http://srfi.schemers.org/srfi-44/srfi-44.html#enumprocs
+
+Those less-side-effecty languages (haskell and ML say) always have a 
+search-and-return-early "find" interface too:
+
+http://www.haskell.org/ghc/docs/latest/html/libraries/base-4.4.0.0/Data-List.html#v:find
+
+http://www.standardml.org/Basis/list.html#SIG:LIST.find:VAL
+
+If you want to do the simpler thing, we don't need a "full" tri-state 
+loopctl datatype, just bool. Do this:
+
+     - Break in loop body => return false from loop thunk
+     - Cont in loop body => return true from loop thunk
+     - Ret in loop body => prohibited, but easy to emulate:
+
+       let res = sentinel;
+       let found = false;
+       for e in iter(v) {
+           if foo(e) {
+               res = e;
+               found = true;
+               break;
+           }
+        }
+        if found { ret res; }
+
+Another possibility I'm totally fine with:
+
+     - Eliminate 'for / break / cont' transformation altogether,
+       just tell users to write in terminal-bool closure-passing style:
+
+       let res = sentinel;
+       let found = false;
+       vec::each(v) {|e|
+           if foo(e) {
+               res = e;
+               found = true;
+               false
+           } else {
+               true
+           }
+        }
+        if found { ret res; }
+
+        lest you find this too chatty for the no-early-stop case, let
+        me point out aspect B:
+
+      - Write >1 iter interfaces on most collections, with varying
+        strategies, to reduce unwanted boilerplate in cases you don't
+        need it. Cold code is cold, harmless.
+
+        vec::each(v)  ==  takes fn(e) -> (), returns ()
+        vec::scan(v)  ==  takes fn(e) -> bool, returns ()
+        vec::find(v)  ==  takes fn(e) -> bool, returns option::t<e>
+
+I really, really think the exterior-iterator style is wrong. It puts 
+logic in the wrong place, encourages hand-recoding loop logic 
+incorrectly rather than collecting a rich library of correct 
+enumerators. You can write a whole lot of cold enumerators that are safe 
+and do-interesting-things to cover, I think, any of the needs of an 
+external-iterator. This was less true when we had no closures, but now 
+that we have block closures, I don't think there's any excuse.
+
+If you don't believe me, believe Oleg!
+
+http://okmij.org/ftp/papers/LL3-collections-enumerators.txt
+
+-Graydon
+
+From pwalton at mozilla.com  Thu Sep 29 15:04:08 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 29 Sep 2011 15:04:08 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E84B23B.5070804@mozilla.com>
+References: <4E839F59.4030608@mozilla.com> <4E83F16B.7020506@mozilla.com>
+	<4E84645F.2030808@mozilla.com> <4E84B23B.5070804@mozilla.com>
+Message-ID: <4E84EB58.9070002@mozilla.com>
+
+On 9/29/11 11:00 AM, Graydon Hoare wrote:
+> You're introducing either require-copy or unsafe-alias problems.
+> Closure-passing style tells the alias-analysis system what it needs to
+> keep reference-based iteration safe. You can't touch the vec while
+> you're pointing into it. Statically. Even if you make copies, it's very
+> likely nothing you return *from* the iterator can be a reference either
+> since they'll be hidden state inside the iterator; the alias-analysis
+> system can't make unsafe code safe.
+
+For some reason the alias analysis doesn't allow me to write vec::eachi 
+the way I'd like to:
+
+fn eachi<@T>(f: block(T, uint) -> (), v: [mutable? T]) {
+     let i = 0u;
+     let l = len(v);
+     while (i < l) {
+         f(v[i], i);	// fails
+         i += 1u;
+     }
+}
+
+../src/lib/vec.rs:340:8: 340:9 error: function may alias with argument 
+0, which is not immutably rooted
+../src/lib/vec.rs:340         f(v[i], i);
+
+Instead I have to write:
+
+fn eachi<@T>(f: block(T, uint) -> (), v: [mutable? T]) {
+     let i = 0u;
+     let l = len(v);
+     while (i < l) {
+         let elem = v[i];    // Satisfy alias checker
+         f(elem, i);
+         i += 1u;
+     }
+}
+
+I guess the alias analysis is being defensive against the block here?
+
+Patrick
+
+From pwalton at mozilla.com  Thu Sep 29 16:07:43 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 29 Sep 2011 16:07:43 -0700
+Subject: [rust-dev] Parameter passing and native calls
+Message-ID: <4E84FA3F.9050500@mozilla.com>
+
+Now that every parameter is passed by reference, our ABI is no longer 
+compatible with C. Passing a struct by value is not the same as passing 
+it by immutable alias in C.
+
+This is a severe problem, and my first instinct is to propose bringing 
+back & for it. We could bring the old meaning of & back just for native 
+calls, but that seems inconsistent.
+
+Patrick
+
+From brendan at mozilla.org  Thu Sep 29 16:22:15 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Fri, 30 Sep 2011 00:22:15 +0100
+Subject: [rust-dev] Parameter passing and native calls
+In-Reply-To: <4E84FA3F.9050500@mozilla.com>
+References: <4E84FA3F.9050500@mozilla.com>
+Message-ID: <E9DB6498-AED7-427B-B607-65E5CEA48967@mozilla.org>
+
+Wait, what? Even a stack allocated int32 is passed by reference? That is wrong, it hurts performance as well as breaking ABI.
+
+When did this change, for what reason?
+
+/be
+
+On Sep 30, 2011, at 12:07 AM, Patrick Walton wrote:
+
+> Now that every parameter is passed by reference, our ABI is no longer compatible with C. Passing a struct by value is not the same as passing it by immutable alias in C.
+> 
+> This is a severe problem, and my first instinct is to propose bringing back & for it. We could bring the old meaning of & back just for native calls, but that seems inconsistent.
+> 
+> Patrick
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From pwalton at mozilla.com  Thu Sep 29 16:25:50 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 29 Sep 2011 16:25:50 -0700
+Subject: [rust-dev] Parameter passing and native calls
+In-Reply-To: <E9DB6498-AED7-427B-B607-65E5CEA48967@mozilla.org>
+References: <4E84FA3F.9050500@mozilla.com>
+	<E9DB6498-AED7-427B-B607-65E5CEA48967@mozilla.org>
+Message-ID: <4E84FE7E.2030405@mozilla.com>
+
+On 9/29/11 4:22 PM, Brendan Eich wrote:
+> Wait, what? Even a stack allocated int32 is passed by reference? That is wrong, it hurts performance as well as breaking ABI.
+>
+> When did this change, for what reason?
+
+See the thread starting at 
+https://mail.mozilla.org/pipermail/rust-dev/2011-September/000759.html.
+
+Patrick
+
+
+From brendan at mozilla.org  Thu Sep 29 16:31:56 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Fri, 30 Sep 2011 00:31:56 +0100
+Subject: [rust-dev] Parameter passing and native calls
+In-Reply-To: <4E84FE7E.2030405@mozilla.com>
+References: <4E84FA3F.9050500@mozilla.com>
+	<E9DB6498-AED7-427B-B607-65E5CEA48967@mozilla.org>
+	<4E84FE7E.2030405@mozilla.com>
+Message-ID: <A3EB4AA6-FC90-4102-BAEB-3FF4DDD22D5B@mozilla.org>
+
+Thanks, I was three unread messages from the end, just before the message where all params went to pass by ref. Bad on me for my reading backlog, still I think this needs more discussion before implementation though.
+
+/be
+
+On Sep 30, 2011, at 12:25 AM, Patrick Walton wrote:
+
+> On 9/29/11 4:22 PM, Brendan Eich wrote:
+>> Wait, what? Even a stack allocated int32 is passed by reference? That is wrong, it hurts performance as well as breaking ABI.
+>> 
+>> When did this change, for what reason?
+> 
+> See the thread starting at https://mail.mozilla.org/pipermail/rust-dev/2011-September/000759.html.
+> 
+> Patrick
+> 
+
+
+From graydon at mozilla.com  Thu Sep 29 16:51:17 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 29 Sep 2011 16:51:17 -0700
+Subject: [rust-dev] Parameter passing and native calls
+In-Reply-To: <4E84FA3F.9050500@mozilla.com>
+References: <4E84FA3F.9050500@mozilla.com>
+Message-ID: <4E850475.9090009@mozilla.com>
+
+On 29/09/2011 4:07 PM, Patrick Walton wrote:
+> Now that every parameter is passed by reference, our ABI is no longer
+> compatible with C. Passing a struct by value is not the same as passing
+> it by immutable alias in C.
+>
+> This is a severe problem, and my first instinct is to propose bringing
+> back & for it. We could bring the old meaning of & back just for native
+> calls, but that seems inconsistent.
+
+& is already accepted there; it means "mutable reference" in rust abi.
+
+I think this is probably less of a worry than you're seeing; the "new" 
+rust abi is "probably by reference, but by value in some cases". It only 
+has the freedom to choose when it's unobservable to safe code anyways 
+(when it's an immutable value). So the values are "effectively" the same 
+as passed-by-value as far as callee is concerned. That's why marijn 
+could make the change without breaking everything, after all :)
+
+I think it's fine to have C abi say the same thing:
+
+   - un-adorned means "effectively by-value" (in C-abi, always!),
+     even though in many cases rust-abi will do this by-ref, only
+     in ways that are unobservable in safe code.
+
+   - adorned means "observably by-reference, mutable". This is
+     worth expressing in the signature anyways, since we can't
+     control what C will do with a pointer -- it might write through
+     it -- we might as well tell the alias checker we're forming a
+     mutable pointer here.
+
+It does mean you have to re-add & to a lot of C-abi function signatures 
+that had the & removed during the recent abi shift. To "properly 
+document" that they are taking "mutable references".
+
+-Graydon
+
+From pwalton at mozilla.com  Thu Sep 29 17:07:10 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 29 Sep 2011 17:07:10 -0700
+Subject: [rust-dev] Parameter passing and native calls
+In-Reply-To: <4E850475.9090009@mozilla.com>
+References: <4E84FA3F.9050500@mozilla.com> <4E850475.9090009@mozilla.com>
+Message-ID: <4E85082E.7090902@mozilla.com>
+
+On 9/29/11 4:51 PM, Graydon Hoare wrote:
+> I think this is probably less of a worry than you're seeing; the "new"
+> rust abi is "probably by reference, but by value in some cases". It only
+> has the freedom to choose when it's unobservable to safe code anyways
+> (when it's an immutable value). So the values are "effectively" the same
+> as passed-by-value as far as callee is concerned. That's why marijn
+> could make the change without breaking everything, after all :)
+
+It doesn't have the freedom to choose; it always goes by reference, due 
+to type passing. This is the problem. We can only fix this by 
+monomorphizing.
+
+Patrick
+
+From pwalton at mozilla.com  Thu Sep 29 17:12:07 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 29 Sep 2011 17:12:07 -0700
+Subject: [rust-dev] Parameter passing and native calls
+In-Reply-To: <4E850475.9090009@mozilla.com>
+References: <4E84FA3F.9050500@mozilla.com> <4E850475.9090009@mozilla.com>
+Message-ID: <4E850957.6080009@mozilla.com>
+
+On 9/29/11 4:51 PM, Graydon Hoare wrote:
+> - un-adorned means "effectively by-value" (in C-abi, always!),
+> even though in many cases rust-abi will do this by-ref, only
+> in ways that are unobservable in safe code.
+
+This is a weaker argument, but I'd also think it would be kind of nice 
+if the Rust ABI and the C ABI matched (modulo stack switching). If we 
+monomorphize, we can actually get there (as the task is already in 
+thread local storage and bare fns let us leave off the env pointer).
+
+Also unsafe code can observe the distinction, and I'd like to minimize 
+surprise for them too.
+
+Patrick
+
+From pwalton at mozilla.com  Thu Sep 29 18:15:21 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 29 Sep 2011 18:15:21 -0700
+Subject: [rust-dev] FYI: C stacks
+Message-ID: <4E851829.50502@mozilla.com>
+
+C stacks are starting to make their way into rustc. This is a 
+prerequisite for stack growth -- C code can't in general be expected to 
+perform stack growth checks, so we need to reserve a large stack for it 
+(one per thread, in the current implementation). Right now C stack usage 
+is implemented as a native ABI, so it's opt-in per function.
+
+One major challenge with the implementation of C stacks in rustboot was 
+getting gdb to understand backtraces across C functions. With the 
+current assembler trampoline stub (src/rt/arch/i386/ccall.S), I tried 
+hard to make the stack frame look as normal as possible from gdb's 
+perspective. Backtraces do seem to work on the Mac GDB, once it's 
+appropriately patched to avoid the "(corrupt stack?)" warning (see [1] 
+if you don't mind applying a binary patch, for Snow Leopard).
+
+I'm planning to start moving our native calls over to using the C stack, 
+and I definitely don't want to break backtraces for everyone else. 
+They're really important for productivity :)
+
+So, please don't hesitate to speak up if you're finding broken 
+backtraces due to C stacks over the next few days. I'll do my best to 
+sort out any issues that people have. We all have slightly different 
+build environments and slightly different GDBs. GDB tends to be 
+notoriously fussy about the stack layout, and I want to make sure people 
+aren't left out in the cold.
+
+Thanks!
+
+Patrick
+
+[1]: https://mail.mozilla.org/pipermail/rust-dev/2010-December/000139.html
+
+From marijnh at gmail.com  Fri Sep 30 00:14:48 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 30 Sep 2011 09:14:48 +0200
+Subject: [rust-dev] Parameter passing and native calls
+In-Reply-To: <4E84FA3F.9050500@mozilla.com>
+References: <4E84FA3F.9050500@mozilla.com>
+Message-ID: <CAJnHWXsMN-Sp=YY71t_2V+GYUZE0fSo9ecMq6YrwEbxL6z0bMA@mail.gmail.com>
+
+> Now that every parameter is passed by reference, our ABI is no longer
+> compatible with C.
+
+Are you talking about calling C functions from rust, or calling rust
+from C? In the first case, we are generating a wrapper anyway, which
+currently makes sure things are passed by value. In the second case,
+you are right, but the C code can just pass pointers to things, and
+it'll work.
+
+I agree the current everything-by-reference situation is awful. I'm
+not keen on bringing back references though. One relatively simple
+solution would be partial monomorphizing: For each type parameter that
+a function takes, we generate one version for immediate (by value)
+types, and one version for structural types. You'd get 2^N (where N is
+the number of type params, rarely more than 2) version of each generic
+function. They can be generated in the crate that defines the
+function, so no involved cross-crate magic is needed yet. This'd make
+it predictable again whether an argument is passed by value or by
+reference, so the everything-by-reference hack can go again. It'd also
+make generic functions much more efficient when called on immediate
+values.
+
+What do you think?
+
+From marijnh at gmail.com  Fri Sep 30 00:06:33 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 30 Sep 2011 09:06:33 +0200
+Subject: [rust-dev] FYI: C stacks
+In-Reply-To: <4E851829.50502@mozilla.com>
+References: <4E851829.50502@mozilla.com>
+Message-ID: <CAJnHWXs_9J0G_bTFqERn=ypHdO4FJdVF9gjzfPRLHhKxOp_k8g@mail.gmail.com>
+
+> Backtraces do seem to work on the Mac GDB, once it's appropriately patched
+
+Is this patch in upstream gdb? Ubuntu currently comes with gdb 7.2.
+Can I expect that to work, or should I build a patched on myself?
+
+From marijnh at gmail.com  Fri Sep 30 00:16:03 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 30 Sep 2011 09:16:03 +0200
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E84EB58.9070002@mozilla.com>
+References: <4E839F59.4030608@mozilla.com> <4E83F16B.7020506@mozilla.com>
+	<4E84645F.2030808@mozilla.com> <4E84B23B.5070804@mozilla.com>
+	<4E84EB58.9070002@mozilla.com>
+Message-ID: <CAJnHWXuSUJgDGegb7N009EUA4eGzxRAnUBh6mCRrGkAU1zwMag@mail.gmail.com>
+
+> I guess the alias analysis is being defensive against the block here?
+
+Yes. It has to be. The block might, for all it knows, overwrite the
+vector argument.
+
+Safe references have their cost.
+
+From pwalton at mozilla.com  Fri Sep 30 08:29:15 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 30 Sep 2011 08:29:15 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E84B23B.5070804@mozilla.com>
+References: <4E839F59.4030608@mozilla.com> <4E83F16B.7020506@mozilla.com>
+	<4E84645F.2030808@mozilla.com> <4E84B23B.5070804@mozilla.com>
+Message-ID: <4E85E04B.3090809@mozilla.com>
+
+On 9/29/11 11:00 AM, Graydon Hoare wrote:
+> - Write >1 iter interfaces on most collections, with varying
+> strategies, to reduce unwanted boilerplate in cases you don't
+> need it. Cold code is cold, harmless.
+>
+> vec::each(v) == takes fn(e) -> (), returns ()
+> vec::scan(v) == takes fn(e) -> bool, returns ()
+> vec::find(v) == takes fn(e) -> bool, returns option::t<e>
+>
+> I really, really think the exterior-iterator style is wrong. It puts
+> logic in the wrong place, encourages hand-recoding loop logic
+> incorrectly rather than collecting a rich library of correct
+> enumerators. You can write a whole lot of cold enumerators that are safe
+> and do-interesting-things to cover, I think, any of the needs of an
+> external-iterator. This was less true when we had no closures, but now
+> that we have block closures, I don't think there's any excuse.
+
+Given that we clearly need more discussion here before we reach 
+consensus, I'd like to propose doing the above for 0.1, and removing 
+iters as they currently stand. I already added vec::eachi and it's 
+pretty nice to use -- the added sugar in |for each| doesn't seem to buy 
+us much.
+
+I whipped up a small testcase using clang and it seems that LLVM indeed 
+can optimize this style of iteration into a loop.
+
+Is everyone ok with this?
+
+Patrick
+
+From graydon at mozilla.com  Fri Sep 30 08:32:41 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 30 Sep 2011 08:32:41 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E85E04B.3090809@mozilla.com>
+References: <4E839F59.4030608@mozilla.com> <4E83F16B.7020506@mozilla.com>
+	<4E84645F.2030808@mozilla.com> <4E84B23B.5070804@mozilla.com>
+	<4E85E04B.3090809@mozilla.com>
+Message-ID: <4E85E119.9050002@mozilla.com>
+
+On 30/09/2011 8:29 AM, Patrick Walton wrote:
+
+> Given that we clearly need more discussion here before we reach
+> consensus, I'd like to propose doing the above for 0.1, and removing
+> iters as they currently stand. I already added vec::eachi and it's
+> pretty nice to use -- the added sugar in |for each| doesn't seem to buy
+> us much.
+>
+> I whipped up a small testcase using clang and it seems that LLVM indeed
+> can optimize this style of iteration into a loop.
+>
+> Is everyone ok with this?
+
+Yup. Adios iter/put/each keywords.
+(I suppose saying so is redundant)
+
+Figure you'll change 'for' to C-style 3-clause init/test/step in the 
+meantime? Or just remove 'for' as a keyword and leave it reserved? I 
+don't mind either way.
+
+-Graydon
+
+
+From pwalton at mozilla.com  Fri Sep 30 08:37:29 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 30 Sep 2011 08:37:29 -0700
+Subject: [rust-dev] Parameter passing and native calls
+In-Reply-To: <CAJnHWXsMN-Sp=YY71t_2V+GYUZE0fSo9ecMq6YrwEbxL6z0bMA@mail.gmail.com>
+References: <4E84FA3F.9050500@mozilla.com>
+	<CAJnHWXsMN-Sp=YY71t_2V+GYUZE0fSo9ecMq6YrwEbxL6z0bMA@mail.gmail.com>
+Message-ID: <4E85E239.2080400@mozilla.com>
+
+On 9/30/11 12:14 AM, Marijn Haverbeke wrote:
+>> Now that every parameter is passed by reference, our ABI is no longer
+>> compatible with C.
+>
+> Are you talking about calling C functions from rust, or calling rust
+> from C? In the first case, we are generating a wrapper anyway, which
+> currently makes sure things are passed by value.
+
+Not anymore, with the C decl.
+
+> I agree the current everything-by-reference situation is awful. I'm
+> not keen on bringing back references though. One relatively simple
+> solution would be partial monomorphizing: For each type parameter that
+> a function takes, we generate one version for immediate (by value)
+> types, and one version for structural types. You'd get 2^N (where N is
+> the number of type params, rarely more than 2) version of each generic
+> function. They can be generated in the crate that defines the
+> function, so no involved cross-crate magic is needed yet. This'd make
+> it predictable again whether an argument is passed by value or by
+> reference, so the everything-by-reference hack can go again. It'd also
+> make generic functions much more efficient when called on immediate
+> values.
+>
+> What do you think?
+
+How about what I proposed earlier: the '+' sigil means by-value, the '&' 
+sigil means by-immutable-reference, and leaving it off has the compiler 
+choose a sensible default based on the type? (Word-sized immutable stuff 
+would get +, and others would get &.) You might still have to have & in 
+a few corner cases involving generics, although I can't think of any 
+concrete instances off the top of my head in which this would be the case.
+
+I have a feeling this would avoid all the & noise we had before while 
+maintaining ABI predictability.
+
+Patrick
+
+From pwalton at mozilla.com  Fri Sep 30 08:38:20 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 30 Sep 2011 08:38:20 -0700
+Subject: [rust-dev] Parameter passing and native calls
+In-Reply-To: <4E85E239.2080400@mozilla.com>
+References: <4E84FA3F.9050500@mozilla.com>
+	<CAJnHWXsMN-Sp=YY71t_2V+GYUZE0fSo9ecMq6YrwEbxL6z0bMA@mail.gmail.com>
+	<4E85E239.2080400@mozilla.com>
+Message-ID: <4E85E26C.20808@mozilla.com>
+
+On 9/30/11 8:37 AM, Patrick Walton wrote:
+> On 9/30/11 12:14 AM, Marijn Haverbeke wrote:
+>> Are you talking about calling C functions from rust, or calling rust
+>> from C? In the first case, we are generating a wrapper anyway, which
+>> currently makes sure things are passed by value.
+>
+> Not anymore, with the C decl.
+
+Make that "C stack". Ow.
+
+Patrick
+
+From graydon at mozilla.com  Fri Sep 30 09:09:46 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 30 Sep 2011 09:09:46 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E85E04B.3090809@mozilla.com>
+References: <4E839F59.4030608@mozilla.com> <4E83F16B.7020506@mozilla.com>
+	<4E84645F.2030808@mozilla.com> <4E84B23B.5070804@mozilla.com>
+	<4E85E04B.3090809@mozilla.com>
+Message-ID: <4E85E9CA.4030101@mozilla.com>
+
+On 30/09/2011 8:29 AM, Patrick Walton wrote:
+
+> I whipped up a small testcase using clang and it seems that LLVM indeed
+> can optimize this style of iteration into a loop.
+>
+> Is everyone ok with this?
+
+Oh also note: you almost certainly want to make the 
+traling-block-as-last-arg syntax work before doing the conversion. That 
+is, make:
+
+     vec::each(v) {|e| ... }
+
+parse (and re-print as such) rather than having to write:
+
+     vec::each(v, {|e| ... });
+
+The latter requires hard-to-hack indentation in the pretty printer and 
+trailing }); lexical uglies all over the code. Best to give users a way 
+to avoid these.
+
+-Graydon
+
+From marijnh at gmail.com  Fri Sep 30 09:55:00 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 30 Sep 2011 18:55:00 +0200
+Subject: [rust-dev] Parameter passing and native calls
+In-Reply-To: <4E85E239.2080400@mozilla.com>
+References: <4E84FA3F.9050500@mozilla.com>
+	<CAJnHWXsMN-Sp=YY71t_2V+GYUZE0fSo9ecMq6YrwEbxL6z0bMA@mail.gmail.com>
+	<4E85E239.2080400@mozilla.com>
+Message-ID: <CAJnHWXsE=S5hm3mhrf7jpzz+O0qdeWSycSGhvPD-MnhV4-nkRw@mail.gmail.com>
+
+> Not anymore, with the C decl.
+
+Can you elaborate on that?
+
+> How about what I proposed earlier: the '+' sigil means by-value, the '&'
+> sigil means by-immutable-reference, and leaving it off has the compiler
+> choose a sensible default based on the type?
+
+That'd work, though it'd be a little obscure (a function fn<T>(T) will
+always take its arg by reference, even when instantiated with T=int).
+I guess it's a good stopgap until we decide what to do with
+monomorphizing.
+
+Would passing structural types by value be allowed? How would that
+look? (Using load/store as we used to do, or passing by pointer with
+the caller owning the value, or passed by pointer with the callee
+copying it into its frame?)
+
+From marijnh at gmail.com  Fri Sep 30 10:00:18 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 30 Sep 2011 19:00:18 +0200
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E85E9CA.4030101@mozilla.com>
+References: <4E839F59.4030608@mozilla.com> <4E83F16B.7020506@mozilla.com>
+	<4E84645F.2030808@mozilla.com> <4E84B23B.5070804@mozilla.com>
+	<4E85E04B.3090809@mozilla.com> <4E85E9CA.4030101@mozilla.com>
+Message-ID: <CAJnHWXsG-3Gi5BAx6gfZGjZSsaONoUEKjP3-VMYq=6hiHSDOtQ@mail.gmail.com>
+
+I'm also fine with this. As for the syntax...
+
+> ? ?vec::each(v) {|e| ... }
+
+This once again produces ambiguity with fail and ret: does 'fail {|e|
+...}' mean 'call the function produced by fail with this block', or
+'fail with this block as the message'. Can be hacked around, or we can
+just specify that the second version holds, but it's a wart.
+
+From pwalton at mozilla.com  Fri Sep 30 10:19:31 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 30 Sep 2011 10:19:31 -0700
+Subject: [rust-dev] Parameter passing and native calls
+In-Reply-To: <CAJnHWXsE=S5hm3mhrf7jpzz+O0qdeWSycSGhvPD-MnhV4-nkRw@mail.gmail.com>
+References: <4E84FA3F.9050500@mozilla.com>
+	<CAJnHWXsMN-Sp=YY71t_2V+GYUZE0fSo9ecMq6YrwEbxL6z0bMA@mail.gmail.com>
+	<4E85E239.2080400@mozilla.com>
+	<CAJnHWXsE=S5hm3mhrf7jpzz+O0qdeWSycSGhvPD-MnhV4-nkRw@mail.gmail.com>
+Message-ID: <4E85FA23.6010406@mozilla.com>
+
+On 9/30/11 9:55 AM, Marijn Haverbeke wrote:
+>> Not anymore, with the C decl.
+>
+> Can you elaborate on that?
+
+Native functions with the C stack ABI are what we've been calling "bare 
+functions". That is, |bind| doesn't work with them, and they take no 
+environment. So no wrapper function is needed.
+
+The reason is that I felt that having two layers of indirection per C 
+function call (one for the wrapper, and one for the stack switching 
+stub, both of which actually set up new stack frames) was excessive. 
+Also, in the vast majority of cases, the programmer doesn't need to bind 
+to a native function, so using wrappers tends to generate a lot of code 
+in the crate that doesn't actually buy us anything.
+
+I probably should have cleared this first with the mailing list, sorry.
+
+>> How about what I proposed earlier: the '+' sigil means by-value, the '&'
+>> sigil means by-immutable-reference, and leaving it off has the compiler
+>> choose a sensible default based on the type?
+>
+> That'd work, though it'd be a little obscure (a function fn<T>(T) will
+> always take its arg by reference, even when instantiated with T=int).
+> I guess it's a good stopgap until we decide what to do with
+> monomorphizing.
+
+Well, with type passing that's what we end up having to do.
+
+> Would passing structural types by value be allowed?
+
+Doesn't matter much to me. I guess it allows the copy operator to become 
+a function, if we want to do that (Brian floated this idea). Not high 
+priority though, I don't think.
+
+> How would that look? (Using load/store as we used to do, or passing by pointer with
+> the caller owning the value, or passed by pointer with the callee
+> copying it into its frame?)
+
+My preference is for whatever clang does :) Looks like it passes by 
+pointer with the LLVM |byval| attribute. This causes LLVM to 
+automatically copy on the callee side AFAICT.
+
+Patrick
+
+From graydon at mozilla.com  Fri Sep 30 13:50:21 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 30 Sep 2011 13:50:21 -0700
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <CAJnHWXsG-3Gi5BAx6gfZGjZSsaONoUEKjP3-VMYq=6hiHSDOtQ@mail.gmail.com>
+References: <4E839F59.4030608@mozilla.com> <4E83F16B.7020506@mozilla.com>
+	<4E84645F.2030808@mozilla.com> <4E84B23B.5070804@mozilla.com>
+	<4E85E04B.3090809@mozilla.com> <4E85E9CA.4030101@mozilla.com>
+	<CAJnHWXsG-3Gi5BAx6gfZGjZSsaONoUEKjP3-VMYq=6hiHSDOtQ@mail.gmail.com>
+Message-ID: <4E862B8D.9010901@mozilla.com>
+
+On 30/09/2011 10:00 AM, Marijn Haverbeke wrote:
+> I'm also fine with this. As for the syntax...
+>
+>>     vec::each(v) {|e| ... }
+>
+> This once again produces ambiguity with fail and ret: does 'fail {|e|
+> ...}' mean 'call the function produced by fail with this block', or
+> 'fail with this block as the message'. Can be hacked around, or we can
+> just specify that the second version holds, but it's a wart.
+
+Hm? I thought we were assuming {|e| ... } only adheres to a call 
+expression to its left, is considered "the last argument" to the call.
+
+ret and fail are not call exprs.
+
+-Graydon
+
+From pwalton at mozilla.com  Fri Sep 30 16:16:31 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 30 Sep 2011 16:16:31 -0700
+Subject: [rust-dev] Removing ty_native
+Message-ID: <4E864DCF.8050906@mozilla.com>
+
+I think native types might have outlived their usefulness at this point. 
+We can represent them as ints, and their type safety can be achieved via 
+tags.
+
+So
+
+native mod ... { type ModuleRef; }
+
+becomes
+
+tag ModuleRef = int;
+
+This has the nice benefit of being able to use sizes other than words; 
+e.g. u64. (This was the use case that motivated this post.)
+
+Thoughts on removing them?
+
+Patrick
+
+From marijnh at gmail.com  Fri Sep 30 22:34:08 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 1 Oct 2011 07:34:08 +0200
+Subject: [rust-dev] Proposal: Java-style iterators
+In-Reply-To: <4E862B8D.9010901@mozilla.com>
+References: <4E839F59.4030608@mozilla.com> <4E83F16B.7020506@mozilla.com>
+	<4E84645F.2030808@mozilla.com> <4E84B23B.5070804@mozilla.com>
+	<4E85E04B.3090809@mozilla.com> <4E85E9CA.4030101@mozilla.com>
+	<CAJnHWXsG-3Gi5BAx6gfZGjZSsaONoUEKjP3-VMYq=6hiHSDOtQ@mail.gmail.com>
+	<4E862B8D.9010901@mozilla.com>
+Message-ID: <CAJnHWXvJTSh164NnEamOg-xzhJC6ritLDC91WyuvOh04gYYtxg@mail.gmail.com>
+
+> Hm? I thought we were assuming {|e| ... } only adheres to a call expression
+> to its left, is considered "the last argument" to the call.
+
+Sure, that solves the ambiguity.
+

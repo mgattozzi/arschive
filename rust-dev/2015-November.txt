@@ -1,0 +1,100 @@
+From jespinog at gmail.com  Sat Nov 14 21:29:03 2015
+From: jespinog at gmail.com (=?UTF-8?Q?Jes=C3=BAs_Espino?=)
+Date: Sat, 14 Nov 2015 22:29:03 +0100
+Subject: [rust-dev] Where to include "access" unix function in Rust API
+Message-ID: <CALRMi61VWOmhDZr7bnCWL3LcUzVR-0eOODFnUvnNhpJCCs-Vpw@mail.gmail.com>
+
+Hi, I need a function that check the permissions of the current user
+in a file (this is the unix access function). In rust i can use the
+unsafe function libc::access, but I think must more sense to have it
+on the File Metadata object or MetadataExt.
+
+I'm thinking about make a pull request to rust with this function
+(calling libc::access) but I want to know if this approach is correct,
+and where to include it.
+
+Regards.
+
+From eg1290 at gmail.com  Sat Nov 14 21:38:36 2015
+From: eg1290 at gmail.com (Evan G)
+Date: Sat, 14 Nov 2015 21:38:36 +0000
+Subject: [rust-dev] Where to include "access" unix function in Rust API
+In-Reply-To: <CALRMi61VWOmhDZr7bnCWL3LcUzVR-0eOODFnUvnNhpJCCs-Vpw@mail.gmail.com>
+References: <CALRMi61VWOmhDZr7bnCWL3LcUzVR-0eOODFnUvnNhpJCCs-Vpw@mail.gmail.com>
+Message-ID: <CAJY4u8GG7a4r1CqA+7TJQ-2qFvJ4BuiGWnp4nFWEJP5V=VwbUw@mail.gmail.com>
+
+Hey! Not sure how you got here, but this mailing list is shut down in favor
+of the rust forum <https://users.rust-lang.org>. Feel free to ask your
+questions there!
+
+it looks like you may be looking for
+https://doc.rust-lang.org/std/fs/struct.Permissions.html though.
+
+On Sat, Nov 14, 2015 at 4:29 PM Jes?s Espino <jespinog at gmail.com> wrote:
+
+> Hi, I need a function that check the permissions of the current user
+> in a file (this is the unix access function). In rust i can use the
+> unsafe function libc::access, but I think must more sense to have it
+> on the File Metadata object or MetadataExt.
+>
+> I'm thinking about make a pull request to rust with this function
+> (calling libc::access) but I want to know if this approach is correct,
+> and where to include it.
+>
+> Regards.
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20151114/1727dd73/attachment.html>
+
+From jistone at redhat.com  Mon Nov 16 20:56:53 2015
+From: jistone at redhat.com (Josh Stone)
+Date: Mon, 16 Nov 2015 12:56:53 -0800
+Subject: [rust-dev] Where to include "access" unix function in Rust API
+In-Reply-To: <CAJY4u8GG7a4r1CqA+7TJQ-2qFvJ4BuiGWnp4nFWEJP5V=VwbUw@mail.gmail.com>
+References: <CALRMi61VWOmhDZr7bnCWL3LcUzVR-0eOODFnUvnNhpJCCs-Vpw@mail.gmail.com>
+	<CAJY4u8GG7a4r1CqA+7TJQ-2qFvJ4BuiGWnp4nFWEJP5V=VwbUw@mail.gmail.com>
+Message-ID: <564A4315.4010605@redhat.com>
+
+On 11/14/2015 01:38 PM, Evan G wrote:
+> Hey! Not sure how you got here, but this mailing list is shut down in
+> favor of the rust forum <https://users.rust-lang.org>. Feel free to ask
+> your questions there!
+
+Why is the list even accepting new messages anymore?  It should be a
+read-only archive, with a bounce similar to your reply, pointing to the
+users forum.  Is this possible to configure?
+
+From jistone at redhat.com  Mon Nov 16 21:18:05 2015
+From: jistone at redhat.com (Josh Stone)
+Date: Mon, 16 Nov 2015 13:18:05 -0800
+Subject: [rust-dev] Where to include "access" unix function in Rust API
+In-Reply-To: <564A4315.4010605@redhat.com>
+References: <CALRMi61VWOmhDZr7bnCWL3LcUzVR-0eOODFnUvnNhpJCCs-Vpw@mail.gmail.com>
+	<CAJY4u8GG7a4r1CqA+7TJQ-2qFvJ4BuiGWnp4nFWEJP5V=VwbUw@mail.gmail.com>
+	<564A4315.4010605@redhat.com>
+Message-ID: <564A480D.3020502@redhat.com>
+
+On 11/16/2015 12:56 PM, Josh Stone wrote:
+> On 11/14/2015 01:38 PM, Evan G wrote:
+>> Hey! Not sure how you got here, but this mailing list is shut down in
+>> favor of the rust forum <https://users.rust-lang.org>. Feel free to ask
+>> your questions there!
+> 
+> Why is the list even accepting new messages anymore?  It should be a
+> read-only archive, with a bounce similar to your reply, pointing to the
+> users forum.  Is this possible to configure?
+
+Aha, I did get an auto-response from rust-dev-bounces:
+
+"The rust-dev mailing list is no longer active. Please direct your
+queries to http://discuss.rust-lang.org/"
+
+Perhaps that should be updated to reflect the users/internals split.
+Then I guess the remainder is just to make the list read-only now, and
+stop delivering new messages.
+

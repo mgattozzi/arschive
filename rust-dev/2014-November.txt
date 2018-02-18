@@ -1,0 +1,3551 @@
+From farcaller at gmail.com  Sat Nov  1 15:08:23 2014
+From: farcaller at gmail.com (Vladimir Pouzanov)
+Date: Sat, 1 Nov 2014 22:08:23 +0000
+Subject: [rust-dev] Programmaticaly accessing compiler warnings
+Message-ID: <CAOrN+s7P810fsBa9FMBY0kKtOVTW-EK7eD+L4f6ZZZCpDA7z_Q@mail.gmail.com>
+
+Hi all.
+
+Is there any way to access compiler warnings and errors other than parsing
+stdout? I'd prefer a bit more structured approach.
+
+
+-- 
+Sincerely,
+Vladimir "Farcaller" Pouzanov
+http://farcaller.net/
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141101/84bb5298/attachment.html>
+
+From manishsmail at gmail.com  Sat Nov  1 15:15:16 2014
+From: manishsmail at gmail.com (Manish Goregaokar)
+Date: Sun, 2 Nov 2014 03:45:16 +0530
+Subject: [rust-dev] Programmaticaly accessing compiler warnings
+In-Reply-To: <CAOrN+s7P810fsBa9FMBY0kKtOVTW-EK7eD+L4f6ZZZCpDA7z_Q@mail.gmail.com>
+References: <CAOrN+s7P810fsBa9FMBY0kKtOVTW-EK7eD+L4f6ZZZCpDA7z_Q@mail.gmail.com>
+Message-ID: <CACpkpxmn4qkaUChrRKLRgAno9wo+DRJtM1FgpY2DPkXAgc8bUA@mail.gmail.com>
+
+IIRC there aren't, we came across this while trying to fix a Cargo bug.
+
+Structured logging would be nice to have, though.
+
+-Manish Goregaokar
+
+On Sun, Nov 2, 2014 at 3:38 AM, Vladimir Pouzanov <farcaller at gmail.com>
+wrote:
+
+> Hi all.
+>
+> Is there any way to access compiler warnings and errors other than parsing
+> stdout? I'd prefer a bit more structured approach.
+>
+>
+> --
+> Sincerely,
+> Vladimir "Farcaller" Pouzanov
+> http://farcaller.net/
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141102/77e6b8b5/attachment.html>
+
+From ato at mozilla.com  Sat Nov  1 15:32:34 2014
+From: ato at mozilla.com (Andreas Tolfsen)
+Date: Sat, 1 Nov 2014 15:32:34 -0700
+Subject: [rust-dev] Programmaticaly accessing compiler warnings
+In-Reply-To: <CAOrN+s7P810fsBa9FMBY0kKtOVTW-EK7eD+L4f6ZZZCpDA7z_Q@mail.gmail.com>
+References: <CAOrN+s7P810fsBa9FMBY0kKtOVTW-EK7eD+L4f6ZZZCpDA7z_Q@mail.gmail.com>
+Message-ID: <CAL_dnaVf-xmn3fp1a-ddYmXuXCyaAB437xG8ODSwJ-L9OX-0Nw@mail.gmail.com>
+
+On Sat, Nov 1, 2014 at 3:08 PM, Vladimir Pouzanov <farcaller at gmail.com> wrote:
+> Is there any way to access compiler warnings and errors other than parsing
+> stdout? I'd prefer a bit more structured approach.
+
+Most editors such will understand the output format from the compiler:
+
+/home/ato/Code/wires/src/response.rs:30:17: 30:20 warning: unused
+variable: `msg`, #[warn(unused_variables)] on by default
+
+In Emacs there are a number of built-in functions to deal with the
+output in the compilation mode buffer:
+https://www.gnu.org/software/emacs/manual/html_node/emacs/Compilation-Mode.html
+
+In vi you can type :cwindow to access the compile window.
+
+And in Acme you can simply right-click somefile.rs:42:12 to go to
+column 12 in line 42 in somefile.rs.
+
+So the output the compiler gives is machine readable, and there are
+many more tools that understand it.
+
+From diwic at ubuntu.com  Sun Nov  2 09:22:39 2014
+From: diwic at ubuntu.com (David Henningsson)
+Date: Sun, 02 Nov 2014 18:22:39 +0100
+Subject: [rust-dev] Using an external crate from a module
+Message-ID: <5456685F.2000409@ubuntu.com>
+
+Hi,
+
+I'm wondering if "external crate" declarations from modules are 
+discouraged in general? Because things seem to become a bit quirky, took 
+me a while to grasp:
+
+First, "use" starts at the root whereas everything else starts at the 
+current module. E g, imagine a "test_seri.rs" file which looks like this:
+
+extern crate serialize;
+
+fn test_json() {
+     use self::serialize::json;
+     let _:int = json::decode("").unwrap();
+}
+
+fn test_json2() {
+     let _:int = serialize::json::decode("").unwrap();
+}
+
+So, since the "serialize" crate is inserted into the test_seri 
+namespace, I have to do "use self::serialize::json" and not "use 
+serialize::json" in the example above. But still I can call 
+"serialize::json::decode" in the second example without using the entire 
+path "self::serialize::json" (or test_seri::serialize::json). This is a 
+bit inconsistent, but doable once you understand it.
+
+Second, in the case of the log crate, it looks like it can only be 
+imported in the root crate, not in a module. For two reasons. Imagine a 
+"test_log.rs" file looking like this:
+
+#![feature(phase)]
+#[phase(plugin, link)] extern crate log;
+
+fn test_log() {
+     error!("Yo!");
+}
+
+The first is that "#![feature(phase)]" seems to be silently ignored when 
+not in crate root. You'll get a somewhat confusing compiler error on the 
+second row: "add #![feature(phase)] to the crate attributes to enable" - 
+it's confusing until you get that you have added "#![feature(phase)]" to 
+a module, not a crate.
+
+The second is that the log macros ("error!" etc) reference 
+::log::LogLocation, which assumes that the log is actually imported as 
+::log. Which it isn't in this case, it's test_log::log. Again a 
+confusing compiler error "error: failed to resolve. Maybe a missing 
+`extern crate log`?".
+(Side note: the macros are also broken if you do stuff such as 'extern 
+crate "log" as foo'.)
+
+// David
+
+From lists at ncameron.org  Sun Nov  2 12:26:12 2014
+From: lists at ncameron.org (Nick Cameron)
+Date: Mon, 3 Nov 2014 09:26:12 +1300
+Subject: [rust-dev] Programmaticaly accessing compiler warnings
+In-Reply-To: <CAL_dnaVf-xmn3fp1a-ddYmXuXCyaAB437xG8ODSwJ-L9OX-0Nw@mail.gmail.com>
+References: <CAOrN+s7P810fsBa9FMBY0kKtOVTW-EK7eD+L4f6ZZZCpDA7z_Q@mail.gmail.com>
+	<CAL_dnaVf-xmn3fp1a-ddYmXuXCyaAB437xG8ODSwJ-L9OX-0Nw@mail.gmail.com>
+Message-ID: <CAA5tgF2y7TgyU6Vi-x8n1ycT6zmsbMaV+FT+-bKObMkSQ-w_+w@mail.gmail.com>
+
+There currently isn't, but I'd like to add API for this as part of the
+rustc::middle::save module. If anyone is interested in implementing that,
+it shouldn't be too hard and I'd be happy to help out.
+
+Cheers, Nick
+
+On Sun, Nov 2, 2014 at 11:32 AM, Andreas Tolfsen <ato at mozilla.com> wrote:
+
+> On Sat, Nov 1, 2014 at 3:08 PM, Vladimir Pouzanov <farcaller at gmail.com>
+> wrote:
+> > Is there any way to access compiler warnings and errors other than
+> parsing
+> > stdout? I'd prefer a bit more structured approach.
+>
+> Most editors such will understand the output format from the compiler:
+>
+> /home/ato/Code/wires/src/response.rs:30:17: 30:20 warning: unused
+> variable: `msg`, #[warn(unused_variables)] on by default
+>
+> In Emacs there are a number of built-in functions to deal with the
+> output in the compilation mode buffer:
+>
+> https://www.gnu.org/software/emacs/manual/html_node/emacs/Compilation-Mode.html
+>
+> In vi you can type :cwindow to access the compile window.
+>
+> And in Acme you can simply right-click somefile.rs:42:12 to go to
+> column 12 in line 42 in somefile.rs.
+>
+> So the output the compiler gives is machine readable, and there are
+> many more tools that understand it.
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141103/b4a6b6c4/attachment.html>
+
+From manishsmail at gmail.com  Sun Nov  2 14:38:13 2014
+From: manishsmail at gmail.com (Manish Goregaokar)
+Date: Mon, 3 Nov 2014 04:08:13 +0530
+Subject: [rust-dev] Programmaticaly accessing compiler warnings
+In-Reply-To: <CAA5tgF2y7TgyU6Vi-x8n1ycT6zmsbMaV+FT+-bKObMkSQ-w_+w@mail.gmail.com>
+References: <CAOrN+s7P810fsBa9FMBY0kKtOVTW-EK7eD+L4f6ZZZCpDA7z_Q@mail.gmail.com>
+	<CAL_dnaVf-xmn3fp1a-ddYmXuXCyaAB437xG8ODSwJ-L9OX-0Nw@mail.gmail.com>
+	<CAA5tgF2y7TgyU6Vi-x8n1ycT6zmsbMaV+FT+-bKObMkSQ-w_+w@mail.gmail.com>
+Message-ID: <CACpkpx=s2w0XTzdYQ5qxmQf6XQawhjvCPv+bauMVFr5dcupW+g@mail.gmail.com>
+
+I'm interested, though rather busy right now (free after the second week of
+November)
+
+-Manish Goregaokar
+
+On Mon, Nov 3, 2014 at 1:56 AM, Nick Cameron <lists at ncameron.org> wrote:
+
+> There currently isn't, but I'd like to add API for this as part of the
+> rustc::middle::save module. If anyone is interested in implementing that,
+> it shouldn't be too hard and I'd be happy to help out.
+>
+> Cheers, Nick
+>
+> On Sun, Nov 2, 2014 at 11:32 AM, Andreas Tolfsen <ato at mozilla.com> wrote:
+>
+>> On Sat, Nov 1, 2014 at 3:08 PM, Vladimir Pouzanov <farcaller at gmail.com>
+>> wrote:
+>> > Is there any way to access compiler warnings and errors other than
+>> parsing
+>> > stdout? I'd prefer a bit more structured approach.
+>>
+>> Most editors such will understand the output format from the compiler:
+>>
+>> /home/ato/Code/wires/src/response.rs:30:17: 30:20 warning: unused
+>> variable: `msg`, #[warn(unused_variables)] on by default
+>>
+>> In Emacs there are a number of built-in functions to deal with the
+>> output in the compilation mode buffer:
+>>
+>> https://www.gnu.org/software/emacs/manual/html_node/emacs/Compilation-Mode.html
+>>
+>> In vi you can type :cwindow to access the compile window.
+>>
+>> And in Acme you can simply right-click somefile.rs:42:12 to go to
+>> column 12 in line 42 in somefile.rs.
+>>
+>> So the output the compiler gives is machine readable, and there are
+>> many more tools that understand it.
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141103/d1207762/attachment.html>
+
+From anton.lofgren at gmail.com  Sun Nov  2 22:28:26 2014
+From: anton.lofgren at gmail.com (=?ISO-8859-1?Q?Anton_L=F6fgren?=)
+Date: Mon, 03 Nov 2014 07:28:26 +0100
+Subject: [rust-dev] Programmaticaly accessing compiler warnings
+In-Reply-To: <CACpkpx=s2w0XTzdYQ5qxmQf6XQawhjvCPv+bauMVFr5dcupW+g@mail.gmail.com>
+References: <CAOrN+s7P810fsBa9FMBY0kKtOVTW-EK7eD+L4f6ZZZCpDA7z_Q@mail.gmail.com>
+	<CAL_dnaVf-xmn3fp1a-ddYmXuXCyaAB437xG8ODSwJ-L9OX-0Nw@mail.gmail.com>
+	<CAA5tgF2y7TgyU6Vi-x8n1ycT6zmsbMaV+FT+-bKObMkSQ-w_+w@mail.gmail.com>
+	<CACpkpx=s2w0XTzdYQ5qxmQf6XQawhjvCPv+bauMVFr5dcupW+g@mail.gmail.com>
+Message-ID: <6CA6D915-96AF-4E61-B032-F38274D0F682@gmail.com>
+
+I'm interested as well. Is there an issue on GH tracking this? 
+
+/Anton 
+
+On November 2, 2014 11:38:13 PM CET, Manish Goregaokar <manishsmail at gmail.com> wrote:
+>I'm interested, though rather busy right now (free after the second
+>week of
+>November)
+>
+>-Manish Goregaokar
+>
+>On Mon, Nov 3, 2014 at 1:56 AM, Nick Cameron <lists at ncameron.org>
+>wrote:
+>
+>> There currently isn't, but I'd like to add API for this as part of
+>the
+>> rustc::middle::save module. If anyone is interested in implementing
+>that,
+>> it shouldn't be too hard and I'd be happy to help out.
+>>
+>> Cheers, Nick
+>>
+>> On Sun, Nov 2, 2014 at 11:32 AM, Andreas Tolfsen <ato at mozilla.com>
+>wrote:
+>>
+>>> On Sat, Nov 1, 2014 at 3:08 PM, Vladimir Pouzanov
+><farcaller at gmail.com>
+>>> wrote:
+>>> > Is there any way to access compiler warnings and errors other than
+>>> parsing
+>>> > stdout? I'd prefer a bit more structured approach.
+>>>
+>>> Most editors such will understand the output format from the
+>compiler:
+>>>
+>>> /home/ato/Code/wires/src/response.rs:30:17: 30:20 warning: unused
+>>> variable: `msg`, #[warn(unused_variables)] on by default
+>>>
+>>> In Emacs there are a number of built-in functions to deal with the
+>>> output in the compilation mode buffer:
+>>>
+>>>
+>https://www.gnu.org/software/emacs/manual/html_node/emacs/Compilation-Mode.html
+>>>
+>>> In vi you can type :cwindow to access the compile window.
+>>>
+>>> And in Acme you can simply right-click somefile.rs:42:12 to go to
+>>> column 12 in line 42 in somefile.rs.
+>>>
+>>> So the output the compiler gives is machine readable, and there are
+>>> many more tools that understand it.
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+>
+>------------------------------------------------------------------------
+>
+>_______________________________________________
+>Rust-dev mailing list
+>Rust-dev at mozilla.org
+>https://mail.mozilla.org/listinfo/rust-dev
+
+-- 
+Sent from my Android device with K-9 Mail. Please excuse my brevity.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141103/01a8c708/attachment.html>
+
+From lists at ncameron.org  Mon Nov  3 10:39:19 2014
+From: lists at ncameron.org (Nick Cameron)
+Date: Tue, 4 Nov 2014 07:39:19 +1300
+Subject: [rust-dev] Programmaticaly accessing compiler warnings
+In-Reply-To: <6CA6D915-96AF-4E61-B032-F38274D0F682@gmail.com>
+References: <CAOrN+s7P810fsBa9FMBY0kKtOVTW-EK7eD+L4f6ZZZCpDA7z_Q@mail.gmail.com>
+	<CAL_dnaVf-xmn3fp1a-ddYmXuXCyaAB437xG8ODSwJ-L9OX-0Nw@mail.gmail.com>
+	<CAA5tgF2y7TgyU6Vi-x8n1ycT6zmsbMaV+FT+-bKObMkSQ-w_+w@mail.gmail.com>
+	<CACpkpx=s2w0XTzdYQ5qxmQf6XQawhjvCPv+bauMVFr5dcupW+g@mail.gmail.com>
+	<6CA6D915-96AF-4E61-B032-F38274D0F682@gmail.com>
+Message-ID: <CAA5tgF242E9tNw3frqWCP_Y2O_bCK6aU2Z2-xpmFnJ0o0zQK5w@mail.gmail.com>
+
+I filed https://github.com/rust-lang/rust/issues/18579. Please ping me (nrc
+or @nick29581) if you have any implementation questions and/or for review.
+
+Cheers, Nick
+
+On Mon, Nov 3, 2014 at 7:28 PM, Anton L?fgren <anton.lofgren at gmail.com>
+wrote:
+
+> I'm interested as well. Is there an issue on GH tracking this?
+>
+> /Anton
+>
+> On November 2, 2014 11:38:13 PM CET, Manish Goregaokar <
+> manishsmail at gmail.com> wrote:
+>>
+>> I'm interested, though rather busy right now (free after the second week
+>> of November)
+>>
+>> -Manish Goregaokar
+>>
+>> On Mon, Nov 3, 2014 at 1:56 AM, Nick Cameron <lists at ncameron.org> wrote:
+>>
+>>> There currently isn't, but I'd like to add API for this as part of the
+>>> rustc::middle::save module. If anyone is interested in implementing that,
+>>> it shouldn't be too hard and I'd be happy to help out.
+>>>
+>>> Cheers, Nick
+>>>
+>>> On Sun, Nov 2, 2014 at 11:32 AM, Andreas Tolfsen <ato at mozilla.com>
+>>> wrote:
+>>>
+>>>> On Sat, Nov 1, 2014 at 3:08 PM, Vladimir Pouzanov <farcaller at gmail.com>
+>>>> wrote:
+>>>> > Is there any way to access compiler warnings and errors other than
+>>>> parsing
+>>>> > stdout? I'd prefer a bit more structured approach.
+>>>>
+>>>> Most editors such will understand the output format from the compiler:
+>>>>
+>>>> /home/ato/Code/wires/src/response.rs:30:17: 30:20 warning: unused
+>>>> variable: `msg`, #[warn(unused_variables)] on by default
+>>>>
+>>>> In Emacs there are a number of built-in functions to deal with the
+>>>> output in the compilation mode buffer:
+>>>>
+>>>> https://www.gnu.org/software/emacs/manual/html_node/emacs/Compilation-Mode.html
+>>>>
+>>>> In vi you can type :cwindow to access the compile window.
+>>>>
+>>>> And in Acme you can simply right-click somefile.rs:42:12 to go to
+>>>> column 12 in line 42 in somefile.rs.
+>>>>
+>>>> So the output the compiler gives is machine readable, and there are
+>>>> many more tools that understand it.
+>>>> _______________________________________________
+>>>> Rust-dev mailing list
+>>>> Rust-dev at mozilla.org
+>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>>
+>>>
+>>>
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>>
+>> ------------------------------
+>>
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+> --
+> Sent from my Android device with K-9 Mail. Please excuse my brevity.
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141104/07e0ea52/attachment.html>
+
+From benjamin.foppa at gmail.com  Mon Nov  3 10:48:15 2014
+From: benjamin.foppa at gmail.com (Ben Foppa)
+Date: Mon, 3 Nov 2014 10:48:15 -0800
+Subject: [rust-dev] Using an external crate from a module
+In-Reply-To: <5456685F.2000409@ubuntu.com>
+References: <5456685F.2000409@ubuntu.com>
+Message-ID: <CADu1bNSmPpE4wSW+iDR=rYhxDOy_Oc3H8yzbDzHJ=Dkb2AB12w@mail.gmail.com>
+
+I don't know whether it's *discouraged*, but you're right that things get
+confusing quickly. So far, keeping all the `mod`s and `extern crate`s in a
+separate file (a la
+https://github.com/bfops/playform/blob/339667691197ec02afd2fee55d080e541723b12e/src/playform.rs)
+hasn't given me any issues, so I haven't had a reason not to default to
+that.
+
+On Sun, Nov 2, 2014 at 9:22 AM, David Henningsson <diwic at ubuntu.com> wrote:
+
+> Hi,
+>
+> I'm wondering if "external crate" declarations from modules are
+> discouraged in general? Because things seem to become a bit quirky, took me
+> a while to grasp:
+>
+> First, "use" starts at the root whereas everything else starts at the
+> current module. E g, imagine a "test_seri.rs" file which looks like this:
+>
+> extern crate serialize;
+>
+> fn test_json() {
+>     use self::serialize::json;
+>     let _:int = json::decode("").unwrap();
+> }
+>
+> fn test_json2() {
+>     let _:int = serialize::json::decode("").unwrap();
+> }
+>
+> So, since the "serialize" crate is inserted into the test_seri namespace,
+> I have to do "use self::serialize::json" and not "use serialize::json" in
+> the example above. But still I can call "serialize::json::decode" in the
+> second example without using the entire path "self::serialize::json" (or
+> test_seri::serialize::json). This is a bit inconsistent, but doable once
+> you understand it.
+>
+> Second, in the case of the log crate, it looks like it can only be
+> imported in the root crate, not in a module. For two reasons. Imagine a "
+> test_log.rs" file looking like this:
+>
+> #![feature(phase)]
+> #[phase(plugin, link)] extern crate log;
+>
+> fn test_log() {
+>     error!("Yo!");
+> }
+>
+> The first is that "#![feature(phase)]" seems to be silently ignored when
+> not in crate root. You'll get a somewhat confusing compiler error on the
+> second row: "add #![feature(phase)] to the crate attributes to enable" -
+> it's confusing until you get that you have added "#![feature(phase)]" to a
+> module, not a crate.
+>
+> The second is that the log macros ("error!" etc) reference
+> ::log::LogLocation, which assumes that the log is actually imported as
+> ::log. Which it isn't in this case, it's test_log::log. Again a confusing
+> compiler error "error: failed to resolve. Maybe a missing `extern crate
+> log`?".
+> (Side note: the macros are also broken if you do stuff such as 'extern
+> crate "log" as foo'.)
+>
+> // David
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141103/5f3f6ef2/attachment.html>
+
+From jake.net at gmail.com  Mon Nov  3 12:19:51 2014
+From: jake.net at gmail.com (Jake Scott)
+Date: Tue, 4 Nov 2014 09:19:51 +1300
+Subject: [rust-dev] Confusing way to declare a uint
+Message-ID: <CAGweMX2bibptn-5O6_08w5wgiA5Ndjjcq3LgZ=NTax2By2QZrw@mail.gmail.com>
+
+I was trying to declare a uint using this:
+let a: uint = 0_uint;
+
+But the correct way to declare it is:
+let a: uint = 0u;
+
+Anyone else think that's not consistent?
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141104/ad9967e8/attachment.html>
+
+From eg1290 at gmail.com  Mon Nov  3 12:25:42 2014
+From: eg1290 at gmail.com (Evan G)
+Date: Mon, 3 Nov 2014 15:25:42 -0500
+Subject: [rust-dev] Confusing way to declare a uint
+In-Reply-To: <CAGweMX2bibptn-5O6_08w5wgiA5Ndjjcq3LgZ=NTax2By2QZrw@mail.gmail.com>
+References: <CAGweMX2bibptn-5O6_08w5wgiA5Ndjjcq3LgZ=NTax2By2QZrw@mail.gmail.com>
+Message-ID: <CAJY4u8HUC6PkDs_DDFYvkJH-x0sk-mFfDfH+QX8NFZfNQ90SfQ@mail.gmail.com>
+
+Not consistent with what? The syntax for number literals is taken directly
+from C/C++, and is used by many other languages.
+
+On Mon, Nov 3, 2014 at 3:19 PM, Jake Scott <jake.net at gmail.com> wrote:
+
+> I was trying to declare a uint using this:
+> let a: uint = 0_uint;
+>
+> But the correct way to declare it is:
+> let a: uint = 0u;
+>
+> Anyone else think that's not consistent?
+>
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141103/e4f37edf/attachment.html>
+
+From eg1290 at gmail.com  Mon Nov  3 12:27:13 2014
+From: eg1290 at gmail.com (Evan G)
+Date: Mon, 3 Nov 2014 15:27:13 -0500
+Subject: [rust-dev] Confusing way to declare a uint
+In-Reply-To: <CAJY4u8HUC6PkDs_DDFYvkJH-x0sk-mFfDfH+QX8NFZfNQ90SfQ@mail.gmail.com>
+References: <CAGweMX2bibptn-5O6_08w5wgiA5Ndjjcq3LgZ=NTax2By2QZrw@mail.gmail.com>
+	<CAJY4u8HUC6PkDs_DDFYvkJH-x0sk-mFfDfH+QX8NFZfNQ90SfQ@mail.gmail.com>
+Message-ID: <CAJY4u8GCE1ETMLOgbA4i63x9oEX_mt-M6S6mdeh80SNVXsM+Wg@mail.gmail.com>
+
+Also, because you have the type information in the variable, there's no
+need to redundantly include it by making it an unsigned number literal?rust
+can infer that information.
+
+On Mon, Nov 3, 2014 at 3:25 PM, Evan G <eg1290 at gmail.com> wrote:
+
+> Not consistent with what? The syntax for number literals is taken directly
+> from C/C++, and is used by many other languages.
+>
+> On Mon, Nov 3, 2014 at 3:19 PM, Jake Scott <jake.net at gmail.com> wrote:
+>
+>> I was trying to declare a uint using this:
+>> let a: uint = 0_uint;
+>>
+>> But the correct way to declare it is:
+>> let a: uint = 0u;
+>>
+>> Anyone else think that's not consistent?
+>>
+>>
+>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141103/a5827968/attachment.html>
+
+From jake.net at gmail.com  Mon Nov  3 12:37:49 2014
+From: jake.net at gmail.com (Jake Scott)
+Date: Tue, 4 Nov 2014 09:37:49 +1300
+Subject: [rust-dev] Confusing way to declare a uint
+In-Reply-To: <CAJY4u8GCE1ETMLOgbA4i63x9oEX_mt-M6S6mdeh80SNVXsM+Wg@mail.gmail.com>
+References: <CAGweMX2bibptn-5O6_08w5wgiA5Ndjjcq3LgZ=NTax2By2QZrw@mail.gmail.com>
+	<CAJY4u8HUC6PkDs_DDFYvkJH-x0sk-mFfDfH+QX8NFZfNQ90SfQ@mail.gmail.com>
+	<CAJY4u8GCE1ETMLOgbA4i63x9oEX_mt-M6S6mdeh80SNVXsM+Wg@mail.gmail.com>
+Message-ID: <CAGweMX2Lp=z4tvdjZJ_p2pxOdaLOgkY9=Hitj7+eQgW30sOmmA@mail.gmail.com>
+
+I come from a C# background, so the literal syntax is all new to me. I know
+about type inference but I am being explicit to demonstrate what I think is
+a trap for young players :)
+
+let i: i32 = 0_i32; // uses 'i32' on both sides of the declaration
+let l: u64 = 0_u64; // uses 'u64' on both sides of the declaration
+
+let j: int = 0i; // uses 'int' and 'i' which is different on both sides of
+the declaration
+
+
+
+
+
+
+
+
+On Tue, Nov 4, 2014 at 9:27 AM, Evan G <eg1290 at gmail.com> wrote:
+
+> Also, because you have the type information in the variable, there's no
+> need to redundantly include it by making it an unsigned number literal?rust
+> can infer that information.
+>
+> On Mon, Nov 3, 2014 at 3:25 PM, Evan G <eg1290 at gmail.com> wrote:
+>
+>> Not consistent with what? The syntax for number literals is taken
+>> directly from C/C++, and is used by many other languages.
+>>
+>> On Mon, Nov 3, 2014 at 3:19 PM, Jake Scott <jake.net at gmail.com> wrote:
+>>
+>>> I was trying to declare a uint using this:
+>>> let a: uint = 0_uint;
+>>>
+>>> But the correct way to declare it is:
+>>> let a: uint = 0u;
+>>>
+>>> Anyone else think that's not consistent?
+>>>
+>>>
+>>>
+>>>
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>>
+>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141104/638346ef/attachment.html>
+
+From eg1290 at gmail.com  Mon Nov  3 12:42:49 2014
+From: eg1290 at gmail.com (Evan G)
+Date: Mon, 3 Nov 2014 15:42:49 -0500
+Subject: [rust-dev] Confusing way to declare a uint
+In-Reply-To: <CAGweMX2Lp=z4tvdjZJ_p2pxOdaLOgkY9=Hitj7+eQgW30sOmmA@mail.gmail.com>
+References: <CAGweMX2bibptn-5O6_08w5wgiA5Ndjjcq3LgZ=NTax2By2QZrw@mail.gmail.com>
+	<CAJY4u8HUC6PkDs_DDFYvkJH-x0sk-mFfDfH+QX8NFZfNQ90SfQ@mail.gmail.com>
+	<CAJY4u8GCE1ETMLOgbA4i63x9oEX_mt-M6S6mdeh80SNVXsM+Wg@mail.gmail.com>
+	<CAGweMX2Lp=z4tvdjZJ_p2pxOdaLOgkY9=Hitj7+eQgW30sOmmA@mail.gmail.com>
+Message-ID: <CAJY4u8G4-7kvHsA9JKZrt16RrOceskUbE3Lct4MJJ6smOziNLA@mail.gmail.com>
+
+try `let i = 0i64` :D it just uses the platform to infer the width by
+default. Because number literals show up very commonly throughout Rust
+code, its important that we keep them short and unobtrusive by default
+though, so its normally just recommended to use the short forum unless you
+need a smaller/larger type for some reason.
+
+more detail can be found in the rust reference:
+http://doc.rust-lang.org/reference.html#number-literals
+
+On Mon, Nov 3, 2014 at 3:37 PM, Jake Scott <jake.net at gmail.com> wrote:
+
+> I come from a C# background, so the literal syntax is all new to me. I
+> know about type inference but I am being explicit to demonstrate what I
+> think is a trap for young players :)
+>
+> let i: i32 = 0_i32; // uses 'i32' on both sides of the declaration
+> let l: u64 = 0_u64; // uses 'u64' on both sides of the declaration
+>
+> let j: int = 0i; // uses 'int' and 'i' which is different on both sides of
+> the declaration
+>
+>
+>
+>
+>
+>
+>
+>
+> On Tue, Nov 4, 2014 at 9:27 AM, Evan G <eg1290 at gmail.com> wrote:
+>
+>> Also, because you have the type information in the variable, there's no
+>> need to redundantly include it by making it an unsigned number literal?rust
+>> can infer that information.
+>>
+>> On Mon, Nov 3, 2014 at 3:25 PM, Evan G <eg1290 at gmail.com> wrote:
+>>
+>>> Not consistent with what? The syntax for number literals is taken
+>>> directly from C/C++, and is used by many other languages.
+>>>
+>>> On Mon, Nov 3, 2014 at 3:19 PM, Jake Scott <jake.net at gmail.com> wrote:
+>>>
+>>>> I was trying to declare a uint using this:
+>>>> let a: uint = 0_uint;
+>>>>
+>>>> But the correct way to declare it is:
+>>>> let a: uint = 0u;
+>>>>
+>>>> Anyone else think that's not consistent?
+>>>>
+>>>>
+>>>>
+>>>>
+>>>> _______________________________________________
+>>>> Rust-dev mailing list
+>>>> Rust-dev at mozilla.org
+>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>>
+>>>>
+>>>
+>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141103/b81d55eb/attachment.html>
+
+From ben at 0x539.de  Mon Nov  3 12:59:34 2014
+From: ben at 0x539.de (Benjamin Herr)
+Date: Mon, 03 Nov 2014 21:59:34 +0100
+Subject: [rust-dev] Confusing way to declare a uint
+In-Reply-To: <CAJY4u8HUC6PkDs_DDFYvkJH-x0sk-mFfDfH+QX8NFZfNQ90SfQ@mail.gmail.com>
+References: <CAGweMX2bibptn-5O6_08w5wgiA5Ndjjcq3LgZ=NTax2By2QZrw@mail.gmail.com>
+	<CAJY4u8HUC6PkDs_DDFYvkJH-x0sk-mFfDfH+QX8NFZfNQ90SfQ@mail.gmail.com>
+Message-ID: <1415048374.1597.25.camel@0x539.de>
+
+With the other numeric types, I'd assume. 0_i8, 0_f32 etc all work.
+
+On Mon, 2014-11-03 at 15:25 -0500, Evan G wrote:
+> Not consistent with what? The syntax for number literals is taken
+> directly from C/C++, and is used by many other languages.
+> 
+> 
+> On Mon, Nov 3, 2014 at 3:19 PM, Jake Scott <jake.net at gmail.com> wrote:
+>         I was trying to declare a uint using this:
+>         let a: uint = 0_uint;
+>         
+>         
+>         
+>         But the correct way to declare it is:
+>         let a: uint = 0u;
+>         
+>         
+>         
+>         Anyone else think that's not consistent? 
+>         
+>         
+>         
+>         
+>         
+>         
+>         
+>         _______________________________________________
+>         Rust-dev mailing list
+>         Rust-dev at mozilla.org
+>         https://mail.mozilla.org/listinfo/rust-dev
+>         
+> 
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+
+From mozilla at mcpherrin.ca  Mon Nov  3 16:50:45 2014
+From: mozilla at mcpherrin.ca (Matthew McPherrin)
+Date: Mon, 3 Nov 2014 16:50:45 -0800
+Subject: [rust-dev] Confusing way to declare a uint
+In-Reply-To: <CAGweMX2bibptn-5O6_08w5wgiA5Ndjjcq3LgZ=NTax2By2QZrw@mail.gmail.com>
+References: <CAGweMX2bibptn-5O6_08w5wgiA5Ndjjcq3LgZ=NTax2By2QZrw@mail.gmail.com>
+Message-ID: <CAMYrfjKYFRPk4_ksUB=Rgbo0_b=YmZQ31xehOXJKg8VLAC4bQA@mail.gmail.com>
+
+You're not alone.  This was bikeshedded a while back, and I think the
+decision was that 8uint felt too verbose for what is a common thing,
+and that renaming uint to u was inappropriately short.
+
+I think this topic isn't 100% closed yet, in particular renaming uint
+to something like uintptr or usize or something has been brought up.
+Github isn't loading for me right now, but I think there might have
+been an open RFC in this area.
+
+On Mon, Nov 3, 2014 at 12:19 PM, Jake Scott <jake.net at gmail.com> wrote:
+> I was trying to declare a uint using this:
+> let a: uint = 0_uint;
+>
+> But the correct way to declare it is:
+> let a: uint = 0u;
+>
+> Anyone else think that's not consistent?
+>
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+From anton.lofgren at gmail.com  Sat Nov  8 02:30:01 2014
+From: anton.lofgren at gmail.com (=?ISO-8859-1?Q?Anton_L=F6fgren?=)
+Date: Sat, 08 Nov 2014 11:30:01 +0100
+Subject: [rust-dev] Programmaticaly accessing compiler warnings
+In-Reply-To: <CAA5tgF242E9tNw3frqWCP_Y2O_bCK6aU2Z2-xpmFnJ0o0zQK5w@mail.gmail.com>
+References: <CAOrN+s7P810fsBa9FMBY0kKtOVTW-EK7eD+L4f6ZZZCpDA7z_Q@mail.gmail.com>
+	<CAL_dnaVf-xmn3fp1a-ddYmXuXCyaAB437xG8ODSwJ-L9OX-0Nw@mail.gmail.com>
+	<CAA5tgF2y7TgyU6Vi-x8n1ycT6zmsbMaV+FT+-bKObMkSQ-w_+w@mail.gmail.com>
+	<CACpkpx=s2w0XTzdYQ5qxmQf6XQawhjvCPv+bauMVFr5dcupW+g@mail.gmail.com>
+	<6CA6D915-96AF-4E61-B032-F38274D0F682@gmail.com>
+	<CAA5tgF242E9tNw3frqWCP_Y2O_bCK6aU2Z2-xpmFnJ0o0zQK5w@mail.gmail.com>
+Message-ID: <D0784C1F-C6DC-4ED7-A6E8-BFC0AC2C06C3@gmail.com>
+
+FYI, I've been unexpectedly busy this week so I haven't been able to get started on this. Looks like things will be quite hectic the few upcoming weeks as well so if someone else would like to begin work on this, please go ahead. I don't want to unnecessarily block progress. 
+
+/Anton 
+
+On November 3, 2014 7:39:19 PM CET, Nick Cameron <lists at ncameron.org> wrote:
+>I filed https://github.com/rust-lang/rust/issues/18579. Please ping me
+>(nrc
+>or @nick29581) if you have any implementation questions and/or for
+>review.
+>
+>Cheers, Nick
+>
+>On Mon, Nov 3, 2014 at 7:28 PM, Anton L?fgren <anton.lofgren at gmail.com>
+>wrote:
+>
+>> I'm interested as well. Is there an issue on GH tracking this?
+>>
+>> /Anton
+>>
+>> On November 2, 2014 11:38:13 PM CET, Manish Goregaokar <
+>> manishsmail at gmail.com> wrote:
+>>>
+>>> I'm interested, though rather busy right now (free after the second
+>week
+>>> of November)
+>>>
+>>> -Manish Goregaokar
+>>>
+>>> On Mon, Nov 3, 2014 at 1:56 AM, Nick Cameron <lists at ncameron.org>
+>wrote:
+>>>
+>>>> There currently isn't, but I'd like to add API for this as part of
+>the
+>>>> rustc::middle::save module. If anyone is interested in implementing
+>that,
+>>>> it shouldn't be too hard and I'd be happy to help out.
+>>>>
+>>>> Cheers, Nick
+>>>>
+>>>> On Sun, Nov 2, 2014 at 11:32 AM, Andreas Tolfsen <ato at mozilla.com>
+>>>> wrote:
+>>>>
+>>>>> On Sat, Nov 1, 2014 at 3:08 PM, Vladimir Pouzanov
+><farcaller at gmail.com>
+>>>>> wrote:
+>>>>> > Is there any way to access compiler warnings and errors other
+>than
+>>>>> parsing
+>>>>> > stdout? I'd prefer a bit more structured approach.
+>>>>>
+>>>>> Most editors such will understand the output format from the
+>compiler:
+>>>>>
+>>>>> /home/ato/Code/wires/src/response.rs:30:17: 30:20 warning: unused
+>>>>> variable: `msg`, #[warn(unused_variables)] on by default
+>>>>>
+>>>>> In Emacs there are a number of built-in functions to deal with the
+>>>>> output in the compilation mode buffer:
+>>>>>
+>>>>>
+>https://www.gnu.org/software/emacs/manual/html_node/emacs/Compilation-Mode.html
+>>>>>
+>>>>> In vi you can type :cwindow to access the compile window.
+>>>>>
+>>>>> And in Acme you can simply right-click somefile.rs:42:12 to go to
+>>>>> column 12 in line 42 in somefile.rs.
+>>>>>
+>>>>> So the output the compiler gives is machine readable, and there
+>are
+>>>>> many more tools that understand it.
+>>>>> _______________________________________________
+>>>>> Rust-dev mailing list
+>>>>> Rust-dev at mozilla.org
+>>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>>>
+>>>>
+>>>>
+>>>> _______________________________________________
+>>>> Rust-dev mailing list
+>>>> Rust-dev at mozilla.org
+>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>>
+>>>>
+>>> ------------------------------
+>>>
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>>
+>> --
+>> Sent from my Android device with K-9 Mail. Please excuse my brevity.
+>>
+
+-- 
+Sent from my Android device with K-9 Mail. Please excuse my brevity.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141108/a88535a6/attachment.html>
+
+From ckkashyap at gmail.com  Sun Nov  9 09:33:48 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Sun, 9 Nov 2014 23:03:48 +0530
+Subject: [rust-dev] Calling rust function rom C
+Message-ID: <CAGdT1grhRua0+yKXC3GDwzNRWKY_ZnuQABh1TkCMvJziXXiSPw@mail.gmail.com>
+
+Hi All,
+
+I am attempting to implement some functions in Rust that I'd like to call
+from my existing C app. Here's what I tried - I created a rust file as
+follows -
+
+#![crate_name = "rustcode"]
+#![crate_type = "staticlib"]
+#![no_std]
+#![feature(globs, asm, lang_items)]
+
+#[no_mangle]
+pub extern "C" fn rust_func() {}
+
+
+
+When I compile it using rustc, I get
+
+error: requires `sized` lang_item
+error: aborting due to previous erro
+
+
+What I'd like to be able to do is call rust_func from my C program.
+
+Regards,
+Kashyap
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141109/26a48608/attachment.html>
+
+From mikhail.zabaluev at gmail.com  Sun Nov  9 10:05:11 2014
+From: mikhail.zabaluev at gmail.com (Mikhail Zabaluev)
+Date: Sun, 9 Nov 2014 21:05:11 +0300
+Subject: [rust-dev] Calling rust function rom C
+In-Reply-To: <CAGdT1grhRua0+yKXC3GDwzNRWKY_ZnuQABh1TkCMvJziXXiSPw@mail.gmail.com>
+References: <CAGdT1grhRua0+yKXC3GDwzNRWKY_ZnuQABh1TkCMvJziXXiSPw@mail.gmail.com>
+Message-ID: <CAKUkx90w5BS4Bt=bqJspp2-oE6GqNRDgWw1SQX=youNBW6Lx5Q@mail.gmail.com>
+
+Hi,
+
+2014-11-09 19:33 GMT+02:00 C K Kashyap <ckkashyap at gmail.com>:
+
+>
+> I am attempting to implement some functions in Rust that I'd like to call
+> from my existing C app. Here's what I tried - I created a rust file as
+> follows -
+>
+> #![crate_name = "rustcode"]
+> #![crate_type = "staticlib"]
+> #![no_std]
+> #![feature(globs, asm, lang_items)]
+>
+> #[no_mangle]
+> pub extern "C" fn rust_func() {}
+>
+>
+>
+> When I compile it using rustc, I get
+>
+> error: requires `sized` lang_item
+> error: aborting due to previous erro
+>
+
+Try removing feature(lang_items).
+
+Mikhail
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141109/8c330a02/attachment.html>
+
+From ckkashyap at gmail.com  Sun Nov  9 20:57:02 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Mon, 10 Nov 2014 10:27:02 +0530
+Subject: [rust-dev] Calling rust function rom C
+In-Reply-To: <CAKUkx90w5BS4Bt=bqJspp2-oE6GqNRDgWw1SQX=youNBW6Lx5Q@mail.gmail.com>
+References: <CAGdT1grhRua0+yKXC3GDwzNRWKY_ZnuQABh1TkCMvJziXXiSPw@mail.gmail.com>
+	<CAKUkx90w5BS4Bt=bqJspp2-oE6GqNRDgWw1SQX=youNBW6Lx5Q@mail.gmail.com>
+Message-ID: <CAGdT1gphegLMjB=F8kKZWJE4hpBzr8wBzSaw0SQkG70+9yRpUw@mail.gmail.com>
+
+Thanks Mikhail,
+I tried removing the "lang_items" entry in the feature list but I got the
+same error.
+
+So some hit and trial got me this and it seems to work
+
+#![crate_name = "rustcode"]
+#![crate_type = "staticlib"]
+#![feature(lang_items)]
+#![no_std]
+
+#[lang="sized"]
+#[no_mangle]
+pub extern "C" fn rust_func() -> int {
+        return 1234444;
+}
+
+#[lang = "stack_exhausted"] extern fn stack_exhausted() {}
+
+
+Regards,
+Kashyap
+
+
+
+On Sun, Nov 9, 2014 at 11:35 PM, Mikhail Zabaluev <
+mikhail.zabaluev at gmail.com> wrote:
+
+> Hi,
+>
+> 2014-11-09 19:33 GMT+02:00 C K Kashyap <ckkashyap at gmail.com>:
+>
+>>
+>> I am attempting to implement some functions in Rust that I'd like to call
+>> from my existing C app. Here's what I tried - I created a rust file as
+>> follows -
+>>
+>> #![crate_name = "rustcode"]
+>> #![crate_type = "staticlib"]
+>> #![no_std]
+>> #![feature(globs, asm, lang_items)]
+>>
+>> #[no_mangle]
+>> pub extern "C" fn rust_func() {}
+>>
+>>
+>>
+>> When I compile it using rustc, I get
+>>
+>> error: requires `sized` lang_item
+>> error: aborting due to previous erro
+>>
+>
+> Try removing feature(lang_items).
+>
+> Mikhail
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141110/2278da15/attachment.html>
+
+From daniel.trstenjak at gmail.com  Mon Nov 10 09:29:06 2014
+From: daniel.trstenjak at gmail.com (Daniel Trstenjak)
+Date: Mon, 10 Nov 2014 18:29:06 +0100
+Subject: [rust-dev] Destructuring and references
+Message-ID: <20141110172906.GA25030@machine>
+
+
+Dear rust devs,
+
+    let vec = vec![("a".to_string(), "b".to_string())];
+
+    for &(ref a, ref b) in vec.iter() {
+        println!("{}: {}", a, b);
+    }
+
+I understand that the '&' and 'ref' are needed here, because otherwise
+the 'String' could be moved out of the 'Vec'.
+
+I don't quite understand, why there's the need for these explicit refs,
+why isn't the outer '&' enough to indicate that everything inside of
+the pattern is also referenced?
+
+Why isn't it possible to just have (with the same semantics):
+
+    for &(a, b) in vec.iter() {
+        println!("{}: {}", a, b);
+    }
+
+
+Without these refs pattern matching would be aesthetically more in sync
+with the types, which I would consider very pleasing. 
+
+
+Greetings,
+Daniel
+
+From benjamin.foppa at gmail.com  Mon Nov 10 10:32:46 2014
+From: benjamin.foppa at gmail.com (Ben Foppa)
+Date: Mon, 10 Nov 2014 10:32:46 -0800
+Subject: [rust-dev] Destructuring and references
+In-Reply-To: <20141110172906.GA25030@machine>
+References: <20141110172906.GA25030@machine>
+Message-ID: <CADu1bNQjcymTYxzCaquLsBDST2DFBkmdzm62-A_sx77K_WZVAw@mail.gmail.com>
+
+As far as I understand it, saying
+
+let &a = ...
+
+is similar to saying
+
+let a = ...
+let a = *a
+
+which generally tries to move `a`. The same is true here:
+
+for &(a, b) in vec.iter()
+
+tries to move `a` and `b`, which I think could be potentially valid if you
+had:
+
+let vec: Vec<&(a, b)> = ...
+for &(a, b) in vec.into_iter()
+
+To signify that we want to refer to them without moving, we add `ref`. FWIW
+it's also not possible to say
+
+for (ref a, ref b) in vec.iter()
+
+because the iter produces a reference to a tuple.
+
+On Mon, Nov 10, 2014 at 9:29 AM, Daniel Trstenjak <
+daniel.trstenjak at gmail.com> wrote:
+
+>
+> Dear rust devs,
+>
+>     let vec = vec![("a".to_string(), "b".to_string())];
+>
+>     for &(ref a, ref b) in vec.iter() {
+>         println!("{}: {}", a, b);
+>     }
+>
+> I understand that the '&' and 'ref' are needed here, because otherwise
+> the 'String' could be moved out of the 'Vec'.
+>
+> I don't quite understand, why there's the need for these explicit refs,
+> why isn't the outer '&' enough to indicate that everything inside of
+> the pattern is also referenced?
+>
+> Why isn't it possible to just have (with the same semantics):
+>
+>     for &(a, b) in vec.iter() {
+>         println!("{}: {}", a, b);
+>     }
+>
+>
+> Without these refs pattern matching would be aesthetically more in sync
+> with the types, which I would consider very pleasing.
+>
+>
+> Greetings,
+> Daniel
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141110/10225b97/attachment.html>
+
+From dpx.infinity at gmail.com  Mon Nov 10 10:42:11 2014
+From: dpx.infinity at gmail.com (Vladimir Matveev)
+Date: Mon, 10 Nov 2014 22:42:11 +0400
+Subject: [rust-dev] Destructuring and references
+In-Reply-To: <20141110172906.GA25030@machine>
+References: <20141110172906.GA25030@machine>
+Message-ID: <CA+jWdBgC=PwXkwLdC0gO8-uyQ57kirjXhM8Be2LOFM40JrYSHg@mail.gmail.com>
+
+Hi, Daniel,
+
+Consider this example:
+
+    let vec = vec![(1u, 2u)];
+
+    for &(a, b) in vec.iter() {
+        println!("{}: {}", a, b);
+    }
+
+a and b here are of type uint, which is implicitly copyable. It is not
+natural to take references to it when passing around its values. That
+is, variables under & pattern are not *always* taken as a reference.
+
+Another reason is consistency. Patterns and corresponding constructor
+expressions are meant to be inverses of each other:
+
+    let x = &(1u, 2i);
+    match x {
+        &(a, b) => ...
+    }
+
+See how nicely `&(a, b)` and `&(1, 2)` correspond to each other. `a`
+is of type uint, just like the literal 1u, and `b` is int, like 2i.
+This expands to other types too, including complex ones like `Box`.
+With automatic references there won't be such consistency.
+
+2014-11-10 20:29 GMT+03:00 Daniel Trstenjak <daniel.trstenjak at gmail.com>:
+>
+> Dear rust devs,
+>
+>     let vec = vec![("a".to_string(), "b".to_string())];
+>
+>     for &(ref a, ref b) in vec.iter() {
+>         println!("{}: {}", a, b);
+>     }
+>
+> I understand that the '&' and 'ref' are needed here, because otherwise
+> the 'String' could be moved out of the 'Vec'.
+>
+> I don't quite understand, why there's the need for these explicit refs,
+> why isn't the outer '&' enough to indicate that everything inside of
+> the pattern is also referenced?
+>
+> Why isn't it possible to just have (with the same semantics):
+>
+>     for &(a, b) in vec.iter() {
+>         println!("{}: {}", a, b);
+>     }
+>
+>
+> Without these refs pattern matching would be aesthetically more in sync
+> with the types, which I would consider very pleasing.
+>
+>
+> Greetings,
+> Daniel
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+From jauhien at gentoo.org  Mon Nov 10 16:51:28 2014
+From: jauhien at gentoo.org (Jauhien Piatlicki)
+Date: Tue, 11 Nov 2014 01:51:28 +0100
+Subject: [rust-dev] LLVM Kaleidoscope tutorial in Rust
+Message-ID: <54615D90.3070903@gentoo.org>
+
+Hi,
+
+I have started a Rust LLVM tutorial [1] that shows how to use LLVM from inside Rust, using the currently available mechanisms.
+
+At the moment the code corresponding to the whole original tutorial [2] is created. I'm working on the text now.
+
+I would like to ask those interested to review it from the point of view of proper usage of
+
+* Rust and related stuff (like Cargo)
+
+* LLVM API
+
+* English
+
+Any help with further work is also welcome in the form of pull requests.
+
+[1] https://github.com/jauhien/iron-kaleidoscope
+
+[2] http://llvm.org/docs/tutorial/
+
+--
+Jauhien
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 836 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141111/162121fb/attachment.sig>
+
+From paul at colomiets.name  Sat Nov 15 08:40:50 2014
+From: paul at colomiets.name (Paul Colomiets)
+Date: Sat, 15 Nov 2014 18:40:50 +0200
+Subject: [rust-dev] Compiling static binary
+Message-ID: <CAA0gF6pXMffeAtwoygr9Wwrxt_Xm3hudwUuYzSdyYAUx3xGZBA@mail.gmail.com>
+
+Hi,
+
+Is there any way to compile static binary with rust compiler? I'm
+experimenting with linux conainerisation and it would be much easier
+if I could compile a binary which doesn't depend on libc.
+
+There is also an stack overflow question with no answer:
+http://stackoverflow.com/questions/26202494/portable-binaries-with-rust
+
+Thanks in advance!
+
+--
+Paul
+
+From nodakai at gmail.com  Sat Nov 15 13:02:00 2014
+From: nodakai at gmail.com (Kai Noda)
+Date: Sun, 16 Nov 2014 05:02:00 +0800
+Subject: [rust-dev] Compiling static binary
+In-Reply-To: <CAA0gF6pXMffeAtwoygr9Wwrxt_Xm3hudwUuYzSdyYAUx3xGZBA@mail.gmail.com>
+References: <CAA0gF6pXMffeAtwoygr9Wwrxt_Xm3hudwUuYzSdyYAUx3xGZBA@mail.gmail.com>
+Message-ID: <CAHx8SrkO8BF3rxo+MEhZd9nHxHLs_YdHUxBTqAD+XBYnT1sdCA@mail.gmail.com>
+
+Hi Paul,
+
+I managed to get it working by manually tweaking linker options (this
+mustn't be the right way to go...)
+
+Rust devs: what is the official way to do this?  Simply adding "-C
+link-args=-static" doesn't work (see my second transcript)
+
+$ cat hello-rust.rs
+fn main() {
+    println!("Hello, world!");
+}
+$ rlibs=`rustc -Z print-link-args hello-rust.rs | sed -e 's/ /\n/g' | grep
+rlib`
+$ echo $rlibs
+'/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libnative-4e7c5e5c.rlib'
+'/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libstd-4e7c5e5c.rlib'
+'/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libsync-4e7c5e5c.rlib'
+'/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustrt-4e7c5e5c.rlib'
+'/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcollections-4e7c5e5c.rlib'
+'/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/liballoc-4e7c5e5c.rlib'
+'/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/liblibc-4e7c5e5c.rlib'
+'/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/librand-4e7c5e5c.rlib'
+'/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libunicode-4e7c5e5c.rlib'
+'/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcore-4e7c5e5c.rlib'
+$ rustc -Z print-link-args --emit obj hello-rust.rs
+$ file hello-rust.o
+hello-rust.o: ELF 64-bit LSB relocatable, x86-64, version 1 (GNU/Linux),
+not stripped
+$ eval "gcc -static -static-libgcc hello-rust.o `tr $'\n' ' '<<<$rlibs`
+-lpthread -lm -ldl -lrt -o hello-rust"
+/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libstd-4e7c5e5c.rlib(std-4e7c5e5c.o):
+In function `dynamic_lib::dl::open_internal::hda8e305d06a14b844og':
+std.0.rs:(.text._ZN11dynamic_lib2dl13open_internal20hda8e305d06a14b844ogE+0x8):
+warning: Using 'dlopen' in statically linked applications requires at
+runtime the shared libraries from the glibc version used for linking
+/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libstd-4e7c5e5c.rlib(std-4e7c5e5c.o):
+In function `io::net::addrinfo::get_host_addresses::hf208fefd6f07b89awSi':
+std.0.rs:(.text._ZN2io3net8addrinfo18get_host_addresses20hf208fefd6f07b89awSiE+0xad):
+warning: Using 'getaddrinfo' in statically linked applications requires at
+runtime the shared libraries from the glibc version used for linking
+$ file ./hello-rust
+./hello-rust: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux),
+statically linked, for GNU/Linux 2.6.24,
+BuildID[sha1]=0x7fa2ba5ebdec633b220a8e9c988c4632b26a17d9, not stripped
+$ ./hello-rust
+Hello, world!
+$ ls -l hello-rust
+-rwxrwxr-x 1 nodakai nodakai 4.3M 11? 16 04:41 hello-rust*
+
+
+$ x=`rustc -Z print-link-args hello-rust.rs`
+$ y=`rustc -C link-args=-static -Z print-link-args hello-rust.rs`
+$ diff <(tr ' ' $'\n' <<< $x) <(tr ' ' $'\n' <<< $y)
+13d12
+< '-pie'
+39a39
+> '-static'
+$ file hello-rust
+hello-rust: ELF 64-bit LSB executable, x86-64, version 1 (SYSV),
+dynamically linked (uses shared libs), for GNU/Linux 2.6.24,
+BuildID[sha1]=0x3a723f38042703be0ad45679b53220ce5f21787d, not stripped
+$ LANG=C ./hello-rust
+zsh: no such file or directory: ./hello-rust (<-- ENOENT, ie. invalid
+executable)
+
+Regards,
+Kai
+
+??  ? <nodakai at gmail.com>
+
+2014-11-16 0:40 GMT+08:00 Paul Colomiets <paul at colomiets.name>:
+
+> Hi,
+>
+> Is there any way to compile static binary with rust compiler? I'm
+> experimenting with linux conainerisation and it would be much easier
+> if I could compile a binary which doesn't depend on libc.
+>
+> There is also an stack overflow question with no answer:
+> http://stackoverflow.com/questions/26202494/portable-binaries-with-rust
+>
+> Thanks in advance!
+>
+> --
+> Paul
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141116/59061b4d/attachment.html>
+
+From banderson at mozilla.com  Sat Nov 15 13:23:18 2014
+From: banderson at mozilla.com (Brian Anderson)
+Date: Sat, 15 Nov 2014 13:23:18 -0800
+Subject: [rust-dev] Compiling static binary
+In-Reply-To: <CAHx8SrkO8BF3rxo+MEhZd9nHxHLs_YdHUxBTqAD+XBYnT1sdCA@mail.gmail.com>
+References: <CAA0gF6pXMffeAtwoygr9Wwrxt_Xm3hudwUuYzSdyYAUx3xGZBA@mail.gmail.com>
+	<CAHx8SrkO8BF3rxo+MEhZd9nHxHLs_YdHUxBTqAD+XBYnT1sdCA@mail.gmail.com>
+Message-ID: <5467C446.5080301@mozilla.com>
+
+I believe it is not possible to link to glibc statically. My 
+understanding is that to get a Rust binary that does not depend on a 
+system-provided libc at all we need to add explicit support for 
+alternate libc implementations[1].
+
+[1]: https://github.com/rust-lang/rust/issues/7283
+
+On 11/15/2014 01:02 PM, Kai Noda wrote:
+> Hi Paul,
+>
+> I managed to get it working by manually tweaking linker options (this 
+> mustn't be the right way to go...)
+>
+> Rust devs: what is the official way to do this?  Simply adding "-C 
+> link-args=-static" doesn't work (see my second transcript)
+>
+> $ cat hello-rust.rs <http://hello-rust.rs>
+> fn main() {
+>     println!("Hello, world!");
+> }
+> $ rlibs=`rustc -Z print-link-args hello-rust.rs <http://hello-rust.rs> 
+> | sed -e 's/ /\n/g' | grep rlib`
+> $ echo $rlibs
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libnative-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libstd-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libsync-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustrt-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcollections-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/liballoc-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/liblibc-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/librand-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libunicode-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcore-4e7c5e5c.rlib'
+> $ rustc -Z print-link-args --emit obj hello-rust.rs <http://hello-rust.rs>
+> $ file hello-rust.o
+> hello-rust.o: ELF 64-bit LSB relocatable, x86-64, version 1 
+> (GNU/Linux), not stripped
+> $ eval "gcc -static -static-libgcc hello-rust.o `tr $'\n' ' 
+> '<<<$rlibs` -lpthread -lm -ldl -lrt -o hello-rust"
+> /home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libstd-4e7c5e5c.rlib(std-4e7c5e5c.o): 
+> In function `dynamic_lib::dl::open_internal::hda8e305d06a14b844og':
+> std.0.rs:(.text._ZN11dynamic_lib2dl13open_internal20hda8e305d06a14b844ogE+0x8): 
+> warning: Using 'dlopen' in statically linked applications requires at 
+> runtime the shared libraries from the glibc version used for linking
+> /home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libstd-4e7c5e5c.rlib(std-4e7c5e5c.o): 
+> In function `io::net::addrinfo::get_host_addresses::hf208fefd6f07b89awSi':
+> std.0.rs:(.text._ZN2io3net8addrinfo18get_host_addresses20hf208fefd6f07b89awSiE+0xad): 
+> warning: Using 'getaddrinfo' in statically linked applications 
+> requires at runtime the shared libraries from the glibc version used 
+> for linking
+> $ file ./hello-rust
+> ./hello-rust: ELF 64-bit LSB executable, x86-64, version 1 
+> (GNU/Linux), statically linked, for GNU/Linux 2.6.24, 
+> BuildID[sha1]=0x7fa2ba5ebdec633b220a8e9c988c4632b26a17d9, not stripped
+> $ ./hello-rust
+> Hello, world!
+> $ ls -l hello-rust
+> -rwxrwxr-x 1 nodakai nodakai 4.3M 11? 16 04:41 hello-rust*
+>
+>
+> $ x=`rustc -Z print-link-args hello-rust.rs <http://hello-rust.rs>`
+> $ y=`rustc -C link-args=-static -Z print-link-args hello-rust.rs 
+> <http://hello-rust.rs>`
+> $ diff <(tr ' ' $'\n' <<< $x) <(tr ' ' $'\n' <<< $y)
+> 13d12
+> < '-pie'
+> 39a39
+> > '-static'
+> $ file hello-rust
+> hello-rust: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), 
+> dynamically linked (uses shared libs), for GNU/Linux 2.6.24, 
+> BuildID[sha1]=0x3a723f38042703be0ad45679b53220ce5f21787d, not stripped
+> $ LANG=C ./hello-rust
+> zsh: no such file or directory: ./hello-rust (<-- ENOENT, ie. invalid 
+> executable)
+>
+> Regards,
+> Kai
+>
+> ??  ? <nodakai at gmail.com <mailto:nodakai at gmail.com>>
+>
+> 2014-11-16 0:40 GMT+08:00 Paul Colomiets <paul at colomiets.name 
+> <mailto:paul at colomiets.name>>:
+>
+>     Hi,
+>
+>     Is there any way to compile static binary with rust compiler? I'm
+>     experimenting with linux conainerisation and it would be much easier
+>     if I could compile a binary which doesn't depend on libc.
+>
+>     There is also an stack overflow question with no answer:
+>     http://stackoverflow.com/questions/26202494/portable-binaries-with-rust
+>
+>     Thanks in advance!
+>
+>     --
+>     Paul
+>     _______________________________________________
+>     Rust-dev mailing list
+>     Rust-dev at mozilla.org <mailto:Rust-dev at mozilla.org>
+>     https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141115/3f4af971/attachment.html>
+
+From paul at colomiets.name  Sat Nov 15 14:04:05 2014
+From: paul at colomiets.name (Paul Colomiets)
+Date: Sun, 16 Nov 2014 00:04:05 +0200
+Subject: [rust-dev] Compiling static binary
+In-Reply-To: <CAHx8SrkO8BF3rxo+MEhZd9nHxHLs_YdHUxBTqAD+XBYnT1sdCA@mail.gmail.com>
+References: <CAA0gF6pXMffeAtwoygr9Wwrxt_Xm3hudwUuYzSdyYAUx3xGZBA@mail.gmail.com>
+	<CAHx8SrkO8BF3rxo+MEhZd9nHxHLs_YdHUxBTqAD+XBYnT1sdCA@mail.gmail.com>
+Message-ID: <CAA0gF6pwR5G7-zpki44uBdK6tR0iGahXaiCS+7MZVhwWLKQi2g@mail.gmail.com>
+
+Hi Kai,
+
+On Sat, Nov 15, 2014 at 11:02 PM, Kai Noda <nodakai at gmail.com> wrote:
+> Hi Paul,
+>
+> I managed to get it working by manually tweaking linker options (this
+> mustn't be the right way to go...)
+>
+> Rust devs: what is the official way to do this?  Simply adding "-C
+> link-args=-static" doesn't work (see my second transcript)
+>
+> $ cat hello-rust.rs
+> fn main() {
+>     println!("Hello, world!");
+> }
+> $ rlibs=`rustc -Z print-link-args hello-rust.rs | sed -e 's/ /\n/g' | grep
+> rlib`
+> $ echo $rlibs
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libnative-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libstd-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libsync-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustrt-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcollections-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/liballoc-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/liblibc-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/librand-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libunicode-4e7c5e5c.rlib'
+> '/home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcore-4e7c5e5c.rlib'
+> $ rustc -Z print-link-args --emit obj hello-rust.rs
+> $ file hello-rust.o
+> hello-rust.o: ELF 64-bit LSB relocatable, x86-64, version 1 (GNU/Linux), not
+> stripped
+> $ eval "gcc -static -static-libgcc hello-rust.o `tr $'\n' ' '<<<$rlibs`
+> -lpthread -lm -ldl -lrt -o hello-rust"
+> /home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libstd-4e7c5e5c.rlib(std-4e7c5e5c.o):
+> In function `dynamic_lib::dl::open_internal::hda8e305d06a14b844og':
+> std.0.rs:(.text._ZN11dynamic_lib2dl13open_internal20hda8e305d06a14b844ogE+0x8):
+> warning: Using 'dlopen' in statically linked applications requires at
+> runtime the shared libraries from the glibc version used for linking
+> /home/nodakai/local/rust/lib/rustlib/x86_64-unknown-linux-gnu/lib/libstd-4e7c5e5c.rlib(std-4e7c5e5c.o):
+> In function `io::net::addrinfo::get_host_addresses::hf208fefd6f07b89awSi':
+> std.0.rs:(.text._ZN2io3net8addrinfo18get_host_addresses20hf208fefd6f07b89awSiE+0xad):
+> warning: Using 'getaddrinfo' in statically linked applications requires at
+> runtime the shared libraries from the glibc version used for linking
+> $ file ./hello-rust
+> ./hello-rust: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux),
+> statically linked, for GNU/Linux 2.6.24,
+> BuildID[sha1]=0x7fa2ba5ebdec633b220a8e9c988c4632b26a17d9, not stripped
+> $ ./hello-rust
+> Hello, world!
+
+Sure, this is a workaround. But it works, until rust will support
+alternative libc implementations. Thanks a lot!
+
+-- 
+Paul
+
+From paul at colomiets.name  Sat Nov 15 14:24:59 2014
+From: paul at colomiets.name (Paul Colomiets)
+Date: Sun, 16 Nov 2014 00:24:59 +0200
+Subject: [rust-dev] Compiling static binary
+In-Reply-To: <5467C446.5080301@mozilla.com>
+References: <CAA0gF6pXMffeAtwoygr9Wwrxt_Xm3hudwUuYzSdyYAUx3xGZBA@mail.gmail.com>
+	<CAHx8SrkO8BF3rxo+MEhZd9nHxHLs_YdHUxBTqAD+XBYnT1sdCA@mail.gmail.com>
+	<5467C446.5080301@mozilla.com>
+Message-ID: <CAA0gF6oxp3pqfp6ZUMSmW5fMJWA6T4g_nAgHK4wn_iYGzVR2Cw@mail.gmail.com>
+
+Hi Brian,
+
+On Sat, Nov 15, 2014 at 11:23 PM, Brian Anderson <banderson at mozilla.com> wrote:
+> I believe it is not possible to link to glibc statically. My understanding
+> is that to get a Rust binary that does not depend on a system-provided libc
+> at all we need to add explicit support for alternate libc
+> implementations[1].
+>
+
+Thanks. This really explains why problem is so hard. It seems that
+it's possible to link to glibc, with the issue of non-working name
+resolution (which is pluggable in glibc) and dlopen (for obvious
+reasons). That would work for me for now.
+
+Still, when you are talking about "system-provided libc", do you mean
+that if I would compile Rust on e.g. Alpine linux (which has musl libc
+by default), I will be able to link rust program with musl libc
+statically?
+
+--
+Paul
+
+From danielmicay at gmail.com  Sat Nov 15 15:23:06 2014
+From: danielmicay at gmail.com (Daniel Micay)
+Date: Sat, 15 Nov 2014 18:23:06 -0500
+Subject: [rust-dev] Compiling static binary
+In-Reply-To: <CAA0gF6oxp3pqfp6ZUMSmW5fMJWA6T4g_nAgHK4wn_iYGzVR2Cw@mail.gmail.com>
+References: <CAA0gF6pXMffeAtwoygr9Wwrxt_Xm3hudwUuYzSdyYAUx3xGZBA@mail.gmail.com>	<CAHx8SrkO8BF3rxo+MEhZd9nHxHLs_YdHUxBTqAD+XBYnT1sdCA@mail.gmail.com>	<5467C446.5080301@mozilla.com>
+	<CAA0gF6oxp3pqfp6ZUMSmW5fMJWA6T4g_nAgHK4wn_iYGzVR2Cw@mail.gmail.com>
+Message-ID: <5467E05A.1070007@gmail.com>
+
+On 15/11/14 05:24 PM, Paul Colomiets wrote:
+> Hi Brian,
+> 
+> On Sat, Nov 15, 2014 at 11:23 PM, Brian Anderson <banderson at mozilla.com> wrote:
+>> I believe it is not possible to link to glibc statically. My understanding
+>> is that to get a Rust binary that does not depend on a system-provided libc
+>> at all we need to add explicit support for alternate libc
+>> implementations[1].
+>>
+> 
+> Thanks. This really explains why problem is so hard. It seems that
+> it's possible to link to glibc, with the issue of non-working name
+> resolution (which is pluggable in glibc) and dlopen (for obvious
+> reasons). That would work for me for now.
+> 
+> Still, when you are talking about "system-provided libc", do you mean
+> that if I would compile Rust on e.g. Alpine linux (which has musl libc
+> by default), I will be able to link rust program with musl libc
+> statically?
+
+The limited static linking support in glibc is misleading, because it's
+quite broken.
+
+Here's a simple example of a performance bug (time it with and without
+using -static):
+
+    #include <time.h>
+
+    int main(void) {
+        struct timespec ts;
+        for (unsigned i = 0; i < 1000000; i++) {
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+        }
+    }
+
+Unlike musl, glibc has no vdso support without dynamic linking.
+
+Statically linking all libraries is also different than a *fully* static
+binary which is incompatible with features like ASLR. Rust enables PIE
+(full ASLR) by default so `-static` alone is poorly defined and will
+likely break at compile-time or runtime.
+
+Rust's current approach to FFI is to hard-wire the entire ABI of a
+specific version / configuration of the library. It's unlikely that it
+will work with musl at this time, despite musl's progress towards
+support for the glibc ABI.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141115/dfb4908b/attachment.sig>
+
+From maxp at trystero.is  Sun Nov 16 13:25:46 2014
+From: maxp at trystero.is (Max R.D. Parmer)
+Date: Sun, 16 Nov 2014 13:25:46 -0800
+Subject: [rust-dev] surprising test failure with "panicked at 'Box<Any>'"
+Message-ID: <20141116212545.GA7492@localhost>
+
+The code and error generated from the test suite are here:
+https://gist.github.com/maxrp/e8b17669d18006471434
+
+Where things get strange to me (is this a bug?) is how main() works as
+expected and the first test passes but the second test fails with this
+odd "panicked at 'Box<Any>'" -- I'm not sure where the Box occurs --
+possibly libtest?
+
+I'm using the latest nightlies:
+rustc --version && cargo --version
+    rustc 0.13.0-nightly (d91a015ab 2014-11-14 23:37:27 +0000)
+    cargo 0.0.1-pre-nightly (56852db 2014-11-14 23:33:33 +0000)
+
+Secondary to the specific issue, any remarks on style and idiom are also
+welcome.
+
+Thanks,
+Max
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 949 bytes
+Desc: Digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141116/6cfe2c4d/attachment.sig>
+
+From sfackler at gmail.com  Mon Nov 17 08:48:53 2014
+From: sfackler at gmail.com (Steven Fackler)
+Date: Mon, 17 Nov 2014 16:48:53 +0000
+Subject: [rust-dev] surprising test failure with "panicked at 'Box<Any>'"
+References: <20141116212545.GA7492@localhost>
+Message-ID: <CANb7cF4S4qzfWyoiB12gUpGe_TY-88MTG32p1hzo9xzXZTBdgA@mail.gmail.com>
+
+assert! Takes a boolean expression and an optional error message. The
+`false` is being interpreted as an error message which results in the
+Box<Any> output. You probably want to use assert_eq!
+
+On Mon Nov 17 2014 at 8:31:46 AM Max R.D. Parmer <maxp at trystero.is> wrote:
+
+> The code and error generated from the test suite are here:
+> https://gist.github.com/maxrp/e8b17669d18006471434
+>
+> Where things get strange to me (is this a bug?) is how main() works as
+> expected and the first test passes but the second test fails with this
+> odd "panicked at 'Box<Any>'" -- I'm not sure where the Box occurs --
+> possibly libtest?
+>
+> I'm using the latest nightlies:
+> rustc --version && cargo --version
+>     rustc 0.13.0-nightly (d91a015ab 2014-11-14 23:37:27 +0000)
+>     cargo 0.0.1-pre-nightly (56852db 2014-11-14 23:33:33 +0000)
+>
+> Secondary to the specific issue, any remarks on style and idiom are also
+> welcome.
+>
+> Thanks,
+> Max
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141117/1efbc265/attachment.html>
+
+From maxp at trystero.is  Mon Nov 17 09:37:47 2014
+From: maxp at trystero.is (Max R.D. Parmer)
+Date: Mon, 17 Nov 2014 09:37:47 -0800
+Subject: [rust-dev] surprising test failure with "panicked at 'Box<Any>'"
+In-Reply-To: <CANb7cF4S4qzfWyoiB12gUpGe_TY-88MTG32p1hzo9xzXZTBdgA@mail.gmail.com>
+References: <20141116212545.GA7492@localhost>
+	<CANb7cF4S4qzfWyoiB12gUpGe_TY-88MTG32p1hzo9xzXZTBdgA@mail.gmail.com>
+Message-ID: <4428F6A8-9ACF-4622-8207-E065F025E5E9@trystero.is>
+
+Augh! Thanks.
+
+On November 17, 2014 8:48:53 AM PST, Steven Fackler <sfackler at gmail.com> wrote:
+>assert! Takes a boolean expression and an optional error message. The
+>`false` is being interpreted as an error message which results in the
+>Box<Any> output. You probably want to use assert_eq!
+>
+>On Mon Nov 17 2014 at 8:31:46 AM Max R.D. Parmer <maxp at trystero.is>
+>wrote:
+>
+>> The code and error generated from the test suite are here:
+>> https://gist.github.com/maxrp/e8b17669d18006471434
+>>
+>> Where things get strange to me (is this a bug?) is how main() works
+>as
+>> expected and the first test passes but the second test fails with
+>this
+>> odd "panicked at 'Box<Any>'" -- I'm not sure where the Box occurs --
+>> possibly libtest?
+>>
+>> I'm using the latest nightlies:
+>> rustc --version && cargo --version
+>>     rustc 0.13.0-nightly (d91a015ab 2014-11-14 23:37:27 +0000)
+>>     cargo 0.0.1-pre-nightly (56852db 2014-11-14 23:33:33 +0000)
+>>
+>> Secondary to the specific issue, any remarks on style and idiom are
+>also
+>> welcome.
+>>
+>> Thanks,
+>> Max
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+
+-- 
+Sent from my Android device with K-9 Mail. Please excuse my brevity.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141117/0909df35/attachment.html>
+
+From daniel.trstenjak at gmail.com  Tue Nov 18 11:38:13 2014
+From: daniel.trstenjak at gmail.com (Daniel Trstenjak)
+Date: Tue, 18 Nov 2014 20:38:13 +0100
+Subject: [rust-dev] Why there's this asymmetry in defining a generic
+ type/function/method and calling it?
+Message-ID: <20141118193812.GA2014@machine>
+
+
+Dear rust devs,
+
+is there a reason why it's e.g.:
+
+   let vec = Vec::<int>::new();
+   let vec = vec.iter().map(|i| *i + 1).collect::<Vec<int>>();
+
+instead of:
+
+   let vec = Vec<int>::new();
+   let vec = vec.iter().map(|i| *i + 1).collect<Vec<int>>();
+
+
+Thanks for any hints!
+
+
+Greetings,
+Daniel
+
+From sfackler at gmail.com  Tue Nov 18 11:41:38 2014
+From: sfackler at gmail.com (Steven Fackler)
+Date: Tue, 18 Nov 2014 19:41:38 +0000
+Subject: [rust-dev] Why there's this asymmetry in defining a generic
+ type/function/method and calling it?
+References: <20141118193812.GA2014@machine>
+Message-ID: <CANb7cF4XTR-M3dn_JPwiX-_z51wq4F8BWh9OfdvZv40wH-JDQg@mail.gmail.com>
+
+The syntax is ambiguous:
+
+let foo = (HashMap<Foo, Bar>new());
+
+is foo a HashMap<Foo, Bar>, or is it a tuple containing the results of
+these two comparisons: HashMap < Foo and Bar > new()?
+
+On Tue Nov 18 2014 at 1:38:26 PM Daniel Trstenjak <
+daniel.trstenjak at gmail.com> wrote:
+
+>
+> Dear rust devs,
+>
+> is there a reason why it's e.g.:
+>
+>    let vec = Vec::<int>::new();
+>    let vec = vec.iter().map(|i| *i + 1).collect::<Vec<int>>();
+>
+> instead of:
+>
+>    let vec = Vec<int>::new();
+>    let vec = vec.iter().map(|i| *i + 1).collect<Vec<int>>();
+>
+>
+> Thanks for any hints!
+>
+>
+> Greetings,
+> Daniel
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141118/b0986583/attachment.html>
+
+From daniel.trstenjak at gmail.com  Tue Nov 18 12:23:50 2014
+From: daniel.trstenjak at gmail.com (Daniel Trstenjak)
+Date: Tue, 18 Nov 2014 21:23:50 +0100
+Subject: [rust-dev] Why there's this asymmetry in defining a generic
+ type/function/method and calling it?
+In-Reply-To: <CANb7cF4XTR-M3dn_JPwiX-_z51wq4F8BWh9OfdvZv40wH-JDQg@mail.gmail.com>
+References: <20141118193812.GA2014@machine>
+	<CANb7cF4XTR-M3dn_JPwiX-_z51wq4F8BWh9OfdvZv40wH-JDQg@mail.gmail.com>
+Message-ID: <20141118202350.GA3075@machine>
+
+
+Hi Steven,
+
+On Tue, Nov 18, 2014 at 07:41:38PM +0000, Steven Fackler wrote:
+> The syntax is ambiguous:
+> 
+> let foo = (HashMap<Foo, Bar>new());
+
+You mean 'let foo = (HashMap<Foo, Bar>::new());' , right?
+
+Is '::new()' a valid expression for accessing some kind of global
+or super namespace? 
+
+If not, then the expression doesn't seem to be ambiguous, but I can see,
+that writing the parser would be more tedious.
+
+So is this the reason, an easier parser implementation and therefore
+most likely faster parsing of code?
+
+
+Greetings,
+Daniel
+
+From paul.stansifer at gmail.com  Tue Nov 18 12:31:17 2014
+From: paul.stansifer at gmail.com (Paul Stansifer)
+Date: Tue, 18 Nov 2014 15:31:17 -0500
+Subject: [rust-dev] Why there's this asymmetry in defining a generic
+ type/function/method and calling it?
+In-Reply-To: <20141118202350.GA3075@machine>
+References: <20141118193812.GA2014@machine>
+	<CANb7cF4XTR-M3dn_JPwiX-_z51wq4F8BWh9OfdvZv40wH-JDQg@mail.gmail.com>
+	<20141118202350.GA3075@machine>
+Message-ID: <CA+VxxZceVZRnw96W9W1ZfOLtkECAA4egNh9NxNpO94k1Jf5+4w@mail.gmail.com>
+
+> If not, then the expression doesn't seem to be ambiguous, but I can see,
+> that writing the parser would be more tedious.
+>
+> So is this the reason, an easier parser implementation and therefore
+> most likely faster parsing of code?
+>
+
+It's not so much the speed of the parser that is the matter, but the
+fragility of the grammar. The less lookahead that's required, the more
+likely it is that parser error messages will make sense, and the less
+likely that a future change to Rust's syntax will introduce an ambiguity.
+
+Paul
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141118/ddef3323/attachment.html>
+
+From tkuehn at cmu.edu  Tue Nov 18 12:42:33 2014
+From: tkuehn at cmu.edu (Tim Kuehn)
+Date: Tue, 18 Nov 2014 12:42:33 -0800
+Subject: [rust-dev] Why there's this asymmetry in defining a generic
+ type/function/method and calling it?
+In-Reply-To: <20141118202350.GA3075@machine>
+References: <20141118193812.GA2014@machine>
+	<CANb7cF4XTR-M3dn_JPwiX-_z51wq4F8BWh9OfdvZv40wH-JDQg@mail.gmail.com>
+	<20141118202350.GA3075@machine>
+Message-ID: <CACVDHKnYy5DJwSs0D3U9Bbd3Extb=atwMYj-ne=+n2b1W_5DXg@mail.gmail.com>
+
+On Tue, Nov 18, 2014 at 12:23 PM, Daniel Trstenjak <
+daniel.trstenjak at gmail.com> wrote:
+
+>
+> Hi Steven,
+>
+> On Tue, Nov 18, 2014 at 07:41:38PM +0000, Steven Fackler wrote:
+> > The syntax is ambiguous:
+> >
+> > let foo = (HashMap<Foo, Bar>new());
+>
+> You mean 'let foo = (HashMap<Foo, Bar>::new());' , right?
+>
+> Is '::new()' a valid expression for accessing some kind of global
+> or super namespace?
+
+
+Correct <http://is.gd/6T0U3R>; the `::` prefix resolves from the crate
+root; unprefixed resolves from the module root.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141118/97fdc266/attachment.html>
+
+From nikos at vasilak.is  Tue Nov 18 15:13:29 2014
+From: nikos at vasilak.is (Nikos Vasilakis)
+Date: Tue, 18 Nov 2014 18:13:29 -0500
+Subject: [rust-dev] File Descriptors
+Message-ID: <CADg=4TiutAP6EAM8D9HpoBGuUucT9fFcBtZW27p-mNyreba0VA@mail.gmail.com>
+
+Hi everyone,
+
+(I apologize if this is not the right mailing list for this; if not,
+please point me to the right direction).
+
+At a high level, I am trying to get the file descriptor for a file I
+am opening -- the reason for this is I want to pass it on to ioctl
+later on. I am trying two approaches here:
+
+1. Use libc FFI, and create and pass around a sys::fs::FileDesc. This
+worked until today, when I updated to latest rustc (using rustup).
+Now, trying to compile, gives me "unresolved import
+`sys::fs::FileDesc`. Maybe a missing `extern crate sys`?". (and extern
+does not work, can't find crate).
+
+Looking in the rust-lang source, however, I see it being used (and
+being imported) exactly as I do above (e.g.,
+libstd/sys/unix/{helper_signal.rs, process.rs}). So, what's going on?
+
+2. (Try to) Use regular, rust-y std::io::{File, Open, ReadWrite}, and
+try to use the `as_fd()` method on the `File` result I get from open.
+This is somewhat undocumented, but I came across the method in fs.rs
+source [1] (I think I intuitively understand what
+`sys_common::AsFileDesc` means in `impl sys_common::AsFileDesc for
+File`), and I then saw that process.rs actually uses it, of course
+after doing `use sys_common::{AsFileDesc}` at the beginning, as my
+intuition suggested. Still though, I get a similar error to (1) above,
+i.e., `unresolved import `sys_common::AsFileDesc`. Maybe a missing
+`extern crate sys_common`?` What's going on here?
+
+What doesn't any of these imports work? Also, where is the
+`sys_common` documented? And, most importantly, how do I get to play
+with file descriptors, without implementing the abstraction myself (in
+the case of (1), for instance)?
+
+Thanks!
+Nikos
+
+
+[1] http://doc.rust-lang.org/src/std/home/rustbuild/src/rust-buildbot/slave/nightly-linux/build/src/libstd/io/fs.rs.html#91-95
+
+From steve at steveklabnik.com  Tue Nov 18 15:37:19 2014
+From: steve at steveklabnik.com (Steve Klabnik)
+Date: Tue, 18 Nov 2014 18:37:19 -0500
+Subject: [rust-dev] File Descriptors
+In-Reply-To: <CADg=4TiutAP6EAM8D9HpoBGuUucT9fFcBtZW27p-mNyreba0VA@mail.gmail.com>
+References: <CADg=4TiutAP6EAM8D9HpoBGuUucT9fFcBtZW27p-mNyreba0VA@mail.gmail.com>
+Message-ID: <CABL+ZB7nc2eeFFYegmy3oF8wmsJoStqFyw1WSrGZoNhKWm7SsA@mail.gmail.com>
+
+It's not the wrong list, but usually StackOverflow works better.
+
+(Sorry I don't know more about file descriptors :/)
+
+From nodakai at gmail.com  Tue Nov 18 15:39:16 2014
+From: nodakai at gmail.com (Kai Noda)
+Date: Wed, 19 Nov 2014 07:39:16 +0800
+Subject: [rust-dev] File Descriptors
+In-Reply-To: <CADg=4TiutAP6EAM8D9HpoBGuUucT9fFcBtZW27p-mNyreba0VA@mail.gmail.com>
+References: <CADg=4TiutAP6EAM8D9HpoBGuUucT9fFcBtZW27p-mNyreba0VA@mail.gmail.com>
+Message-ID: <CAHx8Sr=gjCr7FWRaF4gwX1Wy0OjMHvB5mJpDsxL+_y80CtnNdw@mail.gmail.com>
+
+Hi Nikos,
+
+std::sys is private and only for internal use in libstd as of now.  It was
+broken in the course of the Great Runtime Overhaul
+https://github.com/rust-lang/rust/pull/18557
+
+Stay tuned for updates from aturon...
+
+Regards,
+Kai
+
+??  ? <nodakai at gmail.com>
+
+2014-11-19 7:13 GMT+08:00 Nikos Vasilakis <nikos at vasilak.is>:
+
+> Hi everyone,
+>
+> (I apologize if this is not the right mailing list for this; if not,
+> please point me to the right direction).
+>
+> At a high level, I am trying to get the file descriptor for a file I
+> am opening -- the reason for this is I want to pass it on to ioctl
+> later on. I am trying two approaches here:
+>
+> 1. Use libc FFI, and create and pass around a sys::fs::FileDesc. This
+> worked until today, when I updated to latest rustc (using rustup).
+> Now, trying to compile, gives me "unresolved import
+> `sys::fs::FileDesc`. Maybe a missing `extern crate sys`?". (and extern
+> does not work, can't find crate).
+>
+> Looking in the rust-lang source, however, I see it being used (and
+> being imported) exactly as I do above (e.g.,
+> libstd/sys/unix/{helper_signal.rs, process.rs}). So, what's going on?
+>
+> 2. (Try to) Use regular, rust-y std::io::{File, Open, ReadWrite}, and
+> try to use the `as_fd()` method on the `File` result I get from open.
+> This is somewhat undocumented, but I came across the method in fs.rs
+> source [1] (I think I intuitively understand what
+> `sys_common::AsFileDesc` means in `impl sys_common::AsFileDesc for
+> File`), and I then saw that process.rs actually uses it, of course
+> after doing `use sys_common::{AsFileDesc}` at the beginning, as my
+> intuition suggested. Still though, I get a similar error to (1) above,
+> i.e., `unresolved import `sys_common::AsFileDesc`. Maybe a missing
+> `extern crate sys_common`?` What's going on here?
+>
+> What doesn't any of these imports work? Also, where is the
+> `sys_common` documented? And, most importantly, how do I get to play
+> with file descriptors, without implementing the abstraction myself (in
+> the case of (1), for instance)?
+>
+> Thanks!
+> Nikos
+>
+>
+> [1]
+> http://doc.rust-lang.org/src/std/home/rustbuild/src/rust-buildbot/slave/nightly-linux/build/src/libstd/io/fs.rs.html#91-95
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141119/d87e458f/attachment.html>
+
+From ckkashyap at gmail.com  Tue Nov 18 23:05:31 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Wed, 19 Nov 2014 12:35:31 +0530
+Subject: [rust-dev] Unable to understand the behaviour of the rust code
+Message-ID: <CAGdT1go1shUtvCo3DjFZckjkOh5Ubn+oJr=d8whUS4L204rZmQ@mail.gmail.com>
+
+Hi,
+I am attempting to port xv6 to rust. I found a strange observation in my
+code at https://github.com/ckkashyap/unix/blob/newrustfile/kernel/kernel.rs
+
+The code as it is works as expected - prints out AB on the screen. However,
+as soon as I comment out lines 30 to 37, the kernel keeps rebooting. I also
+find that if the function kashyap has a parameter then the rebooting stops.
+Can someone please tell me if I am missing something here?
+
+Regards,
+Kashyap
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141119/4603f90d/attachment.html>
+
+From daniel.trstenjak at gmail.com  Wed Nov 19 05:42:32 2014
+From: daniel.trstenjak at gmail.com (Daniel Trstenjak)
+Date: Wed, 19 Nov 2014 14:42:32 +0100
+Subject: [rust-dev] Why there's this asymmetry in defining a generic
+ type/function/method and calling it?
+In-Reply-To: <CA+VxxZceVZRnw96W9W1ZfOLtkECAA4egNh9NxNpO94k1Jf5+4w@mail.gmail.com>
+References: <20141118193812.GA2014@machine>
+	<CANb7cF4XTR-M3dn_JPwiX-_z51wq4F8BWh9OfdvZv40wH-JDQg@mail.gmail.com>
+	<20141118202350.GA3075@machine>
+	<CA+VxxZceVZRnw96W9W1ZfOLtkECAA4egNh9NxNpO94k1Jf5+4w@mail.gmail.com>
+Message-ID: <20141119134232.GA19500@machine>
+
+
+Hi Paul,
+
+On Tue, Nov 18, 2014 at 03:31:17PM -0500, Paul Stansifer wrote:
+> It's not so much the speed of the parser that is the matter, but the fragility
+> of the grammar. The less lookahead that's required, the more likely it is that
+> parser error messages will make sense, and the less likely that a future change
+> to Rust's syntax will introduce an ambiguity.
+
+Ok, that's absolutely reasonable.
+
+I'm wondering, if it could get distinct by enforcing some properties
+which are already compile warnings, that types should always start
+with an upper case and functions/methods with a lower case.
+
+let foo = (HashMap<Foo, Bar>::new());
+
+But then 'HashMap' could still e.g. be an enum value instead of
+a type, but currently you certainly also need some kind of context
+to distinguish cases like e.g. 'some(x)' and 'Some(x)'.
+
+
+Somehow I think, that's a very good idea to enforce these
+properties, regardless of the issue here.
+
+If you've read code where everything starts with a lower case or
+upper case (even variables!), then you can really see the value
+of using the case to distinguish types/functions/methods.
+
+
+Greetings,
+Daniel
+
+From matthieu.monrocq at gmail.com  Wed Nov 19 09:40:21 2014
+From: matthieu.monrocq at gmail.com (Matthieu Monrocq)
+Date: Wed, 19 Nov 2014 18:40:21 +0100
+Subject: [rust-dev] Why there's this asymmetry in defining a generic
+ type/function/method and calling it?
+In-Reply-To: <20141119134232.GA19500@machine>
+References: <20141118193812.GA2014@machine>
+	<CANb7cF4XTR-M3dn_JPwiX-_z51wq4F8BWh9OfdvZv40wH-JDQg@mail.gmail.com>
+	<20141118202350.GA3075@machine>
+	<CA+VxxZceVZRnw96W9W1ZfOLtkECAA4egNh9NxNpO94k1Jf5+4w@mail.gmail.com>
+	<20141119134232.GA19500@machine>
+Message-ID: <CAKE6RfjzmkzddSApQeuwobaK3NCYQG=r0F4A0q=45u7YbqSLkQ@mail.gmail.com>
+
+On Wed, Nov 19, 2014 at 2:42 PM, Daniel Trstenjak <
+daniel.trstenjak at gmail.com> wrote:
+
+>
+> Hi Paul,
+>
+> On Tue, Nov 18, 2014 at 03:31:17PM -0500, Paul Stansifer wrote:
+> > It's not so much the speed of the parser that is the matter, but the
+> fragility
+> > of the grammar. The less lookahead that's required, the more likely it
+> is that
+> > parser error messages will make sense, and the less likely that a future
+> change
+> > to Rust's syntax will introduce an ambiguity.
+>
+> Ok, that's absolutely reasonable.
+>
+> I'm wondering, if it could get distinct by enforcing some properties
+> which are already compile warnings, that types should always start
+> with an upper case and functions/methods with a lower case.
+>
+
+Note, the syntax also applies to functions; ie if you have `fn pow<T:
+Num>(T n, uint e) -> T` then to qualify `T` you can use `pow::<int>(123,
+4)`.
+
+Therefore using case would not solve the issue (not completely, at least).
+
+
+>
+> let foo = (HashMap<Foo, Bar>::new());
+>
+> But then 'HashMap' could still e.g. be an enum value instead of
+> a type, but currently you certainly also need some kind of context
+> to distinguish cases like e.g. 'some(x)' and 'Some(x)'.
+>
+>
+> Somehow I think, that's a very good idea to enforce these
+> properties, regardless of the issue here.
+>
+> If you've read code where everything starts with a lower case or
+> upper case (even variables!), then you can really see the value
+> of using the case to distinguish types/functions/methods.
+>
+>
+> Greetings,
+> Daniel
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141119/a26063e5/attachment.html>
+
+From lethom at live.fr  Wed Nov 19 11:03:05 2014
+From: lethom at live.fr (Thomas Letan)
+Date: Wed, 19 Nov 2014 20:03:05 +0100
+Subject: [rust-dev] Using both libnative and libgreen in a single program
+Message-ID: <DUB123-W3667399F21E4F3FB602D2BC1890@phx.gbl>
+
+Hi everyone,
+
+I'm currently discovering Rust and I use it for one of my project. I was wondering if it was possible to use both libnative *and* libgreen in a single program.
+
+I could use libgreen flexibility for (very numerous) tasks, but I need libnative too for the io capability.
+
+Thanks,
+Thomas
+ 		 	   		  
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141119/325dbddc/attachment.html>
+
+From nikos at vasilak.is  Wed Nov 19 12:27:53 2014
+From: nikos at vasilak.is (Nikos Vasilakis)
+Date: Wed, 19 Nov 2014 15:27:53 -0500
+Subject: [rust-dev] File Descriptors
+In-Reply-To: <CAHx8Sr=gjCr7FWRaF4gwX1Wy0OjMHvB5mJpDsxL+_y80CtnNdw@mail.gmail.com>
+References: <CADg=4TiutAP6EAM8D9HpoBGuUucT9fFcBtZW27p-mNyreba0VA@mail.gmail.com>
+	<CAHx8Sr=gjCr7FWRaF4gwX1Wy0OjMHvB5mJpDsxL+_y80CtnNdw@mail.gmail.com>
+Message-ID: <CADg=4ThsR3Zq1P0HMFnPmLC2GhQ53bris=z4ceDcco2Wu835tw@mail.gmail.com>
+
+Thank you both.
+
+Kai, do you think I should open an issue on github?
+
+Nikos
+On Tue, Nov 18, 2014 at 6:39 PM, Kai Noda <nodakai at gmail.com> wrote:
+> Hi Nikos,
+>
+> std::sys is private and only for internal use in libstd as of now.  It was
+> broken in the course of the Great Runtime Overhaul
+> https://github.com/rust-lang/rust/pull/18557
+>
+> Stay tuned for updates from aturon...
+>
+> Regards,
+> Kai
+>
+> ??  ? <nodakai at gmail.com>
+>
+> 2014-11-19 7:13 GMT+08:00 Nikos Vasilakis <nikos at vasilak.is>:
+>>
+>> Hi everyone,
+>>
+>> (I apologize if this is not the right mailing list for this; if not,
+>> please point me to the right direction).
+>>
+>> At a high level, I am trying to get the file descriptor for a file I
+>> am opening -- the reason for this is I want to pass it on to ioctl
+>> later on. I am trying two approaches here:
+>>
+>> 1. Use libc FFI, and create and pass around a sys::fs::FileDesc. This
+>> worked until today, when I updated to latest rustc (using rustup).
+>> Now, trying to compile, gives me "unresolved import
+>> `sys::fs::FileDesc`. Maybe a missing `extern crate sys`?". (and extern
+>> does not work, can't find crate).
+>>
+>> Looking in the rust-lang source, however, I see it being used (and
+>> being imported) exactly as I do above (e.g.,
+>> libstd/sys/unix/{helper_signal.rs, process.rs}). So, what's going on?
+>>
+>> 2. (Try to) Use regular, rust-y std::io::{File, Open, ReadWrite}, and
+>> try to use the `as_fd()` method on the `File` result I get from open.
+>> This is somewhat undocumented, but I came across the method in fs.rs
+>> source [1] (I think I intuitively understand what
+>> `sys_common::AsFileDesc` means in `impl sys_common::AsFileDesc for
+>> File`), and I then saw that process.rs actually uses it, of course
+>> after doing `use sys_common::{AsFileDesc}` at the beginning, as my
+>> intuition suggested. Still though, I get a similar error to (1) above,
+>> i.e., `unresolved import `sys_common::AsFileDesc`. Maybe a missing
+>> `extern crate sys_common`?` What's going on here?
+>>
+>> What doesn't any of these imports work? Also, where is the
+>> `sys_common` documented? And, most importantly, how do I get to play
+>> with file descriptors, without implementing the abstraction myself (in
+>> the case of (1), for instance)?
+>>
+>> Thanks!
+>> Nikos
+>>
+>>
+>> [1]
+>> http://doc.rust-lang.org/src/std/home/rustbuild/src/rust-buildbot/slave/nightly-linux/build/src/libstd/io/fs.rs.html#91-95
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+
+From ckkashyap at gmail.com  Thu Nov 20 22:18:03 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Fri, 21 Nov 2014 11:48:03 +0530
+Subject: [rust-dev] Test email
+Message-ID: <CAGdT1grfnig_HtMqDbjnN6HPmK-zPE0qGXnt8xF0xX3AEHHmGQ@mail.gmail.com>
+
+Hi,
+I am new to Rust - but I love the fact that it is best of Haskell and C++.
+I am attempting to port xv6 to rust - just sending out this note to say hi
+and also check to see if my email is making it to the group.
+Regards,
+Kashyap
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141121/e842fabb/attachment.html>
+
+From anton.lofgren at gmail.com  Thu Nov 20 22:33:02 2014
+From: anton.lofgren at gmail.com (=?ISO-8859-1?Q?Anton_L=F6fgren?=)
+Date: Fri, 21 Nov 2014 07:33:02 +0100
+Subject: [rust-dev] Test email
+In-Reply-To: <CAGdT1grfnig_HtMqDbjnN6HPmK-zPE0qGXnt8xF0xX3AEHHmGQ@mail.gmail.com>
+References: <CAGdT1grfnig_HtMqDbjnN6HPmK-zPE0qGXnt8xF0xX3AEHHmGQ@mail.gmail.com>
+Message-ID: <3752937A-9EE0-4B7A-8102-D443AA38D78A@gmail.com>
+
+Hi Kashyap, 
+
+Your email's getting through just fine.  :-) 
+
+/Anton 
+
+On November 21, 2014 7:18:03 AM CET, C K Kashyap <ckkashyap at gmail.com> wrote:
+>Hi,
+>I am new to Rust - but I love the fact that it is best of Haskell and
+>C++.
+>I am attempting to port xv6 to rust - just sending out this note to say
+>hi
+>and also check to see if my email is making it to the group.
+>Regards,
+>Kashyap
+>
+>
+>------------------------------------------------------------------------
+>
+>_______________________________________________
+>Rust-dev mailing list
+>Rust-dev at mozilla.org
+>https://mail.mozilla.org/listinfo/rust-dev
+
+-- 
+Sent from my Android device with K-9 Mail. Please excuse my brevity.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141121/d2a7e583/attachment.html>
+
+From ckkashyap at gmail.com  Thu Nov 20 22:35:58 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Fri, 21 Nov 2014 12:05:58 +0530
+Subject: [rust-dev] Test email
+In-Reply-To: <3752937A-9EE0-4B7A-8102-D443AA38D78A@gmail.com>
+References: <CAGdT1grfnig_HtMqDbjnN6HPmK-zPE0qGXnt8xF0xX3AEHHmGQ@mail.gmail.com>
+	<3752937A-9EE0-4B7A-8102-D443AA38D78A@gmail.com>
+Message-ID: <CAGdT1gp=dQTu_yJ5WRH38w7UY6pK5+dYp_t1rAv333Xepob_EA@mail.gmail.com>
+
+Thanks for the confirmation,
+I think I need to update my settings - cause I cant seem to get my own
+emails.
+Regards,
+Kashyap
+
+On Fri, Nov 21, 2014 at 12:03 PM, Anton L?fgren <anton.lofgren at gmail.com>
+wrote:
+
+> Hi Kashyap,
+>
+> Your email's getting through just fine. :-)
+>
+> /Anton
+>
+> On November 21, 2014 7:18:03 AM CET, C K Kashyap <ckkashyap at gmail.com>
+> wrote:
+>
+>> Hi,
+>> I am new to Rust - but I love the fact that it is best of Haskell and C++.
+>> I am attempting to port xv6 to rust - just sending out this note to say
+>> hi and also check to see if my email is making it to the group.
+>> Regards,
+>> Kashyap
+>>
+>> ------------------------------
+>>
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+> --
+> Sent from my Android device with K-9 Mail. Please excuse my brevity.
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141121/901666d9/attachment.html>
+
+From moorekang at gmail.com  Thu Nov 20 22:38:40 2014
+From: moorekang at gmail.com (Yukang Chen)
+Date: Fri, 21 Nov 2014 14:38:40 +0800
+Subject: [rust-dev] Test email
+In-Reply-To: <CAGdT1grfnig_HtMqDbjnN6HPmK-zPE0qGXnt8xF0xX3AEHHmGQ@mail.gmail.com>
+References: <CAGdT1grfnig_HtMqDbjnN6HPmK-zPE0qGXnt8xF0xX3AEHHmGQ@mail.gmail.com>
+Message-ID: <CAGw+hMX+3VHk4G09ZKiYL0zL6N48LZXb=ZtVLW7Mb14mRzbsMA@mail.gmail.com>
+
+Hi,
+
+That's should be a interesting project,
+Tell us the repo if you have started.
+
+2014-11-21 14:18 GMT+08:00 C K Kashyap <ckkashyap at gmail.com>:
+
+> Hi,
+> I am new to Rust - but I love the fact that it is best of Haskell and C++.
+> I am attempting to port xv6 to rust - just sending out this note to say hi
+> and also check to see if my email is making it to the group.
+> Regards,
+> Kashyap
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+
+
+-- 
+                                                              Best regards.
+                                                              Yukang
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141121/846697c3/attachment.html>
+
+From ckkashyap at gmail.com  Thu Nov 20 22:41:44 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Fri, 21 Nov 2014 12:11:44 +0530
+Subject: [rust-dev] Test email
+In-Reply-To: <CAGw+hMX+3VHk4G09ZKiYL0zL6N48LZXb=ZtVLW7Mb14mRzbsMA@mail.gmail.com>
+References: <CAGdT1grfnig_HtMqDbjnN6HPmK-zPE0qGXnt8xF0xX3AEHHmGQ@mail.gmail.com>
+	<CAGw+hMX+3VHk4G09ZKiYL0zL6N48LZXb=ZtVLW7Mb14mRzbsMA@mail.gmail.com>
+Message-ID: <CAGdT1gqiXwS_JDUOqObEErWJvgarZKHiKChpLGw_X4Li6Yt5jA@mail.gmail.com>
+
+It's here -
+https://github.com/ckkashyap/unix
+
+My limited rust knowledge is the biggest impedance at the moment :) - using
+xv6 as a guide is helping.
+
+Regards,
+Kashyap
+
+On Fri, Nov 21, 2014 at 12:08 PM, Yukang Chen <moorekang at gmail.com> wrote:
+
+> Hi,
+>
+> That's should be a interesting project,
+> Tell us the repo if you have started.
+>
+> 2014-11-21 14:18 GMT+08:00 C K Kashyap <ckkashyap at gmail.com>:
+>
+>> Hi,
+>> I am new to Rust - but I love the fact that it is best of Haskell and C++.
+>> I am attempting to port xv6 to rust - just sending out this note to say
+>> hi and also check to see if my email is making it to the group.
+>> Regards,
+>> Kashyap
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+>
+> --
+>                                                               Best regards.
+>                                                               Yukang
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141121/3f12dd37/attachment.html>
+
+From prasoon92.iitr at gmail.com  Mon Nov 24 22:42:54 2014
+From: prasoon92.iitr at gmail.com (Prasoon Shukla)
+Date: Tue, 25 Nov 2014 12:12:54 +0530
+Subject: [rust-dev] Recommendations for a GUI toolkit for rust
+Message-ID: <CA+c5VvNtWoLAf__g01J7G22h8gPsBLp=oF91=kdtECxAJZGnPg@mail.gmail.com>
+
+Hey all
+
+I have been thinking of making a small text editor, with emacs-like
+fundamentals, as a way learning rust this winter break. I need a GUI
+toolkit for this, of course. So, I searched for it and found this page:
+https://github.com/kud1ing/awesome-rust
+
+This page gives a few choices to me and since everything is alpha right now
+(both the language and the toolkits), I don't know which one to choose. As
+a reference, I have used GTK+ before and so, I could probably use it again
+<https://github.com/JeremyLetang/rgtk>. However, my primary concern is that
+the toolkit I use would stop active development - I don't want to have to
+port everything to another toolkit later on. So, if any project shows
+promise of continuing, please suggest it to me.
+
+Thank you.
+?
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141125/e6d27117/attachment.html>
+
+From gaetan at xeberon.net  Tue Nov 25 09:53:35 2014
+From: gaetan at xeberon.net (Gaetan)
+Date: Tue, 25 Nov 2014 18:53:35 +0100
+Subject: [rust-dev] Recommendations for a GUI toolkit for rust
+In-Reply-To: <CA+c5VvNtWoLAf__g01J7G22h8gPsBLp=oF91=kdtECxAJZGnPg@mail.gmail.com>
+References: <CA+c5VvNtWoLAf__g01J7G22h8gPsBLp=oF91=kdtECxAJZGnPg@mail.gmail.com>
+Message-ID: <CANK7tAGt=EhYUO-mnUGtxObkhb0gn4V1dOwy6XdNHB0Gk2P2YA@mail.gmail.com>
+
+To my opinion qt is far better, more portable, more easy to work with, but
+binding qt on rust is quite a challenge.
+
+I think binding gtk3 is much easier, however I don't think there is any
+project ready for production yet.
+
+
+Le mardi 25 novembre 2014, Prasoon Shukla <prasoon92.iitr at gmail.com> a
+?crit :
+
+> Hey all
+>
+> I have been thinking of making a small text editor, with emacs-like
+> fundamentals, as a way learning rust this winter break. I need a GUI
+> toolkit for this, of course. So, I searched for it and found this page:
+> https://github.com/kud1ing/awesome-rust
+>
+> This page gives a few choices to me and since everything is alpha right
+> now (both the language and the toolkits), I don't know which one to choose.
+> As a reference, I have used GTK+ before and so, I could probably use it
+> again <https://github.com/JeremyLetang/rgtk>. However, my primary concern
+> is that the toolkit I use would stop active development - I don't want to
+> have to port everything to another toolkit later on. So, if any project
+> shows promise of continuing, please suggest it to me.
+>
+> Thank you.
+> ?
+>
+
+
+-- 
+-----
+Gaetan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141125/270e8080/attachment.html>
+
+From connor at mesosphere.io  Tue Nov 25 13:55:49 2014
+From: connor at mesosphere.io (Connor Doyle)
+Date: Tue, 25 Nov 2014 13:55:49 -0800
+Subject: [rust-dev] C interop puzzle
+Message-ID: <C2E1FE2B-874F-4214-80C9-BD71A5ECB5B8@mesosphere.io>
+
+Hi all,
+
+First time on the mailing list!
+
+I'm having trouble setting a raw void pointer in a struct using a recent (72 hrs) nightly.
+I'd like to address the underlying bytes for a Vec<u8> I have in-hand.
+
+The FFI guide is a little thin in this area, glad to add detail once I figure out how this is done.
+
+For reference, here is the target struct:
+
+extern crate libc;
+
+#[repr(C)]
+pub struct ProtobufObj {
+    pub data: *mut libc::c_void,
+    pub size: libc::size_t,
+}
+
+Thanks,
+--
+Connor
+
+
+
+From cg.wowus.cg at gmail.com  Tue Nov 25 14:12:55 2014
+From: cg.wowus.cg at gmail.com (Clark Gaebel)
+Date: Tue, 25 Nov 2014 14:12:55 -0800 (PST)
+Subject: [rust-dev] C interop puzzle
+In-Reply-To: <C2E1FE2B-874F-4214-80C9-BD71A5ECB5B8@mesosphere.io>
+References: <C2E1FE2B-874F-4214-80C9-BD71A5ECB5B8@mesosphere.io>
+Message-ID: <1416953575272.0aa6800b@Nodemailer>
+
+```
+
+let v: Vec<u8> = ...;let repr = v.as_slice().repr();
+
+ProtobufObj {
+
+? data: repr.data,
+
+? size: repr.len
+
+}
+
+```
+
+
+
+
+
+
+should do the trick.
+
+On Tue, Nov 25, 2014 at 2:06 PM, Connor Doyle <connor at mesosphere.io>
+wrote:
+
+> Hi all,
+> First time on the mailing list!
+> I'm having trouble setting a raw void pointer in a struct using a recent (72 hrs) nightly.
+> I'd like to address the underlying bytes for a Vec<u8> I have in-hand.
+> The FFI guide is a little thin in this area, glad to add detail once I figure out how this is done.
+> For reference, here is the target struct:
+> extern crate libc;
+> #[repr(C)]
+> pub struct ProtobufObj {
+>     pub data: *mut libc::c_void,
+>     pub size: libc::size_t,
+> }
+> Thanks,
+> --
+> Connor
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141125/ec082549/attachment.html>
+
+From connor at mesosphere.io  Tue Nov 25 16:32:03 2014
+From: connor at mesosphere.io (Connor Doyle)
+Date: Tue, 25 Nov 2014 16:32:03 -0800
+Subject: [rust-dev] C interop puzzle
+In-Reply-To: <CAP6Jx2DES0JoV5DH81oBRqRtwNzU2Z8_j2-AVJ3KwBFOzAvpVg@mail.gmail.com>
+References: <C2E1FE2B-874F-4214-80C9-BD71A5ECB5B8@mesosphere.io>
+	<CAP6Jx2DES0JoV5DH81oBRqRtwNzU2Z8_j2-AVJ3KwBFOzAvpVg@mail.gmail.com>
+Message-ID: <E564D304-4EFE-4EEC-AB87-5A9672A5BFF5@mesosphere.io>
+
+Jos? and Clark,
+An explicit cast as *mut libc::c_void was required to satisfy the type checker.
+Works now, thanks!
+--
+Connor
+
+
+> On Nov 25, 2014, at 14:15, Jos? Armando Garc?a Sancio <jsancio at gmail.com> wrote:
+> 
+> Hey Connor,
+> 
+> Small world. Jose here. I suspect that you want to get a slice from the Vec. Slices have two data members: data and len.
+> 
+> Hope that helps,
+> -Jose
+> 
+> On Tue Nov 25 2014 at 2:06:23 PM Connor Doyle <connor at mesosphere.io> wrote:
+> Hi all,
+> 
+> First time on the mailing list!
+> 
+> I'm having trouble setting a raw void pointer in a struct using a recent (72 hrs) nightly.
+> I'd like to address the underlying bytes for a Vec<u8> I have in-hand.
+> 
+> The FFI guide is a little thin in this area, glad to add detail once I figure out how this is done.
+> 
+> For reference, here is the target struct:
+> 
+> extern crate libc;
+> 
+> #[repr(C)]
+> pub struct ProtobufObj {
+>     pub data: *mut libc::c_void,
+>     pub size: libc::size_t,
+> }
+> 
+> Thanks,
+> --
+> Connor
+> 
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From grayfox at outerhaven.de  Wed Nov 26 09:26:21 2014
+From: grayfox at outerhaven.de (grayfox)
+Date: Wed, 26 Nov 2014 18:26:21 +0100
+Subject: [rust-dev] Two mutable pointers to same memory address?
+Message-ID: <20141126172620.GB25340@outerhaven.de>
+
+Hey guys,
+
+I'm really new to Rust (actually I've looked on Rust the last 5 hours the first time) but I think I produced something that shouldn't be possible. From the pointer guide I know that the following code will not compile because in the end I would have two mutable pointers to the same address:
+
+let x = 5i;
+let y = &x;
+let z = &x;
+
+But in the following snippet I end up with two mutable pointer tmp and *i which point both to the same address:
+
+fn bar<'a>(i: &mut &'a int) {
+    let mut tmp = *i;
+    println!("{} {}", *tmp, **i);
+}
+
+fn foo<'a>() {
+    let mut i: &int = &mut 5;
+    bar(&mut i);
+}
+
+fn main() {
+    foo();
+}
+
+Maybe I don't understand the concept of the Rust memory concept enough but if I understand everything correct so far this shouldn't compile but it does actually.
+
+Kind regards,
+
+grayfox
+
+From peter at taricorp.net  Wed Nov 26 09:40:44 2014
+From: peter at taricorp.net (Peter Marheine)
+Date: Wed, 26 Nov 2014 10:40:44 -0700
+Subject: [rust-dev] Two mutable pointers to same memory address?
+In-Reply-To: <20141126172620.GB25340@outerhaven.de>
+References: <20141126172620.GB25340@outerhaven.de>
+Message-ID: <CACvadSXXpF0eM=SWe_uwHs0hi=1c0gB9yL8-mS0UaHVidPj2kw@mail.gmail.com>
+
+This is sound- you aren't actually making more than one mutable reference here.
+
+Stepping through the operations in your example:
+1. i is a mutable pointer to an immutable memory location
+2. Pass a pointer to i into `bar`, which can mutate `i`.
+3. Deref that pointer so you have a copy of `i`, which still points to
+an immutable memory location.
+
+If you try to assign through `i` in `bar`, you'll quickly see that the
+compiler won't let you. Here's an example in the playpen [1] which
+fails to compile with "cannot assign to immutable dereference of
+`&`-pointer".
+
+If you were doing this in C, the difference between `let bar = &mut
+foo` and `let mut bar: &T = &mut foo` is equivalent to the difference
+between `const *` and `const *const`. The former can be changed to
+point somewhere else, but neither of them allows writing into the
+pointed-to memory. The real trick here is that when we specify the
+type of `bar` as `&T` we opt out of mutability- if you remove the type
+from that assignment, it's inferred to be `&mut T`.
+
+[1] http://is.gd/FqaGiL
+
+On Wed, Nov 26, 2014 at 10:26 AM, grayfox <grayfox at outerhaven.de> wrote:
+> Hey guys,
+>
+> I'm really new to Rust (actually I've looked on Rust the last 5 hours the first time) but I think I produced something that shouldn't be possible. From the pointer guide I know that the following code will not compile because in the end I would have two mutable pointers to the same address:
+>
+> let x = 5i;
+> let y = &x;
+> let z = &x;
+>
+> But in the following snippet I end up with two mutable pointer tmp and *i which point both to the same address:
+>
+> fn bar<'a>(i: &mut &'a int) {
+>     let mut tmp = *i;
+>     println!("{} {}", *tmp, **i);
+> }
+>
+> fn foo<'a>() {
+>     let mut i: &int = &mut 5;
+>     bar(&mut i);
+> }
+>
+> fn main() {
+>     foo();
+> }
+>
+> Maybe I don't understand the concept of the Rust memory concept enough but if I understand everything correct so far this shouldn't compile but it does actually.
+>
+> Kind regards,
+>
+> grayfox
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+
+-- 
+Peter Marheine
+Don't Panic
+
+From danielmicay at gmail.com  Wed Nov 26 09:55:44 2014
+From: danielmicay at gmail.com (Daniel Micay)
+Date: Wed, 26 Nov 2014 12:55:44 -0500
+Subject: [rust-dev] Two mutable pointers to same memory address?
+In-Reply-To: <20141126172620.GB25340@outerhaven.de>
+References: <20141126172620.GB25340@outerhaven.de>
+Message-ID: <54761420.3000108@gmail.com>
+
+On 26/11/14 12:26 PM, grayfox wrote:
+> Hey guys,
+> 
+> I'm really new to Rust (actually I've looked on Rust the last 5 hours the first time) but I think I produced something that shouldn't be possible. From the pointer guide I know that the following code will not compile because in the end I would have two mutable pointers to the same address:
+> 
+> let x = 5i;
+> let y = &x;
+> let z = &x;
+> 
+> But in the following snippet I end up with two mutable pointer tmp and *i which point both to the same address:
+> 
+> fn bar<'a>(i: &mut &'a int) {
+>     let mut tmp = *i;
+>     println!("{} {}", *tmp, **i);
+> }
+> 
+> fn foo<'a>() {
+>     let mut i: &int = &mut 5;
+>     bar(&mut i);
+> }
+> 
+> fn main() {
+>     foo();
+> }
+> 
+> Maybe I don't understand the concept of the Rust memory concept enough but if I understand everything correct so far this shouldn't compile but it does actually.
+> 
+> Kind regards,
+> 
+> grayfox
+
+I see two immutable refs being created from a mutable one, not two
+aliasing mutable refs. The type of `tmp` is `&int`, not `&mut int`. The
+fact that the variable is mutable just means that another immutable
+pointer can be assigned to it - it's unnecessary, as is the `mut` on `i`
+in `foo`.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141126/c2a86541/attachment.sig>
+
+From benwilson512 at gmail.com  Wed Nov 26 20:22:57 2014
+From: benwilson512 at gmail.com (Ben Wilson)
+Date: Wed, 26 Nov 2014 22:22:57 -0600
+Subject: [rust-dev] Overflow when benchmarking
+Message-ID: <CAM6of9xxKKwQ7ZQ=w43cK+eQzK3JBazPh1FNZR4H6LNdYxcPQw@mail.gmail.com>
+
+Hey folks, I've started writing some rust code lately and run into weird
+behavior when benchmarking. When running
+
+https://gist.github.com/benwilson512/56f84ffffd4625f11feb
+
+#[bench]
+fn test_overflow(b: &mut Bencher) {
+  let nums = [0i, ..1000000];
+  b.iter(|| {
+    let mut x = 0i;
+    for i in range(0, nums.len()) {
+      x = nums[i];
+    }
+  });
+}
+
+ I get "task '<main>' has overflowed its stack" pretty much
+immediately when running cargo bench. Ordinarily I'd expect to see
+that error when doing recursion, but I can't quite figure out why it's
+showing up here. What am I missing?
+
+Thanks!
+
+- Ben
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141126/07341879/attachment.html>
+
+From sfackler at gmail.com  Wed Nov 26 20:28:03 2014
+From: sfackler at gmail.com (Steven Fackler)
+Date: Thu, 27 Nov 2014 04:28:03 +0000
+Subject: [rust-dev] Overflow when benchmarking
+References: <CAM6of9xxKKwQ7ZQ=w43cK+eQzK3JBazPh1FNZR4H6LNdYxcPQw@mail.gmail.com>
+Message-ID: <CANb7cF55XKOymLZkNM-rcpKQC8DLT_Qs1j6Q9gZWO5Mn-M+W9A@mail.gmail.com>
+
+The `nums` array is allocated on the stack and is 8 MB (assuming you're on
+a 64 bit platform).
+
+On Wed Nov 26 2014 at 8:23:08 PM Ben Wilson <benwilson512 at gmail.com> wrote:
+
+> Hey folks, I've started writing some rust code lately and run into weird
+> behavior when benchmarking. When running
+>
+> https://gist.github.com/benwilson512/56f84ffffd4625f11feb
+>
+> #[bench]
+> fn test_overflow(b: &mut Bencher) {
+>   let nums = [0i, ..1000000];
+>   b.iter(|| {
+>     let mut x = 0i;
+>     for i in range(0, nums.len()) {
+>       x = nums[i];
+>     }
+>   });
+> }
+>
+>  I get "task '<main>' has overflowed its stack" pretty much immediately when running cargo bench. Ordinarily I'd expect to see that error when doing recursion, but I can't quite figure out why it's showing up here. What am I missing?
+>
+> Thanks!
+>
+> - Ben
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141127/3250263b/attachment.html>
+
+From benwilson512 at gmail.com  Wed Nov 26 20:32:31 2014
+From: benwilson512 at gmail.com (Ben Wilson)
+Date: Wed, 26 Nov 2014 22:32:31 -0600
+Subject: [rust-dev] Overflow when benchmarking
+In-Reply-To: <CANb7cF55XKOymLZkNM-rcpKQC8DLT_Qs1j6Q9gZWO5Mn-M+W9A@mail.gmail.com>
+References: <CAM6of9xxKKwQ7ZQ=w43cK+eQzK3JBazPh1FNZR4H6LNdYxcPQw@mail.gmail.com>
+	<CANb7cF55XKOymLZkNM-rcpKQC8DLT_Qs1j6Q9gZWO5Mn-M+W9A@mail.gmail.com>
+Message-ID: <CAM6of9xv1OTnnWV0qpzU2cu0e=+Y8F9ksNJFcME4PSkzd8X8EA@mail.gmail.com>
+
+Doh, of course. Thanks, it's been a while since I've written low level
+stuff.
+
+On Wed, Nov 26, 2014 at 10:28 PM, Steven Fackler <sfackler at gmail.com> wrote:
+
+> The `nums` array is allocated on the stack and is 8 MB (assuming you're on
+> a 64 bit platform).
+>
+> On Wed Nov 26 2014 at 8:23:08 PM Ben Wilson <benwilson512 at gmail.com>
+> wrote:
+>
+>> Hey folks, I've started writing some rust code lately and run into weird
+>> behavior when benchmarking. When running
+>>
+>> https://gist.github.com/benwilson512/56f84ffffd4625f11feb
+>>
+>> #[bench]
+>> fn test_overflow(b: &mut Bencher) {
+>>   let nums = [0i, ..1000000];
+>>   b.iter(|| {
+>>     let mut x = 0i;
+>>     for i in range(0, nums.len()) {
+>>       x = nums[i];
+>>     }
+>>   });
+>> }
+>>
+>>  I get "task '<main>' has overflowed its stack" pretty much immediately when running cargo bench. Ordinarily I'd expect to see that error when doing recursion, but I can't quite figure out why it's showing up here. What am I missing?
+>>
+>> Thanks!
+>>
+>> - Ben
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141126/3b101e81/attachment.html>
+
+From lists at dhardy.name  Thu Nov 27 08:50:26 2014
+From: lists at dhardy.name (Diggory Hardy)
+Date: Thu, 27 Nov 2014 17:50:26 +0100
+Subject: [rust-dev] Overflow when benchmarking
+In-Reply-To: <CANb7cF55XKOymLZkNM-rcpKQC8DLT_Qs1j6Q9gZWO5Mn-M+W9A@mail.gmail.com>
+References: <CAM6of9xxKKwQ7ZQ=w43cK+eQzK3JBazPh1FNZR4H6LNdYxcPQw@mail.gmail.com>
+	<CANb7cF55XKOymLZkNM-rcpKQC8DLT_Qs1j6Q9gZWO5Mn-M+W9A@mail.gmail.com>
+Message-ID: <1779910.IQzEuUJAC1@tph-l13071>
+
+Shouldn't the compiler automatically put large arrays on the heap? I thought this was a common 
+thing to do beyond a certain memory size.
+
+On Thursday 27 November 2014 04:28:03 Steven Fackler wrote:
+
+
+The `nums` array is allocated on the stack and is 8 MB (assuming you're on a 64 bit platform).
+
+
+
+On Wed Nov 26 2014 at 8:23:08 PM Ben Wilson <benwilson512 at gmail.com[1]> wrote:
+
+
+Hey folks, I've started writing some rust code lately and run into weird behavior when benchmarking. 
+When running
+
+
+https://gist.github.com/benwilson512/56f84ffffd4625f11feb[2]
+
+#[bench]
+fn test_overflow(b: &mut Bencher) {
+  let nums = [0i, ..1000000];
+  b.iter(|| {
+    let mut x = 0i;
+    for i in range(0, nums.len()) {
+      x = nums[i];
+    }
+  });
+}
+
+
+ I get "task '<main>' has overflowed its stack" pretty much immediately when running cargo bench. 
+Ordinarily I'd expect to see that error when doing recursion, but I can't quite figure out why it's 
+showing up here. What am I missing?
+
+
+
+Thanks!
+
+
+- Ben
+_______________________________________________Rust-dev mailing list
+
+Rust-dev at mozilla.org[3]
+https://mail.mozilla.org/listinfo/rust-dev[4]
+
+
+
+
+--------
+[1] mailto:benwilson512 at gmail.com
+[2] https://gist.github.com/benwilson512/56f84ffffd4625f11feb
+[3] mailto:Rust-dev at mozilla.org
+[4] https://mail.mozilla.org/listinfo/rust-dev
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141127/67f20f15/attachment.html>
+
+From steve at steveklabnik.com  Thu Nov 27 08:58:49 2014
+From: steve at steveklabnik.com (Steve Klabnik)
+Date: Thu, 27 Nov 2014 11:58:49 -0500
+Subject: [rust-dev] Overflow when benchmarking
+In-Reply-To: <1779910.IQzEuUJAC1@tph-l13071>
+References: <CAM6of9xxKKwQ7ZQ=w43cK+eQzK3JBazPh1FNZR4H6LNdYxcPQw@mail.gmail.com>
+	<CANb7cF55XKOymLZkNM-rcpKQC8DLT_Qs1j6Q9gZWO5Mn-M+W9A@mail.gmail.com>
+	<1779910.IQzEuUJAC1@tph-l13071>
+Message-ID: <CABL+ZB6bm=NP2G3mYaO2gV7mZVWx-z+uxrLGaB8NLYM3g-3K=A@mail.gmail.com>
+
+Rust is not interested in putting anything automatically on the heap. :)
+
+From manishsmail at gmail.com  Thu Nov 27 19:40:17 2014
+From: manishsmail at gmail.com (Manish Goregaokar)
+Date: Fri, 28 Nov 2014 09:10:17 +0530
+Subject: [rust-dev] Overflow when benchmarking
+In-Reply-To: <1779910.IQzEuUJAC1@tph-l13071>
+References: <CAM6of9xxKKwQ7ZQ=w43cK+eQzK3JBazPh1FNZR4H6LNdYxcPQw@mail.gmail.com>
+	<CANb7cF55XKOymLZkNM-rcpKQC8DLT_Qs1j6Q9gZWO5Mn-M+W9A@mail.gmail.com>
+	<1779910.IQzEuUJAC1@tph-l13071>
+Message-ID: <CACpkpxmL0USGvwt3ShFJZhpEHZy47_MmUcc8UmwKW5MvOijqTA@mail.gmail.com>
+
+C++/C has a lot of "features" which seem tantalizing at first; but end up
+being against the point of a systems language.
+
+Putting large arrays on the heap (not sure if C++ does this, but it sounds
+like something C++ would do) is one -- there are plenty of cases where you
+explicitly want stack-based arrays in systems programming.
+
+Another is the alloca-like behavior of dynamically sized stack-based arrays
+(just learned about this recently).
+
+You always want to be clear of what the compiler is doing. Such
+optimizations can easily be implemented as a library :)
+
+-Manish Goregaokar
+
+On Thu, Nov 27, 2014 at 10:20 PM, Diggory Hardy <lists at dhardy.name> wrote:
+
+>  Shouldn't the compiler automatically put large arrays on the heap? I
+> thought this was a common thing to do beyond a certain memory size.
+>
+>
+> On Thursday 27 November 2014 04:28:03 Steven Fackler wrote:
+>
+> The `nums` array is allocated on the stack and is 8 MB (assuming you're on
+> a 64 bit platform).
+>
+> On Wed Nov 26 2014 at 8:23:08 PM Ben Wilson <benwilson512 at gmail.com>
+> wrote:
+>
+> Hey folks, I've started writing some rust code lately and run into weird
+> behavior when benchmarking. When running
+>
+>
+> https://gist.github.com/benwilson512/56f84ffffd4625f11feb
+>
+> #[bench]
+>
+> fn test_overflow(b: &mut Bencher) {
+>
+>   let nums = [0i, ..1000000];
+>
+>   b.iter(|| {
+>
+>     let mut x = 0i;
+>
+>     for i in range(0, nums.len()) {
+>
+>       x = nums[i];
+>
+>     }
+>
+>   });
+>
+> }
+>
+>
+>  I get "task '<main>' has overflowed its stack" pretty much immediately when running cargo bench. Ordinarily I'd expect to see that error when doing recursion, but I can't quite figure out why it's showing up here. What am I missing?
+>
+>
+> Thanks!
+>
+>
+> - Ben
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141128/8cfd34ab/attachment.html>
+
+From robertknight at gmail.com  Fri Nov 28 04:50:13 2014
+From: robertknight at gmail.com (Robert Knight)
+Date: Fri, 28 Nov 2014 12:50:13 +0000
+Subject: [rust-dev] Recommendations for a GUI toolkit for rust
+In-Reply-To: <CANK7tAGt=EhYUO-mnUGtxObkhb0gn4V1dOwy6XdNHB0Gk2P2YA@mail.gmail.com>
+References: <CA+c5VvNtWoLAf__g01J7G22h8gPsBLp=oF91=kdtECxAJZGnPg@mail.gmail.com>
+	<CANK7tAGt=EhYUO-mnUGtxObkhb0gn4V1dOwy6XdNHB0Gk2P2YA@mail.gmail.com>
+Message-ID: <CAJGrnh1kAZohV7yMvAjoPHZidi76_yVFKp++NWjSU8JB5gyJNg@mail.gmail.com>
+
+> However, my primary concern is that the toolkit I use would stop active
+development - I don't want to have to port everything to another toolkit
+later on.
+> So, if any project shows promise of continuing, please suggest it to me.
+
+Both Qt and GTK+ have been around for a long time and are actively used in
+a lot of software. GTK+ has had lulls in its development in the past and
+Qt's development
+focus is dependent on who the majority of Digia's customers are, so neither
+is risk free but both are probably reasonably safe.
+
+Another alternative would be to use a browser as the UI and implement the
+bulk of the logic in Rust.
+
+On 25 November 2014 at 17:53, Gaetan <gaetan at xeberon.net> wrote:
+
+> To my opinion qt is far better, more portable, more easy to work with, but
+> binding qt on rust is quite a challenge.
+>
+> I think binding gtk3 is much easier, however I don't think there is any
+> project ready for production yet.
+>
+>
+> Le mardi 25 novembre 2014, Prasoon Shukla <prasoon92.iitr at gmail.com> a
+> ?crit :
+>
+> Hey all
+>>
+>> I have been thinking of making a small text editor, with emacs-like
+>> fundamentals, as a way learning rust this winter break. I need a GUI
+>> toolkit for this, of course. So, I searched for it and found this page:
+>> https://github.com/kud1ing/awesome-rust
+>>
+>> This page gives a few choices to me and since everything is alpha right
+>> now (both the language and the toolkits), I don't know which one to choose.
+>> As a reference, I have used GTK+ before and so, I could probably use it
+>> again <https://github.com/JeremyLetang/rgtk>. However, my primary
+>> concern is that the toolkit I use would stop active development - I don't
+>> want to have to port everything to another toolkit later on. So, if any
+>> project shows promise of continuing, please suggest it to me.
+>>
+>> Thank you.
+>> ?
+>>
+>
+>
+> --
+> -----
+> Gaetan
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141128/07f12abc/attachment.html>
+
+From matthieu.monrocq at gmail.com  Fri Nov 28 09:18:29 2014
+From: matthieu.monrocq at gmail.com (Matthieu Monrocq)
+Date: Fri, 28 Nov 2014 18:18:29 +0100
+Subject: [rust-dev] Overflow when benchmarking
+In-Reply-To: <CACpkpxmL0USGvwt3ShFJZhpEHZy47_MmUcc8UmwKW5MvOijqTA@mail.gmail.com>
+References: <CAM6of9xxKKwQ7ZQ=w43cK+eQzK3JBazPh1FNZR4H6LNdYxcPQw@mail.gmail.com>
+	<CANb7cF55XKOymLZkNM-rcpKQC8DLT_Qs1j6Q9gZWO5Mn-M+W9A@mail.gmail.com>
+	<1779910.IQzEuUJAC1@tph-l13071>
+	<CACpkpxmL0USGvwt3ShFJZhpEHZy47_MmUcc8UmwKW5MvOijqTA@mail.gmail.com>
+Message-ID: <CAKE6RfhKfQX4v6-VszTuycYsvJYrXO3=Q5Y0czZLYSsP05CHdw@mail.gmail.com>
+
+Hello,
+
+To be clear: there is no such thing as stack/heap in C and C++, there are
+automatic variable and dynamically allocated variables, the former having
+their lifetime known "statically" and the latter not...
+
+Whether a particular compiler chooses to use the stack or heap for either
+is its free choice, as long as it maintains the "as-if" rule.
+
+In this case, I have never heard of automatically moving an automatic
+variable to the heap, however LLVM routinely uses the stack for dynamically
+allocated variables if it can prove their lifetime (probably restricted to
+fixed-size variables below a certain threshold).
+
+Regarding "Variable Length Arrays" (C99), they are not valid in C++, and
+yes they are traditionally implemented using alloc, for better or worse.
+
+-- Matthieu
+
+On Fri, Nov 28, 2014 at 4:40 AM, Manish Goregaokar <manishsmail at gmail.com>
+wrote:
+
+> C++/C has a lot of "features" which seem tantalizing at first; but end up
+> being against the point of a systems language.
+>
+> Putting large arrays on the heap (not sure if C++ does this, but it sounds
+> like something C++ would do) is one -- there are plenty of cases where you
+> explicitly want stack-based arrays in systems programming.
+>
+> Another is the alloca-like behavior of dynamically sized stack-based
+> arrays (just learned about this recently).
+>
+> You always want to be clear of what the compiler is doing. Such
+> optimizations can easily be implemented as a library :)
+>
+> -Manish Goregaokar
+>
+> On Thu, Nov 27, 2014 at 10:20 PM, Diggory Hardy <lists at dhardy.name> wrote:
+>
+>>  Shouldn't the compiler automatically put large arrays on the heap? I
+>> thought this was a common thing to do beyond a certain memory size.
+>>
+>>
+>> On Thursday 27 November 2014 04:28:03 Steven Fackler wrote:
+>>
+>> The `nums` array is allocated on the stack and is 8 MB (assuming you're
+>> on a 64 bit platform).
+>>
+>> On Wed Nov 26 2014 at 8:23:08 PM Ben Wilson <benwilson512 at gmail.com>
+>> wrote:
+>>
+>> Hey folks, I've started writing some rust code lately and run into weird
+>> behavior when benchmarking. When running
+>>
+>>
+>> https://gist.github.com/benwilson512/56f84ffffd4625f11feb
+>>
+>> #[bench]
+>>
+>> fn test_overflow(b: &mut Bencher) {
+>>
+>>   let nums = [0i, ..1000000];
+>>
+>>   b.iter(|| {
+>>
+>>     let mut x = 0i;
+>>
+>>     for i in range(0, nums.len()) {
+>>
+>>       x = nums[i];
+>>
+>>     }
+>>
+>>   });
+>>
+>> }
+>>
+>>
+>>  I get "task '<main>' has overflowed its stack" pretty much immediately when running cargo bench. Ordinarily I'd expect to see that error when doing recursion, but I can't quite figure out why it's showing up here. What am I missing?
+>>
+>>
+>> Thanks!
+>>
+>>
+>> - Ben
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141128/725bc3a4/attachment.html>
+
+From danielmicay at gmail.com  Fri Nov 28 09:32:09 2014
+From: danielmicay at gmail.com (Daniel Micay)
+Date: Fri, 28 Nov 2014 12:32:09 -0500
+Subject: [rust-dev] Overflow when benchmarking
+In-Reply-To: <CAKE6RfhKfQX4v6-VszTuycYsvJYrXO3=Q5Y0czZLYSsP05CHdw@mail.gmail.com>
+References: <CAM6of9xxKKwQ7ZQ=w43cK+eQzK3JBazPh1FNZR4H6LNdYxcPQw@mail.gmail.com>	<CANb7cF55XKOymLZkNM-rcpKQC8DLT_Qs1j6Q9gZWO5Mn-M+W9A@mail.gmail.com>	<1779910.IQzEuUJAC1@tph-l13071>	<CACpkpxmL0USGvwt3ShFJZhpEHZy47_MmUcc8UmwKW5MvOijqTA@mail.gmail.com>
+	<CAKE6RfhKfQX4v6-VszTuycYsvJYrXO3=Q5Y0czZLYSsP05CHdw@mail.gmail.com>
+Message-ID: <5478B199.1@gmail.com>
+
+On 28/11/14 12:18 PM, Matthieu Monrocq wrote:
+> 
+> In this case, I have never heard of automatically moving an automatic
+> variable to the heap, however LLVM routinely uses the stack for
+> dynamically allocated variables if it can prove their lifetime (probably
+> restricted to fixed-size variables below a certain threshold).
+
+LLVM doesn't have escape analysis for dynamic allocations. It only has
+primitive dead store elimination for malloc/free. It could be taught to
+do escape analysis, but it would probably need to be very conservative
+and only do it for <= pointer size allocations by default.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141128/6d9c83b9/attachment.sig>
+
+From prasoon92.iitr at gmail.com  Tue Nov 25 20:41:59 2014
+From: prasoon92.iitr at gmail.com (Prasoon Shukla)
+Date: Wed, 26 Nov 2014 10:11:59 +0530
+Subject: [rust-dev] Recommendations for a GUI toolkit for rust
+In-Reply-To: <CANK7tAGt=EhYUO-mnUGtxObkhb0gn4V1dOwy6XdNHB0Gk2P2YA@mail.gmail.com>
+References: <CA+c5VvNtWoLAf__g01J7G22h8gPsBLp=oF91=kdtECxAJZGnPg@mail.gmail.com>
+	<CANK7tAGt=EhYUO-mnUGtxObkhb0gn4V1dOwy6XdNHB0Gk2P2YA@mail.gmail.com>
+Message-ID: <CA+c5VvMgUwJLffdVgYMfSdX17T_DGPEkETbS6S5eHy49LWoZdA@mail.gmail.com>
+
+Oh well. I ended up using conrod (https://github.com/PistonDevelopers/conrod)
+for this, primarily because I need access to the underlying data model for
+the text.
+?
+
+On Tue, Nov 25, 2014 at 11:23 PM, Gaetan <gaetan at xeberon.net> wrote:
+
+> To my opinion qt is far better, more portable, more easy to work with, but
+> binding qt on rust is quite a challenge.
+>
+> I think binding gtk3 is much easier, however I don't think there is any
+> project ready for production yet.
+>
+>
+> Le mardi 25 novembre 2014, Prasoon Shukla <prasoon92.iitr at gmail.com> a
+> ?crit :
+>
+> Hey all
+>>
+>> I have been thinking of making a small text editor, with emacs-like
+>> fundamentals, as a way learning rust this winter break. I need a GUI
+>> toolkit for this, of course. So, I searched for it and found this page:
+>> https://github.com/kud1ing/awesome-rust
+>>
+>> This page gives a few choices to me and since everything is alpha right
+>> now (both the language and the toolkits), I don't know which one to choose.
+>> As a reference, I have used GTK+ before and so, I could probably use it
+>> again <https://github.com/JeremyLetang/rgtk>. However, my primary
+>> concern is that the toolkit I use would stop active development - I don't
+>> want to have to port everything to another toolkit later on. So, if any
+>> project shows promise of continuing, please suggest it to me.
+>>
+>> Thank you.
+>> ?
+>>
+>
+>
+> --
+> -----
+> Gaetan
+>
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141126/c9a29d12/attachment.html>
+
+From timonv at gmail.com  Wed Nov 26 08:01:48 2014
+From: timonv at gmail.com (Timon Vonk)
+Date: Wed, 26 Nov 2014 17:01:48 +0100
+Subject: [rust-dev] First Amsterdam Rust meetup early 2015!
+Message-ID: <1417017519-sup-5218@MacBook-Pro.local>
+
+Hi!
+
+Early 2015 we're organizing the first Rust meetup in Amsterdam. We're
+still looking for sponsors, speakers and in due time, I'm sure help with
+organizing will be appreciated.
+
+If you're in the neighborhood, we'd love it if you'd drop by! We'll be
+sure to have free drinks, pizza and (depending on you guys) some amazing
+speakers!
+
+For more details and to follow the announcements, see:
+http://www.meetup.com/Rust-Amsterdam
+
+Cheers,
+Timon
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 535 bytes
+Desc: not available
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141126/2a7ca40a/attachment.sig>
+

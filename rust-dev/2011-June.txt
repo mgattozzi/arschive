@@ -1,0 +1,3818 @@
+From graydon at mozilla.com  Thu Jun  2 14:02:34 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 02 Jun 2011 14:02:34 -0700
+Subject: [rust-dev] alias analysis
+Message-ID: <4DE7FA6A.2070002@mozilla.com>
+
+This email is primarily for Marijn, as he's adopting the "alias analysis 
+pass" task (https://github.com/graydon/rust/issues/408) from the 
+release-milestone list for now, but I figured I'd write to the list so 
+everyone else involved can see what we're thinking (and offer comments 
+or suggestions) too.
+
+The issue here is that Rust's current alias (&) slots permit 
+circumvention of ... most other rules in the system (type safety, memory 
+safety, type-state safety). Even outside any proposed "unsafe" sub-dialect.
+
+This email is not fishing for recommendation of "how to get rid of 
+alias" (though we may rename it "reference" to be more C++-like); rather 
+it's a discussion of "the rules we will enforce on aliases to make them 
+safe". The entire point of & is to be "a safe version of & in C++", and 
+it's not quite safe enough yet. Needs a bit more safety. Unfortunately 
+with pointers, well, you know how it is: even "a little bit unsafe" 
+means "can saw a hole in the universe". So & is presently.
+
+The task of an alias-analysis pass is to reject programs it can't prove 
+to be safely using &. It might additionally involve injecting 
+safety-ensuring code of sorts I'll discuss below.
+
+First, how things can go wrong: if an alias points into a mutable memory 
+structure (or substructure of a mutable) that is simultaneously 
+reachable via any other path (alias or otherwise), then code that 
+mutates the one may invalidate the other. Invalidation may mean:
+
+   - The alias may point to memory that assumes a given typestate
+     predicate, which may no longer hold (by the mutation).
+
+   - This includes the 'init' predicate; in other words the alias
+     may point to memory that was dropped, causing a UMR.
+
+   - The alias may point to tag-variant X which has been changed to
+     tag-variant Y underfoot, causing data corruption or a UMR.
+
+There may be other cases, but these at least spring to mind. We have to 
+prohibit all of these. Some of us have discussed this in the past (this 
+hazard has been evident from the beginning) and have been assuming an 
+analysis pass should be able to reject (conservatively) such cases.
+
+The strategy we discussed was to attempt to prove pairwise disjointness 
+of all non-identical lvals (named points-of-reference through which a 
+read or write may be made). So this means building a list of N*N 
+pairings for the N lvals in a function, and considering each pair 
+independently. With something like the following "main" rules:
+
+   - A pair of *identical* lvals (resolve to the same def_id) are ok.
+   - A pair of lvals that point to fully disjoint types (neither type is
+     a substructure of the other) are ok.
+   - A pair of lvals that point to immutable types are ok.
+   - A pair of lvals where neither is rooted in an alias is ok.
+   - A pair of lvals where either or both are incoming arguments to a
+     function are ok.
+
+The first few of these are obvious; the last point is the tricky one and 
+requires some explanation (as well as support machinery). Aliases are 
+only formed at function-call sites, so there is a sense in which the 
+incoming aliases to a function are the "induction hypothesis" for all 
+subsequent judgments in the body of the function: things that we 
+*assume* hold on the aliases we get, and that we must *prove* to hold 
+over the aliases we form. We thought of four possible rule-sets 
+governing the alias formation:
+
+  1. We permit a caller to form or pass aliases that point into
+     other passed arguments, and rely on the first 4 rules in the callee
+     to check all actions with those aliases (as well as formation of
+     new ones) are safe.
+
+  2. We prohibit callers forming or passing an alias that may point
+     into another passed argument, making the 5th rule hold in the
+     callee and rejecting programs that form maybe-overlapping alias
+     arguments.
+
+  3. We permit ruels #1 and #2 but differentiate them by something
+     like the C99 'restrict' keyword. The 5th "main" rule works for
+     restricted aliases but not unrestricted aliases; the compiler
+     must prove them disjoint using only the first four rules.
+     Restricted-ness becomes a part of the type signature so the caller
+     knows what it has to prove as well.
+
+  4. We permit cases #1 and #2 but provide a "distinguish X" operation
+     that *dynamically* ensures that X (an alias) doesn't point into
+     any of the other lvals it's possibly non-disjoint from in the
+     current scope (under the first four "main" rules). This can either
+     be automatically injected or manually written by users.
+
+We considered all four options governing formation, and tentatively 
+settled on the 2nd, IIRC, but the other 3 options remain possible here 
+as well. In any case we should build one and see how usable or 
+cognitively burdensome it is.
+
+-Graydon
+
+From noelgrandin at gmail.com  Fri Jun  3 05:16:23 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Fri, 03 Jun 2011 14:16:23 +0200
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DE7FA6A.2070002@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com>
+Message-ID: <4DE8D097.30903@gmail.com>
+
+Hi
+
+Maybe I came late to the discussion, and I've missed this bit, but has it been discussed already that the functional
+language solution is off the table?
+
+By functional language solution, I mean that there is no reference operator, and all arguments are passed "by copy"
+semantically.
+The compiler is then free to substitute using pointers instead of copying for a data structure whenever it can prove
+that the data-structure is not modified by the callee.
+In cases where the caller is doing
+ x := doSomething(x, y);
+the compiler is free to re-write the code to:
+ doSomething(&x, y)
+if it can prove a lack of aliasing.
+
+This passes the performance burden from the programmer to the compiler, but allows the compiler to grow more
+intelligence incrementally.
+
+Regards, Noel.
+
+Graydon Hoare wrote:
+> This email is primarily for Marijn, as he's adopting the "alias analysis pass" task
+> (https://github.com/graydon/rust/issues/408) from the release-milestone list for now, but I figured I'd write to the
+> list so everyone else involved can see what we're thinking (and offer comments or suggestions) too.
+>
+> The issue here is that Rust's current alias (&) slots permit circumvention of ... most other rules in the system (type
+> safety, memory safety, type-state safety). Even outside any proposed "unsafe" sub-dialect.
+>
+> This email is not fishing for recommendation of "how to get rid of alias" (though we may rename it "reference" to be
+> more C++-like); rather it's a discussion of "the rules we will enforce on aliases to make them safe". The entire point
+> of & is to be "a safe version of & in C++", and it's not quite safe enough yet. Needs a bit more safety. Unfortunately
+> with pointers, well, you know how it is: even "a little bit unsafe" means "can saw a hole in the universe". So & is
+> presently.
+>
+> The task of an alias-analysis pass is to reject programs it can't prove to be safely using &. It might additionally
+> involve injecting safety-ensuring code of sorts I'll discuss below.
+>
+> First, how things can go wrong: if an alias points into a mutable memory structure (or substructure of a mutable) that
+> is simultaneously reachable via any other path (alias or otherwise), then code that mutates the one may invalidate the
+> other. Invalidation may mean:
+>
+>   - The alias may point to memory that assumes a given typestate
+>     predicate, which may no longer hold (by the mutation).
+>
+>   - This includes the 'init' predicate; in other words the alias
+>     may point to memory that was dropped, causing a UMR.
+>
+>   - The alias may point to tag-variant X which has been changed to
+>     tag-variant Y underfoot, causing data corruption or a UMR.
+>
+> There may be other cases, but these at least spring to mind. We have to prohibit all of these. Some of us have
+> discussed this in the past (this hazard has been evident from the beginning) and have been assuming an analysis pass
+> should be able to reject (conservatively) such cases.
+>
+> The strategy we discussed was to attempt to prove pairwise disjointness of all non-identical lvals (named
+> points-of-reference through which a read or write may be made). So this means building a list of N*N pairings for the
+> N lvals in a function, and considering each pair independently. With something like the following "main" rules:
+>
+>   - A pair of *identical* lvals (resolve to the same def_id) are ok.
+>   - A pair of lvals that point to fully disjoint types (neither type is
+>     a substructure of the other) are ok.
+>   - A pair of lvals that point to immutable types are ok.
+>   - A pair of lvals where neither is rooted in an alias is ok.
+>   - A pair of lvals where either or both are incoming arguments to a
+>     function are ok.
+>
+> The first few of these are obvious; the last point is the tricky one and requires some explanation (as well as support
+> machinery). Aliases are only formed at function-call sites, so there is a sense in which the incoming aliases to a
+> function are the "induction hypothesis" for all subsequent judgments in the body of the function: things that we
+> *assume* hold on the aliases we get, and that we must *prove* to hold over the aliases we form. We thought of four
+> possible rule-sets governing the alias formation:
+>
+>  1. We permit a caller to form or pass aliases that point into
+>     other passed arguments, and rely on the first 4 rules in the callee
+>     to check all actions with those aliases (as well as formation of
+>     new ones) are safe.
+>
+>  2. We prohibit callers forming or passing an alias that may point
+>     into another passed argument, making the 5th rule hold in the
+>     callee and rejecting programs that form maybe-overlapping alias
+>     arguments.
+>
+>  3. We permit ruels #1 and #2 but differentiate them by something
+>     like the C99 'restrict' keyword. The 5th "main" rule works for
+>     restricted aliases but not unrestricted aliases; the compiler
+>     must prove them disjoint using only the first four rules.
+>     Restricted-ness becomes a part of the type signature so the caller
+>     knows what it has to prove as well.
+>
+>  4. We permit cases #1 and #2 but provide a "distinguish X" operation
+>     that *dynamically* ensures that X (an alias) doesn't point into
+>     any of the other lvals it's possibly non-disjoint from in the
+>     current scope (under the first four "main" rules). This can either
+>     be automatically injected or manually written by users.
+>
+> We considered all four options governing formation, and tentatively settled on the 2nd, IIRC, but the other 3 options
+> remain possible here as well. In any case we should build one and see how usable or cognitively burdensome it is.
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From marijnh at gmail.com  Fri Jun  3 07:29:17 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 3 Jun 2011 16:29:17 +0200
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DE7FA6A.2070002@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com>
+Message-ID: <BANLkTimOa=Z7P2JBhZ5CrZb=BS-TjVEWsw@mail.gmail.com>
+
+[This is just a rambing e-mail outlining some problems I'm running
+into. Though I am stressing these problems to make sure they are not
+glossed over, I'm *not* suggesting we give up aliases or anything like
+that.]
+
+The issue I'm running into is that obj types*, function types, and
+type parameters are 'opaque' and, as such, can contain everything.
+This means that any boxed value returned from a function that took a
+stateful obj, parameterized type, or function type (or something that
+contains one!) must be suspected of being reachable from that object.
+
+This means that very typical code, for example stuff passing a context
+around where the context contains a hash table or other state obj has
+a problem. If we go with function parameter aliasing solution #2 (not
+allowed to pass aliasing things) then any function in such a
+context-passing module that takes both a context and an alias, can not
+be called on any boxed (or box-containing) value that was returned
+from another context-taking function. This seems like it'll invalidate
+a serious percentage of the code in the current compiler, with no
+obvious way to 'fix' it.
+
+Going with solution #1 (you may pass aliasing aliases to functions)
+instead, we'd be in a situation where an obj or parameterized argument
+may alias with every alias passed in, which means that after passing
+said obj or parameterized argument to any function you can no longer
+be sure your alias is still valid. This is worse than the situation
+described above.
+
+A 'distinguish' operation would provide a way out, but if I understand
+what you're proposing correctly it'll traverse the values at run-time.
+Proving two big (maybe even cyclic) data structures don't share
+structure is an arbitrarily expensive operation. Sprinkling these in
+your code will probably cause a noticeable slowdown. On top of that,
+while a run-time failure is better than memory corruption, it's not
+*much* better ? passing in an alias is something that is easy to do
+accidentally, in a way that only occurs in corner cases, meaning we'd
+be putting hard-to-test land mines in our code. (For this reason,
+inserting them implicitly is probably a really bad idea.)
+
+So yeah, those are the issues I see. Discuss.
+
+(Seems we're once again entering uncharted territory. As with the
+effects system, that's always dangerous.)
+
+*) Here I mean types defined like 'type foo = obj { ... }' rather than
+'obj foo() { ... }'. I saw someone claiming the former syntax was
+invalid in the IRC logs this week (it's not), so maybe the distinction
+is not widely understood.
+
+Best,
+Marijn
+
+From graydon at mozilla.com  Fri Jun  3 07:36:34 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 03 Jun 2011 07:36:34 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DE8D097.30903@gmail.com>
+References: <4DE7FA6A.2070002@mozilla.com> <4DE8D097.30903@gmail.com>
+Message-ID: <4DE8F172.1080208@mozilla.com>
+
+On 03/06/2011 5:16 AM, Noel Grandin wrote:
+> Hi
+>
+> Maybe I came late to the discussion, and I've missed this bit, but has it been discussed already that the functional
+> language solution is off the table?
+>
+> By functional language solution, I mean that there is no reference operator, and all arguments are passed "by copy"
+> semantically.
+
+Yeah. That's mostly off the table. Sorry. We started there years ago but 
+have long since moved to accept the requirement of being able to 
+differentiate shared-reference and copy as concepts.
+
+> This passes the performance burden from the programmer to the compiler, but allows the compiler to grow more
+> intelligence incrementally.
+
+On a more general note, it is an explicit anti-goal to have performance 
+depend heavily on a clever compiler. Performance should (within some 
+moderate set of "totally obvious, possibly language-mandated" 
+optimizations) be broadly predictable whether or not the compiler does 
+something clever.
+
+-Graydon
+
+
+From noelgrandin at gmail.com  Fri Jun  3 07:45:45 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Fri, 03 Jun 2011 16:45:45 +0200
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DE8F172.1080208@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com> <4DE8D097.30903@gmail.com>
+	<4DE8F172.1080208@mozilla.com>
+Message-ID: <4DE8F399.7090800@gmail.com>
+
+
+OK. Fair enough.
+
+Just thinking out loud here, but I've seen some languages experimenting with tracking ownership in the type system.
+
+Is it possible to prevent aliasing by requiring that all pointed-to objects have an owner, and you can only modify an
+object by following it's ownership chain?
+
+Googling for "ownership types aliasing" returns some interesting papers, but the research looks far from settled.
+
+-- Noel Grandin
+
+Graydon Hoare wrote:
+> On 03/06/2011 5:16 AM, Noel Grandin wrote:
+>> Hi
+>>
+>> Maybe I came late to the discussion, and I've missed this bit, but has it been discussed already that the functional
+>> language solution is off the table?
+>>
+>> By functional language solution, I mean that there is no reference operator, and all arguments are passed "by copy"
+>> semantically.
+>
+> Yeah. That's mostly off the table. Sorry. We started there years ago but have long since moved to accept the
+> requirement of being able to differentiate shared-reference and copy as concepts.
+>
+>> This passes the performance burden from the programmer to the compiler, but allows the compiler to grow more
+>> intelligence incrementally.
+>
+> On a more general note, it is an explicit anti-goal to have performance depend heavily on a clever compiler.
+> Performance should (within some moderate set of "totally obvious, possibly language-mandated" optimizations) be
+> broadly predictable whether or not the compiler does something clever.
+>
+> -Graydon
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From graydon at mozilla.com  Fri Jun  3 07:48:11 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 03 Jun 2011 07:48:11 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DE8F399.7090800@gmail.com>
+References: <4DE7FA6A.2070002@mozilla.com> <4DE8D097.30903@gmail.com>
+	<4DE8F172.1080208@mozilla.com> <4DE8F399.7090800@gmail.com>
+Message-ID: <4DE8F42B.2040103@mozilla.com>
+
+On 03/06/2011 7:45 AM, Noel Grandin wrote:
+>
+> OK. Fair enough.
+>
+> Just thinking out loud here, but I've seen some languages experimenting with tracking ownership in the type system.
+>
+> Is it possible to prevent aliasing by requiring that all pointed-to objects have an owner, and you can only modify an
+> object by following it's ownership chain?
+
+That is very possible, and part of what I'm in the process of suggesting 
+in the next email (replying to Marijn :). Given that a uniquely-owning 
+box, and a kinding of the type system into uniquely-owned and 
+ownership-shared, is one of the features on the near-term list.
+
+-Graydon
+
+From graydon at mozilla.com  Fri Jun  3 08:40:01 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 03 Jun 2011 08:40:01 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <BANLkTimOa=Z7P2JBhZ5CrZb=BS-TjVEWsw@mail.gmail.com>
+References: <4DE7FA6A.2070002@mozilla.com>
+	<BANLkTimOa=Z7P2JBhZ5CrZb=BS-TjVEWsw@mail.gmail.com>
+Message-ID: <4DE90051.90306@mozilla.com>
+
+On 03/06/2011 7:29 AM, Marijn Haverbeke wrote:
+> [This is just a rambing e-mail outlining some problems I'm running
+> into. Though I am stressing these problems to make sure they are not
+> glossed over, I'm *not* suggesting we give up aliases or anything like
+> that.]
+
+Much appreciated; if something's to be shot down, earlier is better! 
+It's already embarrassingly late in the game to be working out these 
+rules in full. Sadly.
+
+> The issue I'm running into is that obj types*, function types, and
+> type parameters are 'opaque' and, as such, can contain everything.
+
+Ouch. This is quite a wrinkle.
+
+> This means that any boxed value returned from a function that took a
+> stateful obj, parameterized type, or function type (or something that
+> contains one!) must be suspected of being reachable from that object.
+
+Suspected of, yes. Let's work on eliminating the suspicion. Or limiting 
+its severity.
+
+> If we go with function parameter aliasing solution #2 (not
+> allowed to pass aliasing things) then any function in such a
+> context-passing module that takes both a context and an alias, can not
+> be called on any boxed (or box-containing) value that was returned
+> from another context-taking function. This seems like it'll invalidate
+> a serious percentage of the code in the current compiler, with no
+> obvious way to 'fix' it.
+
+Possibly. I mean, your analysis is correct about ways it can go wrong, 
+but I'm not sure it's always going to be a pervasive problem, or 
+unfixable. I'd like to continue with solution #2 (let's call this the 
+"strong induction hypothesis" solution) for a moment and consider ways 
+of changing the code or helping it reveal its safety:
+
+   - When we have down-fn-args (in the form of lambda blocks) we will
+     be able to turn many-or-most obj field accessor methods into
+     iter-like constructs, yes? Like, what we do now as:
+
+         obj foo { fn get_bar() -> bar; }
+
+     may well turn into:
+
+         obj foo { fn with_bar(fn(&bar) &f); }
+
+     such that clients stop writing:
+
+         my_foo.get_bar().do_a_thing();
+
+     and start writing:
+
+         my_foo.with_bar() {| b | b.do_a_thing(); }
+
+     which carries the pleasant performance allowance of letting the
+     obj keep its bar member either allocated inline or held as a
+     unique box (which can only alias with another alias, not a
+     shared box). Consider if this is very common whether we want
+     an attribute-like (getter/setter pair) syntax for objs.
+
+   - Along those lines: consider what happens when we have unique boxes
+     in general, and whether returning "shared box" from a function
+     will be quite so common an operation. If the function's job is to
+     *construct* values of type foo, then even if boxed it makes much
+     more sense to return ~foo than @foo since, at the time of function
+     return, the out-pointer is (probably) the sole reference anyways.
+
+   - Further into the unique-ownership line of thinking: when there's a
+     kind system up and running (which you may find a necessary component
+     of formulating this analysis properly -- they're closely related!)
+     it might be possible to constrain the types of an opaque to
+     be "unknown but tree-shaped" (not containing shared pointers).
+     We have discussed always considering obj and fn types as opaque
+     to the kind system too (and assuming the worst about them) but
+     perhaps this is too loose. What would happen to the issue if we
+     could say "this obj type only has tree-kind memory inside it"?
+     Or further, given the depth of the hazard here: what if we
+     *required* that for all obj and fn types? Would shared boxes lose
+     all utility? Would too many idioms stop working?
+
+> Going with solution #1 (you may pass aliasing aliases to functions)
+> instead, we'd be in a situation where an obj or parameterized argument
+> may alias with every alias passed in, which means that after passing
+> said obj or parameterized argument to any function you can no longer
+> be sure your alias is still valid. This is worse than the situation
+> described above.
+
+This is true, and a reason why I still prefer #2. Though again, it may 
+be mitigated by some of the "different idioms, focused on uniqueness" 
+stuff I discuss above. Still, I feel like the weaker induction 
+hypothesis will make too much stuff fall apart; gut feeling but the best 
+I have to go on. I'd like to try to get #2 to hold together.
+
+> A 'distinguish' operation would provide a way out, but if I understand
+> what you're proposing correctly it'll traverse the values at run-time.
+> Proving two big (maybe even cyclic) data structures don't share
+> structure is an arbitrarily expensive operation.
+
+Agreed, this is a ... burdensome operation. Various versions might work 
+but they all feel like fixing the wrong problem. And adding cognitive 
+burden. And runtime landmines, as you say.
+
+> (Seems we're once again entering uncharted territory. As with the
+> effects system, that's always dangerous.)
+
+True, and fair point. It's not *wholly* uncharted -- C and C++ both have 
+a variety of alias-analysis-driven *optimizations* -- but the new part 
+is making one of those analysis passes airtight enough to consider as 
+safety guarantees.
+
+> *) Here I mean types defined like 'type foo = obj { ... }' rather than
+> 'obj foo() { ... }'. I saw someone claiming the former syntax was
+> invalid in the IRC logs this week (it's not), so maybe the distinction
+> is not widely understood.
+
+The latter implies an in-place definition of the former as well. But 
+yes, both are valid.
+
+-Graydon
+
+From pwalton at mozilla.com  Fri Jun  3 13:51:53 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 03 Jun 2011 13:51:53 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DE7FA6A.2070002@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com>
+Message-ID: <4DE94969.5010600@mozilla.com>
+
+So I spent this morning thinking about this problem, and I think I may 
+have a tentative solution.
+
+First, to motivate the problem, here's an example that crashes, assuming 
+(a) that hashmaps have a "get" function that hands out an alias to a 
+callback and (b) that strings are unique (notated by ~):
+
+
+fn f(hashmap[~str,~str] x) {
+     fn g(hashmap[~str,~str] x, &str s) {
+         x.remove("foo");
+         log_err s;	// crash; s is no longer live
+     }
+     x.insert("foo", "bar");
+     x.get("foo", bind g(x, _));
+}
+
+
+Now the rules that Graydon mentioned would forbid the implementation of 
+"get" in such a way as to give rise to this problem, because the closure 
+provided to "get" would be considered to possibly alias the string "s" 
+and calling the function "g" would therefore be illegal. But this is 
+exactly the kind of function we *want* to be able to write. And, as 
+Marijn pointed out, we are already violating these rules in rustc in 
+many places.
+
+I was looking at the Cyclone literature for possible solutions and 
+stumbled upon these insights:
+
+(1) Handing out aliases to local variables and function parameters 
+(directly, not substructures thereof) is always safe. The calling 
+function is the only one that can possibly provide access its own 
+locals, and it's suspended for the duration of the call.
+
+(2) Unique pointers inside data structures can be, in effect, promoted 
+to local variables by swapping them with a local. The resulting local 
+variable can then be handed off as an alias safely per point (1).
+
+These two points provide a possible framework for a solution. The basic 
+proposal is that aliases are only allowed for local variables and 
+function parameters.
+
+Under this regime, a hash map using unique pointers can implement "get" 
+safely as follows:
+
+(1) Look up the key and determine the index of the bucket containing the 
+value.
+
+(2) Swap the value in that bucket temporarily into a local.
+
+(3) Call the closure to receive the value, passing it as an alias. This 
+is allowed because the value is a local.
+
+(4) Swap the value local into the bucket again.
+
+Since the value is in effect stored on the side (in the "get" function's 
+stack frame), the crash in the first example doesn't occur.
+
+Now these rules are probably overly restrictive, but I think we can 
+relax them some. To give a few examples:
+
+(1) Rvalue expressions are essentially local temporaries, so we should 
+permit the results of rvalue expressions to be passed as aliases.
+
+(2) We can probably permit *fully interior* chains to be passed as 
+aliases as well, except for vector elements. I can't think of any 
+situation in this would be unsafe, but I'm less sure about this one.
+
+Thoughts?
+
+Patrick
+
+From graydon at mozilla.com  Fri Jun  3 14:07:11 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 03 Jun 2011 14:07:11 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DE94969.5010600@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com> <4DE94969.5010600@mozilla.com>
+Message-ID: <4DE94CFF.2080301@mozilla.com>
+
+On 11-06-03 01:51 PM, Patrick Walton wrote:
+
+> Thoughts?
+
+I like the line of reasoning; let me try phrasing in a slightly more 
+terse/pithy fashion:
+
+   "Alias-formation must preserve unique ownership of the referent"
+
+IOW an alias is assumed to be a form of unique access to its immediate 
+referent (handed off from caller to callee temporarily during a function 
+call) and you cannot form aliases to things you reached through a shared 
+pointer edge. That referent can contain shared edges out into the heap, 
+but the alias *itself* is "a stack-disciplined unique pointer" to its 
+immediate referent.
+
+Is this sufficient? You can alias a substructure only if you reach it 
+through unique ownership lvals (either interior or a unique pointer).
+
+-Graydon
+
+From pwalton at mozilla.com  Fri Jun  3 14:08:01 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 03 Jun 2011 14:08:01 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DE94CFF.2080301@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com> <4DE94969.5010600@mozilla.com>
+	<4DE94CFF.2080301@mozilla.com>
+Message-ID: <4DE94D31.2060400@mozilla.com>
+
+On 6/3/11 2:07 PM, Graydon Hoare wrote:
+> On 11-06-03 01:51 PM, Patrick Walton wrote:
+>
+>> Thoughts?
+>
+> I like the line of reasoning; let me try phrasing in a slightly more
+> terse/pithy fashion:
+>
+> "Alias-formation must preserve unique ownership of the referent"
+
+Right, that's a good way to put it.
+
+Patrick
+
+From pwalton at mozilla.com  Fri Jun  3 18:48:51 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 03 Jun 2011 18:48:51 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DE94CFF.2080301@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com> <4DE94969.5010600@mozilla.com>
+	<4DE94CFF.2080301@mozilla.com>
+Message-ID: <4DE98F03.4080409@mozilla.com>
+
+On 6/3/11 2:07 PM, Graydon Hoare wrote:
+> I like the line of reasoning; let me try phrasing in a slightly more
+> terse/pithy fashion:
+>
+> "Alias-formation must preserve unique ownership of the referent"
+
+So in a discussion on IRC we found a several issues with this scheme. 
+Taking them one by one:
+
+(1) It's important to be able to take aliases to the interior of a box, 
+because it's how we abstract over interior and exterior types. For 
+example, the list functions in list.rs have signatures of the form:
+
+fn f[T](&list[T] l, ...)
+
+But it's often desired to pass in a @list as the first parameter to 
+these utility functions. To do this, we need to be able to call these 
+functions as f(*l, ...) with l : @list. The alias analysis rules as 
+stated forbid this: there could be multiple aliases to the interior of a 
+box. However, in many cases, we can prove that the caller will keep a 
+reference to the box for the duration of the call and therefore will 
+keep its contents alive. So I propose relaxing the restrictions 
+slightly; the caller can pass the interior of a box *stored in a local 
+variable* as an alias.
+
+(2) "alt" behaves much as a function call with alias parameters. To see 
+why this is true, consider this code:
+
+var x = some("foo");
+alt (x) {
+     case (some(?s)) {
+         x = none;
+         log s; // crash
+     }
+}
+
+This crashes on the line marked "// crash" above. The reason is that "s" 
+is an *alias* to the string, which has its last reference removed by the 
+assignment "x = none;" above. Switching destructuring to use copying 
+instead of aliasing won't work for several reasons orthogonal to this 
+post (although I can go into them if anyone is interested).
+
+The solution is to treat "s" the same as any other alias; in particular, 
+it must temporarily render "x" inaccessible for the duration of the 
+"alt" statement. We also have to mandate that lvalues used in the 
+expression position of an "alt" statement are unique, so that rendering 
+them inaccessible really does make it impossible to affect the lifetime 
+of their subparts (IOW, in this example, we have to make sure there's no 
+other way to get to the contents of "x", i.e. "s").
+
+(3) Putting points (1) and (2) together, we have to ensure that two 
+alias parameters passed into the same function don't, well, alias. This 
+is so that alias parameters can be treated as unique in the callee. To 
+see why this is necessary, consider this code:
+
+fn f(&mutable option::t[str] x, &mutable option::t[str] y) {
+     alt (x) {
+         case (some(?s)) {
+             y = none;
+             log s; // crash
+         }
+     }
+}
+
+fn g() {
+     var x = "foo";
+     f(x, x);
+}
+
+fn h() {
+     var x = "foo";
+     var y = x;
+     f(*x, *y);
+}
+
+Calls to g() and h() will crash at the line marked "// crash", because 
+they both manage to perform a call to f() with the same value for both 
+parameters x and y. It's easy to see how to statically forbid the call 
+to f() inside g(); the two parameters clearly refer to the same local 
+variable, so we can reject the call.
+
+Proving the same for h() is more difficult, since h() takes advantage of 
+the relaxed rules proposed in point (1) above. So in this case, and this 
+case only--namely, when the interior of a box is passed to two 
+type-compatible aliases--a dynamic check will be performed that the two 
+boxes do not alias (note that this is a shallow check), and we can emit 
+a warning.
+
+If the user doesn't want the warning, he or she can copy one of the 
+values before the call. This check allows users to pass box contents as 
+aliases as expected, while (as far as I know anyway) preserving type 
+safety and runtime performance.
+
+Patrick
+
+From graydon at mozilla.com  Sat Jun  4 00:25:34 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 04 Jun 2011 00:25:34 -0700
+Subject: [rust-dev] thread limits and costs
+Message-ID: <4DE9DDEE.9090100@mozilla.com>
+
+A short followup:
+
+I spent the last several days wondering if I'd exaggerated the various 
+risks of committing early to a 1:1 model for tasks (modeling tasks 
+strictly as threads). I don't like over-engineering any more than the 
+next person and the possibility that threads are "sufficiently" fast and 
+small on all platforms continued to nag at me. If we're injecting 
+yield-points in all cases to make code interruptable (which we are) then 
+I think *all* the arguments I had roughly boil down to "potential cost 
+problems".
+
+So I did a little research on costs. It might be worth doing more 
+substantial research (measurements, gathering hard scalability numbers 
+ourselves, making benchmarks) but I'm a *bit* more convinced that I 
+wasn't just speaking nonsense the other day. Gathering more hard numbers 
+outselves may make sense, but I'm less uncertain now. The following 
+turned up in my search:
+
+- Limits of windows: kernel stack for threads is minimum 12kb resident 
+on win32, 24k on win64, and expands to 20 and 48k respectively if the 
+thread touched GDI. Looks like you can push a process into the 10,000s 
+of threads, but probably not the 100,000s
+
+- Limits of OSX: weird kernel restrictions. Non-server 10.6 has 
+arbitrary clamp at 2500 threads per system. Server 10.6 and both 
+versions of 10.7 clamp at 12,500 per 8gb installed memory, with only 20% 
+available to a given process (i.e. 2,500 threads per process, per 8gb). 
+This still sounds like an arbitrary non-adjustable limit though, unless 
+they happen to be dedicating 640k of kernel memory to each thread or 
+something.
+
+- Limits of iOS: iPhones clamp to 1024 threads.
+
+- Limits of solaris 10: kernel stacks are 8k on x86 (later bumped to 
+12k), and 20k on x64. But they're in a 512mb (x86) or 24gb (x64) pinned 
+segment; so on x86 this will clamp to around 45,000 threads.
+
+- Linux has 8k or 4k kernel stacks. Much smaller, much better; but still 
+a fair bit larger than seems *necessary* for our task segment granularity.
+
+- Even then, Intel claims (at least in '07) that its TBB tasks are ~18x 
+faster than a linux thread setup/teardown.
+
+- Erlang processes are 300 bytes (?) whereas Haskell tasks get 1k stack 
+segments by default.
+
+
+Some light reading for the interested:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+http://blogs.technet.com/b/markrussinovich/archive/2009/07/08/3261309.aspx
+
+http://support.apple.com/kb/HT3854
+
+http://www.codeguru.com/cpp/misc/misc/threadsprocesses/article.php/c13533
+
+http://gurkulindia.com/2011/05/05/solaris-reference-understanding-solaris-kernel-stack-overflows/
+
+In support of threads! 
+http://www.mailinator.com/tymaPaulMultithreaded.pdf is an interesting 
+counterpoint, where threads-and-blocking-IO are shown to have pulled 
+back ahead of the NIO interface (at least in java).
+
+http://www.theserverside.com/discussions/thread.tss?thread_id=26700
+
+-Graydon
+
+From marijnh at gmail.com  Sat Jun  4 04:38:34 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 4 Jun 2011 13:38:34 +0200
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DE94969.5010600@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com>
+	<4DE94969.5010600@mozilla.com>
+Message-ID: <BANLkTikHiWn5dM4+KOo8cSr7zs=knZZiAQ@mail.gmail.com>
+
+> (1) Handing out aliases to local variables and function parameters
+> (directly, not substructures thereof) is always safe. The calling function
+> is the only one that can possibly provide access its own locals, and it's
+> suspended for the duration of the call.
+
+Except for upvars. 'for each' bodies can already mess with locals that
+were passed by alias to the iterator. We'll want to expand this with
+generalized non-escaping lambda.
+
+> (2) Unique pointers inside data structures can be, in effect, promoted to
+> local variables by swapping them with a local. The resulting local variable
+> can then be handed off as an alias safely per point (1).
+
+Wouldn't this A) require the field to be mutable, and B) put it in an
+inconsistent state until the value is swapped back in?
+
+Also, I think there's a definite (and low) upper limit on how complex
+we can make this without making the language unusable.
+
+From pwalton at mozilla.com  Sat Jun  4 04:46:07 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 04 Jun 2011 04:46:07 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <BANLkTikHiWn5dM4+KOo8cSr7zs=knZZiAQ@mail.gmail.com>
+References: <4DE7FA6A.2070002@mozilla.com>	<4DE94969.5010600@mozilla.com>
+	<BANLkTikHiWn5dM4+KOo8cSr7zs=knZZiAQ@mail.gmail.com>
+Message-ID: <4DEA1AFF.3050809@mozilla.com>
+
+On 6/4/11 4:38 AM, Marijn Haverbeke wrote:
+> Wouldn't this A) require the field to be mutable, and B) put it in an
+> inconsistent state until the value is swapped back in?
+
+Yes on (A); no on (B). You have to swap a value in of the appropriate 
+type (including constrained types), so there doesn't seem to be anything 
+inconsistent about it. In the case of hash tables, I was thinking we 
+would have a special "in_use" tag variant for this purpose.
+
+> Also, I think there's a definite (and low) upper limit on how complex
+> we can make this without making the language unusable.
+
+We'll have to see. I'd be curious as to how much of our code in rustc we 
+have to change to obey these new rules.
+
+Patrick
+
+From marijnh at gmail.com  Sat Jun  4 04:53:13 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 4 Jun 2011 13:53:13 +0200
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DEA1AFF.3050809@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com> <4DE94969.5010600@mozilla.com>
+	<BANLkTikHiWn5dM4+KOo8cSr7zs=knZZiAQ@mail.gmail.com>
+	<4DEA1AFF.3050809@mozilla.com>
+Message-ID: <BANLkTimhspyOgNvL_eRF=13+uf=ej9tDfQ@mail.gmail.com>
+
+> Yes on (A); no on (B). You have to swap a value in of the appropriate type
+> (including constrained types), so there doesn't seem to be anything
+> inconsistent about it. In the case of hash tables, I was thinking we would
+> have a special "in_use" tag variant for this purpose.
+
+Well, yes, I guess that'd work. But we'd be punching holes in our
+table (which can cause further unpredictable run-time errors on nested
+access -- which is common) and writing a bunch of extra code just to
+avoid bumping up a refcount. I'm not sure there's going to be a real
+win here.
+
+From pwalton at mozilla.com  Sat Jun  4 08:55:33 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 04 Jun 2011 08:55:33 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <BANLkTimhspyOgNvL_eRF=13+uf=ej9tDfQ@mail.gmail.com>
+References: <4DE7FA6A.2070002@mozilla.com>	<4DE94969.5010600@mozilla.com>	<BANLkTikHiWn5dM4+KOo8cSr7zs=knZZiAQ@mail.gmail.com>	<4DEA1AFF.3050809@mozilla.com>
+	<BANLkTimhspyOgNvL_eRF=13+uf=ej9tDfQ@mail.gmail.com>
+Message-ID: <4DEA5575.1030307@mozilla.com>
+
+On 6/4/11 4:53 AM, Marijn Haverbeke wrote:
+> Well, yes, I guess that'd work. But we'd be punching holes in our
+> table (which can cause further unpredictable run-time errors on nested
+> access -- which is common) and writing a bunch of extra code just to
+> avoid bumping up a refcount. I'm not sure there's going to be a real
+> win here.
+
+We'll have to see. We can always have two "get"s -- one that copies the 
+result and avoids these issues and one that doesn't, for temporary access.
+
+Patrick
+
+From niko at alum.mit.edu  Sat Jun  4 09:25:35 2011
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Sat, 04 Jun 2011 18:25:35 +0200
+Subject: [rust-dev] alias analysis
+In-Reply-To: <BANLkTimhspyOgNvL_eRF=13+uf=ej9tDfQ@mail.gmail.com>
+References: <4DE7FA6A.2070002@mozilla.com>
+	<4DE94969.5010600@mozilla.com>	<BANLkTikHiWn5dM4+KOo8cSr7zs=knZZiAQ@mail.gmail.com>	<4DEA1AFF.3050809@mozilla.com>
+	<BANLkTimhspyOgNvL_eRF=13+uf=ej9tDfQ@mail.gmail.com>
+Message-ID: <4DEA5C7F.9060605@alum.mit.edu>
+
+This message brings up at a point I wanted to ask:
+
+It seems that alias types could be handled in a relatively 
+straight-forward fashion using ref-counting, though this clearly entails 
+some runtime cost.  It would also mean that things like alt(x) would 
+"just work", as the extracted value would be stored into a local 
+variable which would up its ref. count, so when x changes the 
+subcomponent remains live.
+
+Are there other arguments against ref-counting besides the runtime 
+cost?  One complication I can imagine is that in generic functions, the 
+type of the aliased value may not be precisely known, and ref-counting 
+is not suitable for some types (e.g., int), so something like tagged 
+pointers, auto-boxing or code specialization would be required.
+
+
+Niko
+
+Marijn Haverbeke wrote:
+>> Yes on (A); no on (B). You have to swap a value in of the appropriate type
+>> (including constrained types), so there doesn't seem to be anything
+>> inconsistent about it. In the case of hash tables, I was thinking we would
+>> have a special "in_use" tag variant for this purpose.
+>
+> Well, yes, I guess that'd work. But we'd be punching holes in our
+> table (which can cause further unpredictable run-time errors on nested
+> access -- which is common) and writing a bunch of extra code just to
+> avoid bumping up a refcount. I'm not sure there's going to be a real
+> win here.
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110604/d48e70ba/attachment.html>
+
+From dherman at mozilla.com  Sat Jun  4 10:33:49 2011
+From: dherman at mozilla.com (David Herman)
+Date: Sat, 4 Jun 2011 10:33:49 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DEA5C7F.9060605@alum.mit.edu>
+References: <4DE7FA6A.2070002@mozilla.com>
+	<4DE94969.5010600@mozilla.com>	<BANLkTikHiWn5dM4+KOo8cSr7zs=knZZiAQ@mail.gmail.com>	<4DEA1AFF.3050809@mozilla.com>
+	<BANLkTimhspyOgNvL_eRF=13+uf=ej9tDfQ@mail.gmail.com>
+	<4DEA5C7F.9060605@alum.mit.edu>
+Message-ID: <9FD05362-8F9D-4A1A-88A7-6345EA841EA1@mozilla.com>
+
+I was going to suggest something similar (the same thing?) -- it seems like putting the box's contents in a local variable is something that could be done automatically. Forcing the programmer to do it seems kind of noisy and not obvious about what purpose it's serving.
+
+Dave
+
+On Jun 4, 2011, at 9:25 AM, Niko Matsakis wrote:
+
+> This message brings up at a point I wanted to ask:
+> 
+> It seems that alias types could be handled in a relatively straight-forward fashion using ref-counting, though this clearly entails some runtime cost.  It would also mean that things like alt(x) would "just work", as the extracted value would be stored into a local variable which would up its ref. count, so when x changes the subcomponent remains live.
+> 
+> Are there other arguments against ref-counting besides the runtime cost?  One complication I can imagine is that in generic functions, the type of the aliased value may not be precisely known, and ref-counting is not suitable for some types (e.g., int), so something like tagged pointers, auto-boxing or code specialization would be required.
+> 
+> 
+> Niko
+> 
+> Marijn Haverbeke wrote:
+>> 
+>>> Yes on (A); no on (B). You have to swap a value in of the appropriate type
+>>> (including constrained types), so there doesn't seem to be anything
+>>> inconsistent about it. In the case of hash tables, I was thinking we would
+>>> have a special "in_use" tag variant for this purpose.
+>> 
+>> Well, yes, I guess that'd work. But we'd be punching holes in our
+>> table (which can cause further unpredictable run-time errors on nested
+>> access -- which is common) and writing a bunch of extra code just to
+>> avoid bumping up a refcount. I'm not sure there's going to be a real
+>> win here.
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>> 
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110604/ce780d68/attachment.html>
+
+From niko at alum.mit.edu  Sat Jun  4 11:40:27 2011
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Sat, 04 Jun 2011 20:40:27 +0200
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DE98F03.4080409@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com>
+	<4DE94969.5010600@mozilla.com>	<4DE94CFF.2080301@mozilla.com>
+	<4DE98F03.4080409@mozilla.com>
+Message-ID: <4DEA7C1B.7090901@alum.mit.edu>
+
+One other question:
+> (2) "alt" behaves much as a function call with alias parameters. To 
+> see why this is true, consider this code:
+> ...
+> The solution is to treat "s" the same as any other alias; in 
+> particular, it must temporarily render "x" inaccessible for the 
+> duration of the "alt" statement. We also have to mandate that lvalues 
+> used in the expression position of an "alt" statement are unique, so 
+> that rendering them inaccessible really does make it impossible to 
+> affect the lifetime of their subparts (IOW, in this example, we have 
+> to make sure there's no other way to get to the contents of "x", i.e. 
+> "s").
+Is that enough?  I mean, consider this variant on your alt() example, 
+where the value "s" extracted during the alt() is stored into a variable 
+"y":
+> var x = some("foo");
+> var y = "bar";
+> alt (x) {
+>     case (some(?s)) {
+>         y = s; // save s
+>     }
+> }
+> x = none;
+> log y; // crash? 
+Would this crash?  If not, why not?  I guess it ultimately depends on 
+what kind of ref-counting scheme is in place for strings (which I 
+presume are stored in the heap, despite their value semantics).
+
+
+Niko
+
+From graydon at mozilla.com  Sat Jun  4 12:01:01 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 04 Jun 2011 12:01:01 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DEA7C1B.7090901@alum.mit.edu>
+References: <4DE7FA6A.2070002@mozilla.com>
+	<4DE94969.5010600@mozilla.com>	<4DE94CFF.2080301@mozilla.com>
+	<4DE98F03.4080409@mozilla.com> <4DEA7C1B.7090901@alum.mit.edu>
+Message-ID: <4DEA80ED.2070800@mozilla.com>
+
+On 04/06/2011 11:40 AM, Niko Matsakis wrote:
+
+> Would this crash? If not, why not? I guess it ultimately depends on what
+> kind of ref-counting scheme is in place for strings (which I presume are
+> stored in the heap, despite their value semantics).
+
+No. They're not to be permanently stored in the heap; we'll be 
+supporting strings with partial internal segments (small vector 
+optimization) in the near future. Besides which this kind of transparent 
+copying or refcounting wouldn't work in cases where the copied thing is 
+mutable or has a destructor we expect to run at a particular time 
+(respectively).
+
+In general I want to make a clear statement of preference in this 
+conversation: if the compiler's going to insert side effects to ensure 
+safety of corner cases, I'd quite prefer to be inserting optional 
+failures (with compile-time warnings that it's doing so) than inserting 
+"make it right by fudging the memory semantics" code (extra copies or 
+extra refcounts).
+
+The whole point of all of this machinery is to be predictable to 
+programmers who are spending mental energy to retain awareness of 
+pointer graphs, ownership and memory models. The cognitive cost of "task 
+fails when something I wasn't expecting happens" is already being paid 
+essentially everywhere in rust code; nothing new to think about is 
+arises by adding a failure (though a warning makes sense, as it's 
+more-likely a coding mistake).
+
+-Graydon
+
+From graydon at mozilla.com  Sat Jun  4 12:03:49 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 04 Jun 2011 12:03:49 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <BANLkTikHiWn5dM4+KOo8cSr7zs=knZZiAQ@mail.gmail.com>
+References: <4DE7FA6A.2070002@mozilla.com>	<4DE94969.5010600@mozilla.com>
+	<BANLkTikHiWn5dM4+KOo8cSr7zs=knZZiAQ@mail.gmail.com>
+Message-ID: <4DEA8195.2040903@mozilla.com>
+
+On 04/06/2011 4:38 AM, Marijn Haverbeke wrote:
+>> (1) Handing out aliases to local variables and function parameters
+>> (directly, not substructures thereof) is always safe. The calling function
+>> is the only one that can possibly provide access its own locals, and it's
+>> suspended for the duration of the call.
+>
+> Except for upvars. 'for each' bodies can already mess with locals that
+> were passed by alias to the iterator. We'll want to expand this with
+> generalized non-escaping lambda.
+
+Upvars-from-lambda-blocks should follow exactly the same rules as the 
+aliases produced by pattern-matching in an alt. That is, locals that are 
+aliased in the scope boundaries between the frame and its lambda-block 
+should be excluded from visibility within the lambda block.
+
+-Graydon
+
+From graydon at mozilla.com  Sat Jun  4 19:24:11 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 04 Jun 2011 19:24:11 -0700
+Subject: [rust-dev] thread limits and costs
+In-Reply-To: <20110605011918.GA371@mulga.csse.unimelb.edu.au>
+References: <4DE9DDEE.9090100@mozilla.com>
+	<20110605011918.GA371@mulga.csse.unimelb.edu.au>
+Message-ID: <4DEAE8CB.4030104@mozilla.com>
+
+On 04/06/2011 6:19 PM, Jeff Schultz wrote:
+> On Sat, Jun 04, 2011 at 12:25:34AM -0700, Graydon Hoare wrote:
+>> - Erlang processes are 300 bytes (?) whereas Haskell tasks get 1k stack
+>> segments by default.
+>
+> I don't want to add to mailing list noise, but that's actually about
+> 300 (309 is one figure I've seen for a recent release) *word.*  These
+> are either 4 or 8 byte.  Note that that includes the process's heap.
+>
+>
+> http://www.erlang.org/doc/man/erlang.html#hibernate-3 may be of
+> interest.
+
+Not noise at all; for pragmatic "gathering comparative information" 
+stuff, more facts-people-know is usually better. So that's essentially 
+another "1k minimum" model on x86. Thanks.
+
+(fwiw, "goroutines" appear to be 4k minimum)
+
+-Graydon
+
+From fw at deneb.enyo.de  Sun Jun  5 08:50:14 2011
+From: fw at deneb.enyo.de (Florian Weimer)
+Date: Sun, 05 Jun 2011 17:50:14 +0200
+Subject: [rust-dev] thread limits and costs
+In-Reply-To: <4DE9DDEE.9090100@mozilla.com> (Graydon Hoare's message of "Sat, 
+	04 Jun 2011 00:25:34 -0700")
+References: <4DE9DDEE.9090100@mozilla.com>
+Message-ID: <8739jo8eh5.fsf@mid.deneb.enyo.de>
+
+* Graydon Hoare:
+
+> - Erlang processes are 300 bytes (?) whereas Haskell tasks get 1k
+                             words (per later correction)
+> stack segments by default.
+
+One more data point:
+
+Depending on the implementation, Lua coroutines need around 1200 bytes
+(Lua 5.1 on amd64) or 450 bytes (LuaJIT on amd64).  Lua coroutines
+share a heap and are roughly equivalent to explicitly scheduled
+threads (sometimes called one-shot continuations), but unlike threads,
+they (and their stacks) are not automatically part of the heap's root
+set.
+
+Footprint for a totally independent Lua environment (called "state")
+is somewhat larger.  There is no cross-state sharing, so all data
+structures (such as module tables) and Lua code has to be loaded into
+each state individually, further increasing the footprint.
+
+From pwalton at mozilla.com  Sun Jun  5 21:45:30 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sun, 05 Jun 2011 21:45:30 -0700
+Subject: [rust-dev] Proposal: nominal records
+Message-ID: <4DEC5B6A.2060305@mozilla.com>
+
+Hi everyone,
+
+This is a proposal that I've been kicking around for maybe a month now, 
+and last week I talked it over with Dave and Paul.
+
+The idea is to have record types be nominal, just as tags are. In this 
+scheme, record types are declared using a syntax akin to that used to 
+declare tags:
+
+rec point3 {
+     x: int;
+     y: int;
+     z: int;
+}
+
+Here "point3" becomes the name of the record. To construct an instance 
+of this record, the user does the following:
+
+import foo::point3;	// if not already in scope
+auto pt = { x: 10, y: 20, z: 30 };
+
+Or, if either the import is not desired or the combination of field 
+names is ambiguous:
+
+auto a = rec foo::point3 { x: 10, y: 20, z: 30 };
+
+(The leading "rec" makes parsing easier. Might not be needed.)
+
+It's valid to have two records in scope with overlapping field names. 
+The combination of field names is used to determine which record is 
+meant when record literal syntax is used.
+
+rec point2 {
+     int x;
+     int y;
+}
+
+import foo::point2;			// if not already in scope
+auto b = { x: 10, y: 20 };		// constructs a point2
+auto c = { x: 10, y: 20, z: 30 };	// constructs a point3
+
+Selecting a field from a record requires neither the record name nor the 
+module the record is declared in to be specified:
+
+log b.x;	// just works
+log c.x;	// works too
+
+OCaml requires that field names be unique and that record fields be 
+fully qualified if not in scope so that its type inference engine can 
+uniquely determine a type for the LHS of a field expression ("b" in 
+"b.x" above). In Rust, this is not needed because we require that the 
+LHS of a field expression already have a fully-resolved type by the time 
+we encounter it during typechecking. Importantly, this is not a new 
+restriction; automatic dereference demands this rule already.
+
+Record constructors wouldn't require that the fields are supplied in the 
+same order that the record declaration specifies. The declaration of the 
+record supplies the canonical ordering for memory layout purposes. For 
+example:
+
+auto pt4 = { z: 30, y: 20, x: 10 }; // constructs an identical value to 
+"pt" above
+
+Now there are a few obvious drawbacks with this proposal:
+
+(1) Anonymous records are no longer allowed. All records must have their 
+types declared up front, potentially increasing programmer burden.
+
+(2) Ad-hoc sharing of records is no longer possible; if module A defines 
+a "point3" with fields { x: int, y: int, z: int } and module B 
+independently defines a "point3" with the same fields, the two modules 
+no longer export compatible types.
+
+(3) If two records are in scope and all their field names and types are 
+identical, extra work is required to disambiguate them.
+
+However, there are a number of benefits, roughly in decreasing order of 
+importance:
+
+(1) Recursive records are now easy to handle without having to create a 
+tag in between. Paul encountered an issue recently in which a record was 
+unable to contain a function that took the same record as an argument. 
+The workaround--to create a singleton tag--is somewhat awkward and 
+requires the creation of helper functions to make usable. I imagine that 
+this isn't the last time we'll be in this situation.
+
+(2) Ordering of fields in record constructors is no longer significant. 
+This simplifies maintenance; for example, a programmer could experiment 
+with different memory layouts for a record to see which yields the best 
+performance without having to rewrite every record literal. It also 
+means that the cognitive overhead of remembering the right order for 
+record fields is reduced.
+
+(3) Type errors are more helpful. A record with the wrong types, for 
+example, generates an error immediately at site of construction instead 
+of farther down. Moreover, no complicated diffing logic is needed to 
+make type mismatches between large record types sensible to the user.
+
+(4) Typechecking should speed up significantly. Much of the time spent 
+in typechecking is spent unifying large record types.
+
+And in practice I think that the drawbacks mentioned above are not 
+significant:
+
+(1) In Rust, truly anonymous record types seem to hardly ever be used in 
+practice. Every record I know of in the standard library and in rustc 
+has an associated typedef. This is due to the fact that functions 
+require type annotations; sooner or later practically every record type 
+that gets used tends to end up as part of the signature of a function, 
+at which point its type must be specified in full. So, in practice, 
+requiring the programmer to specify the types of every field up front is 
+no more of a burden than the status quo.
+
+(2) Ad-hoc sharing of records seems rare to me, and we have tuples for 
+that. In fact, I think simple "point"-like types, which are the ones in 
+which ad-hoc sharing is commonest, may well better be specified as 
+tuples for this exact reason. Tuples are less fragile than records 
+anyway; in the current scheme, { x: int, y: int } and { x: int, y: int } 
+exported by two modules happen to be type-compatible, but what if the 
+two modules used { x: int, y: int } and { xcoord: int, ycoord: int } 
+instead? Tuples don't have this problem, so it seems to me that most of 
+the cases in which ad-hoc sharing is desired would be better served by 
+using tuple types instead.
+
+(3) Having two identically-structured records in scope does require 
+extra work to disambiguate. But this is no worse than having functions 
+with identical names in scope. It's a hazard to be sure, but I suspect 
+it'll be rare enough for the benefits to outweigh this drawback.
+
+Anyway, that's quite enough for one email. Opinions?
+
+Patrick
+
+From tellrob at gmail.com  Sun Jun  5 23:00:25 2011
+From: tellrob at gmail.com (Rob Arnold)
+Date: Sun, 5 Jun 2011 23:00:25 -0700
+Subject: [rust-dev] Proposal: nominal records
+In-Reply-To: <4DEC5B6A.2060305@mozilla.com>
+References: <4DEC5B6A.2060305@mozilla.com>
+Message-ID: <BANLkTinXjnbNKrnqOkQ3CJ2g4ZNNVF0mgw@mail.gmail.com>
+
+On Sun, Jun 5, 2011 at 9:45 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+
+> Hi everyone,
+>
+> This is a proposal that I've been kicking around for maybe a month now, and
+> last week I talked it over with Dave and Paul.
+>
+> The idea is to have record types be nominal, just as tags are. In this
+> scheme, record types are declared using a syntax akin to that used to
+> declare tags:
+>
+> rec point3 {
+>    x: int;
+>    y: int;
+>    z: int;
+> }
+>
+> Here "point3" becomes the name of the record. To construct an instance of
+> this record, the user does the following:
+>
+> import foo::point3;     // if not already in scope
+> auto pt = { x: 10, y: 20, z: 30 };
+>
+> Or, if either the import is not desired or the combination of field names
+> is ambiguous:
+>
+> auto a = rec foo::point3 { x: 10, y: 20, z: 30 };
+>
+> (The leading "rec" makes parsing easier. Might not be needed.)
+>
+> It's valid to have two records in scope with overlapping field names. The
+> combination of field names is used to determine which record is meant when
+> record literal syntax is used.
+>
+> rec point2 {
+>    int x;
+>    int y;
+> }
+>
+> import foo::point2;                     // if not already in scope
+> auto b = { x: 10, y: 20 };              // constructs a point2
+> auto c = { x: 10, y: 20, z: 30 };       // constructs a point3
+>
+> Selecting a field from a record requires neither the record name nor the
+> module the record is declared in to be specified:
+>
+> log b.x;        // just works
+> log c.x;        // works too
+>
+> OCaml requires that field names be unique and that record fields be fully
+> qualified if not in scope so that its type inference engine can uniquely
+> determine a type for the LHS of a field expression ("b" in "b.x" above). In
+> Rust, this is not needed because we require that the LHS of a field
+> expression already have a fully-resolved type by the time we encounter it
+> during typechecking. Importantly, this is not a new restriction; automatic
+> dereference demands this rule already.
+>
+> Record constructors wouldn't require that the fields are supplied in the
+> same order that the record declaration specifies. The declaration of the
+> record supplies the canonical ordering for memory layout purposes. For
+> example:
+>
+> auto pt4 = { z: 30, y: 20, x: 10 }; // constructs an identical value to
+> "pt" above
+>
+> Now there are a few obvious drawbacks with this proposal:
+>
+> (1) Anonymous records are no longer allowed. All records must have their
+> types declared up front, potentially increasing programmer burden.
+>
+> (2) Ad-hoc sharing of records is no longer possible; if module A defines a
+> "point3" with fields { x: int, y: int, z: int } and module B independently
+> defines a "point3" with the same fields, the two modules no longer export
+> compatible types.
+>
+> (3) If two records are in scope and all their field names and types are
+> identical, extra work is required to disambiguate them.
+>
+> However, there are a number of benefits, roughly in decreasing order of
+> importance:
+>
+> (1) Recursive records are now easy to handle without having to create a tag
+> in between. Paul encountered an issue recently in which a record was unable
+> to contain a function that took the same record as an argument. The
+> workaround--to create a singleton tag--is somewhat awkward and requires the
+> creation of helper functions to make usable. I imagine that this isn't the
+> last time we'll be in this situation.
+>
+> (2) Ordering of fields in record constructors is no longer significant.
+> This simplifies maintenance; for example, a programmer could experiment with
+> different memory layouts for a record to see which yields the best
+> performance without having to rewrite every record literal. It also means
+> that the cognitive overhead of remembering the right order for record fields
+> is reduced.
+>
+> (3) Type errors are more helpful. A record with the wrong types, for
+> example, generates an error immediately at site of construction instead of
+> farther down. Moreover, no complicated diffing logic is needed to make type
+> mismatches between large record types sensible to the user.
+>
+> (4) Typechecking should speed up significantly. Much of the time spent in
+> typechecking is spent unifying large record types.
+>
+> And in practice I think that the drawbacks mentioned above are not
+> significant:
+>
+> (1) In Rust, truly anonymous record types seem to hardly ever be used in
+> practice. Every record I know of in the standard library and in rustc has an
+> associated typedef. This is due to the fact that functions require type
+> annotations; sooner or later practically every record type that gets used
+> tends to end up as part of the signature of a function, at which point its
+> type must be specified in full. So, in practice, requiring the programmer to
+> specify the types of every field up front is no more of a burden than the
+> status quo.
+>
+> (2) Ad-hoc sharing of records seems rare to me, and we have tuples for
+> that. In fact, I think simple "point"-like types, which are the ones in
+> which ad-hoc sharing is commonest, may well better be specified as tuples
+> for this exact reason. Tuples are less fragile than records anyway; in the
+> current scheme, { x: int, y: int } and { x: int, y: int } exported by two
+> modules happen to be type-compatible, but what if the two modules used { x:
+> int, y: int } and { xcoord: int, ycoord: int } instead? Tuples don't have
+> this problem, so it seems to me that most of the cases in which ad-hoc
+> sharing is desired would be better served by using tuple types instead.
+>
+> (3) Having two identically-structured records in scope does require extra
+> work to disambiguate. But this is no worse than having functions with
+> identical names in scope. It's a hazard to be sure, but I suspect it'll be
+> rare enough for the benefits to outweigh this drawback.
+>
+> Anyway, that's quite enough for one email. Opinions?
+>
+I am sad to see anonymous records go since I use them frequently in my ML
+and JavaScript programs where giving a type a name doesn't make sense
+(perhaps if there's no type inference at function boundaries this doesn't
+matter). Tuples obviously make sense in the vector example you gave (which
+is what I usually point to as a use case for anonymous records) but tuples
+don't handle the cases where the type changes over time (specifically
+dropping fields). Also sometimes it's just awkward to give a name to a type;
+this is one my frustrations with C-like languages.
+
+Would it be possible to support both named and anonymous record types? For
+C0, I elaborated its nominal records into structural ones by inserting a
+unique field derived from the name into the definition. Perhaps something
+like this would work for Rust?
+
+-Rob
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110605/942214f3/attachment.html>
+
+From pwalton at mozilla.com  Sun Jun  5 23:10:10 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sun, 05 Jun 2011 23:10:10 -0700
+Subject: [rust-dev] Proposal: nominal records
+In-Reply-To: <BANLkTinXjnbNKrnqOkQ3CJ2g4ZNNVF0mgw@mail.gmail.com>
+References: <4DEC5B6A.2060305@mozilla.com>
+	<BANLkTinXjnbNKrnqOkQ3CJ2g4ZNNVF0mgw@mail.gmail.com>
+Message-ID: <4DEC6F42.7040808@mozilla.com>
+
+On 6/5/11 11:00 PM, Rob Arnold wrote:
+> I am sad to see anonymous records go since I use them frequently in my
+> ML and JavaScript programs where giving a type a name doesn't make sense
+> (perhaps if there's no type inference at function boundaries this
+> doesn't matter). Tuples obviously make sense in the vector example you
+> gave (which is what I usually point to as a use case for anonymous
+> records) but tuples don't handle the cases where the type changes over
+> time (specifically dropping fields). Also sometimes it's just awkward to
+> give a name to a type; this is one my frustrations with C-like languages.
+
+Oh, I actually think anonymous records are a perfect fit for fully 
+type-inferred languages like ML. I miss SML's anonymous records a lot in 
+OCaml. It's just that in practice, every Rust record gets a name via a 
+typedef, since they spill across function boundaries so often and we 
+have to annotate function signatures.
+
+Your point about dropping fields is interesting; in what kinds of 
+situations have you wanted to drop record fields?
+
+Patrick
+
+From marijnh at gmail.com  Mon Jun  6 01:46:08 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 6 Jun 2011 10:46:08 +0200
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DE98F03.4080409@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com> <4DE94969.5010600@mozilla.com>
+	<4DE94CFF.2080301@mozilla.com> <4DE98F03.4080409@mozilla.com>
+Message-ID: <BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>
+
+This (Patrick's Jun 4 description) seems extremely promising. It'll
+make aliases slightly less powerful than they currently are, but the
+rules are very simple and predictable ? which, in my opinion, is more
+attractive than having something as powerful as possible at the cost
+of extreme user confusion.
+
+It seems only the 'two aliases may not alias each other' rule requires
+alias analysis. I think we could formulate that instead as having the
+"can't touch any variable that roots an alias rule" also apply to
+mutable aliases passed to functions, so that you can't pass something
+by mutable alias that you're passing by alias, we don't need serious
+alias analysis at all (and maybe that's what you were suggesting).
+
+Another implication is that any field reachable from a local root by
+an immutable path can also be safely aliased, as the root anchors it.
+Maybe even paths with mutable elements but no boxes or tags are safe
+-- they can be mutated, but not in a way that invalidates the alias.
+Also, it seems that immutable 'alias rooting' variables can safely be
+read, just not written.
+
+We'll have to see how much inconvenience this produces for alts. I had
+already ran into the unsafety you described when trying to iterate
+over a list by repeatedly setting the list variable to the tail in an
+alt case. Maybe having a copying variant of alt ('alt copy (x) { ...
+}'?) for convenience will be needed.
+
+I'll try to start implementing a checking pass for this, and probably
+follow up later today.
+
+From stefanlampe at hotmail.com  Mon Jun  6 03:46:15 2011
+From: stefanlampe at hotmail.com (Stefan Lampe)
+Date: Mon, 6 Jun 2011 10:46:15 +0000
+Subject: [rust-dev] Proposal: nominal records
+In-Reply-To: <4DEC6F42.7040808@mozilla.com>
+References: <4DEC5B6A.2060305@mozilla.com>,
+	<BANLkTinXjnbNKrnqOkQ3CJ2g4ZNNVF0mgw@mail.gmail.com>,
+	<4DEC6F42.7040808@mozilla.com>
+Message-ID: <BAY157-w6963FD7EEB580B76A0059B1600@phx.gbl>
+
+
+My comments may not be that relevant to rust as I haven't been following in detail, so please ignore if they aren't - but at the moment I write quite long functions that do a lot of transformations of data in ocaml - lists of data, pipelines of maps, folds, etc. The inability to have lightweight anonymous records means that I end up often using lists of tuples where lists of records would be preferable. In these cases the record type would only exist for the lifetime of the next map or fold, and the overhead of a type declaration (including thinking up a name) is too cumbersome.
+
+Stefan
+
+> Date: Sun, 5 Jun 2011 23:10:10 -0700
+> From: pwalton at mozilla.com
+> To: tellrob at gmail.com
+> CC: rust-dev at mozilla.org
+> Subject: Re: [rust-dev] Proposal: nominal records
+> 
+> On 6/5/11 11:00 PM, Rob Arnold wrote:
+> > I am sad to see anonymous records go since I use them frequently in my
+> > ML and JavaScript programs where giving a type a name doesn't make sense
+> > (perhaps if there's no type inference at function boundaries this
+> > doesn't matter). Tuples obviously make sense in the vector example you
+> > gave (which is what I usually point to as a use case for anonymous
+> > records) but tuples don't handle the cases where the type changes over
+> > time (specifically dropping fields). Also sometimes it's just awkward to
+> > give a name to a type; this is one my frustrations with C-like languages.
+> 
+> Oh, I actually think anonymous records are a perfect fit for fully 
+> type-inferred languages like ML. I miss SML's anonymous records a lot in 
+> OCaml. It's just that in practice, every Rust record gets a name via a 
+> typedef, since they spill across function boundaries so often and we 
+> have to annotate function signatures.
+> 
+> Your point about dropping fields is interesting; in what kinds of 
+> situations have you wanted to drop record fields?
+> 
+> Patrick
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+ 		 	   		  
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110606/a1dcb1e5/attachment.html>
+
+From respindola at mozilla.com  Mon Jun  6 06:28:02 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Mon, 06 Jun 2011 09:28:02 -0400
+Subject: [rust-dev] Proposal: nominal records
+In-Reply-To: <4DEC5B6A.2060305@mozilla.com>
+References: <4DEC5B6A.2060305@mozilla.com>
+Message-ID: <4DECD5E2.6050708@mozilla.com>
+
+  > (3) Type errors are more helpful. A record with the wrong types, for
+> example, generates an error immediately at site of construction instead
+> of farther down. Moreover, no complicated diffing logic is needed to
+> make type mismatches between large record types sensible to the user.
+
+Being able to add a field 'foo' to a record 'bar' and then just fixing 
+all the 'missing field foo' errors would be a very nice improvement when 
+refactoring code :-)
+
+If we do make this change, can we also rename record to struct? They 
+would be really similar to C structs.
+
+>
+> Patrick
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Mon Jun  6 06:45:48 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Mon, 06 Jun 2011 09:45:48 -0400
+Subject: [rust-dev] thread limits and costs
+In-Reply-To: <4DE9DDEE.9090100@mozilla.com>
+References: <4DE9DDEE.9090100@mozilla.com>
+Message-ID: <4DECDA0C.3030203@mozilla.com>
+
+On 11-06-04 3:25 AM, Graydon Hoare wrote:
+> A short followup:
+
+If you are really going to create 10k "things that are independently 
+scheduled", then I would be really surprised if using 10k system threads 
+is the right way to go.
+
+My entire point is that having that abstraction has costs that the 
+compiler cannot remove. We should instead provide the user with tools to 
+use instead of 10k threads/tasks.
+
+> -Graydon
+
+Cheers,
+Rafael
+
+From peterhull90 at gmail.com  Mon Jun  6 08:22:42 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Mon, 6 Jun 2011 16:22:42 +0100
+Subject: [rust-dev] Proposal: nominal records
+In-Reply-To: <4DEC5B6A.2060305@mozilla.com>
+References: <4DEC5B6A.2060305@mozilla.com>
+Message-ID: <BANLkTikvJ9GXDOLH_aVvTN0XG1EJB1DisA@mail.gmail.com>
+
+On Mon, Jun 6, 2011 at 5:45 AM, Patrick Walton <pwalton at mozilla.com> wrote:
+> Anyway, that's quite enough for one email. Opinions?
+Sounds good, but is there any chance that working code could be
+accidentally broken by adding an import in another part of the file?
+(i.e somehow the compiler quietly infers a different rec type than it
+did before and this  later produces a runtime error in the compiled
+program) I don't think so but I might not have thought of everything.
+
+Also, in Graydon's 'Syntax Changes' thread (18th May or so) I was
+wondering whether tuples could be constructed with the same { } syntax
+as recs, only omitting the field names. Were there any thoughts on
+this idea - is it possible/desirable?
+
+Pete
+
+From tellrob at gmail.com  Mon Jun  6 08:29:29 2011
+From: tellrob at gmail.com (Rob Arnold)
+Date: Mon, 6 Jun 2011 08:29:29 -0700
+Subject: [rust-dev] Proposal: nominal records
+In-Reply-To: <4DEC6F42.7040808@mozilla.com>
+References: <4DEC5B6A.2060305@mozilla.com>
+	<BANLkTinXjnbNKrnqOkQ3CJ2g4ZNNVF0mgw@mail.gmail.com>
+	<4DEC6F42.7040808@mozilla.com>
+Message-ID: <BANLkTi=HWOCx2-CfCajqBuaDJPSk8KSF8A@mail.gmail.com>
+
+On Sun, Jun 5, 2011 at 11:10 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+
+> On 6/5/11 11:00 PM, Rob Arnold wrote:
+>
+>> I am sad to see anonymous records go since I use them frequently in my
+>> ML and JavaScript programs where giving a type a name doesn't make sense
+>> (perhaps if there's no type inference at function boundaries this
+>> doesn't matter). Tuples obviously make sense in the vector example you
+>> gave (which is what I usually point to as a use case for anonymous
+>> records) but tuples don't handle the cases where the type changes over
+>> time (specifically dropping fields). Also sometimes it's just awkward to
+>> give a name to a type; this is one my frustrations with C-like languages.
+>>
+>
+> Oh, I actually think anonymous records are a perfect fit for fully
+> type-inferred languages like ML. I miss SML's anonymous records a lot in
+> OCaml. It's just that in practice, every Rust record gets a name via a
+> typedef, since they spill across function boundaries so often and we have to
+> annotate function signatures.
+>
+
+You can write record types directly in function signatures, right? That is,
+can anonymous records can be used across function boundaries? I think
+there's good value in not having to name the type.
+
+
+> Your point about dropping fields is interesting; in what kinds of
+> situations have you wanted to drop record fields?
+
+
+Often it's due to refactoring. The offending field is moved up or down in
+the abstraction hierarchy or enclosed in a closure.
+
+Now that I've had more sleep, I also think that tuples aren't quite a good
+general replacement because you lose some documentation (the field name)
+when converting from records to tuples. Knowing what x[1] is is much harder
+than x.texture. This I definitely encountered in ML all the time when
+reading students' compilers (particularly things like the register
+allocation and other messy algorithmic stuff).
+
+-Rob
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110606/e93b8512/attachment.html>
+
+From pwalton at mozilla.com  Mon Jun  6 09:11:33 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Mon, 06 Jun 2011 09:11:33 -0700
+Subject: [rust-dev] Proposal: nominal records
+In-Reply-To: <BAY157-w6963FD7EEB580B76A0059B1600@phx.gbl>
+References: <4DEC5B6A.2060305@mozilla.com>,
+	<BANLkTinXjnbNKrnqOkQ3CJ2g4ZNNVF0mgw@mail.gmail.com>,
+	<4DEC6F42.7040808@mozilla.com>
+	<BAY157-w6963FD7EEB580B76A0059B1600@phx.gbl>
+Message-ID: <4DECFC35.2000000@mozilla.com>
+
+On 6/6/11 3:46 AM, Stefan Lampe wrote:
+> My comments may not be that relevant to rust as I haven't been following
+> in detail, so please ignore if they aren't - but at the moment I write
+> quite long functions that do a lot of transformations of data in ocaml -
+> lists of data, pipelines of maps, folds, etc. The inability to have
+> lightweight anonymous records means that I end up often using lists of
+> tuples where lists of records would be preferable. In these cases the
+> record type would only exist for the lifetime of the next map or fold,
+> and the overhead of a type declaration (including thinking up a name) is
+> too cumbersome.
+
+Well, it sounds like those records escape the lifetime of the function, 
+in which case you still need a type declaration in Rust. This may change 
+if we get type-inferred lambdas.
+
+Also note that Rust supports function-local typedefs, so you don't need 
+to come up with a globally-unique identifier.
+
+Patrick
+
+From pwalton at mozilla.com  Mon Jun  6 09:21:16 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Mon, 06 Jun 2011 09:21:16 -0700
+Subject: [rust-dev] Proposal: nominal records
+In-Reply-To: <BANLkTi=HWOCx2-CfCajqBuaDJPSk8KSF8A@mail.gmail.com>
+References: <4DEC5B6A.2060305@mozilla.com>	<BANLkTinXjnbNKrnqOkQ3CJ2g4ZNNVF0mgw@mail.gmail.com>	<4DEC6F42.7040808@mozilla.com>
+	<BANLkTi=HWOCx2-CfCajqBuaDJPSk8KSF8A@mail.gmail.com>
+Message-ID: <4DECFE7C.4020601@mozilla.com>
+
+On 6/6/11 8:29 AM, Rob Arnold wrote:
+> You can write record types directly in function signatures, right? That
+> is, can anonymous records can be used across function boundaries? I
+> think there's good value in not having to name the type.
+
+IMHO, you only get a benefit in not having to name the type if the 
+record type appears exactly once. Otherwise you're scattering the record 
+type definition throughout the code, making it harder to e.g. add new 
+fields if you need to. This is why, in practice, every record in the 
+standard library and rustc has a typedef.
+
+> Now that I've had more sleep, I also think that tuples aren't quite a
+> good general replacement because you lose some documentation (the field
+> name) when converting from records to tuples. Knowing what x[1] is is
+> much harder than x.texture. This I definitely encountered in ML all the
+> time when reading students' compilers (particularly things like the
+> register allocation and other messy algorithmic stuff).
+
+Tuples aren't a good *general* replacement for records; they're a good 
+replacement for quick one-off records.
+
+If you want the self-documenting aspect of records, then, well, use 
+records :) In fact, having to give each record a name arguably improves 
+their self-documenting nature.
+
+Patrick
+
+From tellrob at gmail.com  Mon Jun  6 10:08:15 2011
+From: tellrob at gmail.com (Rob Arnold)
+Date: Mon, 6 Jun 2011 10:08:15 -0700
+Subject: [rust-dev] Proposal: nominal records
+In-Reply-To: <4DECFE7C.4020601@mozilla.com>
+References: <4DEC5B6A.2060305@mozilla.com>
+	<BANLkTinXjnbNKrnqOkQ3CJ2g4ZNNVF0mgw@mail.gmail.com>
+	<4DEC6F42.7040808@mozilla.com>
+	<BANLkTi=HWOCx2-CfCajqBuaDJPSk8KSF8A@mail.gmail.com>
+	<4DECFE7C.4020601@mozilla.com>
+Message-ID: <BANLkTik6cyHu8MP87UFcHhsEfDW__Mkqaw@mail.gmail.com>
+
+On Mon, Jun 6, 2011 at 9:21 AM, Patrick Walton <pwalton at mozilla.com> wrote:
+
+> On 6/6/11 8:29 AM, Rob Arnold wrote:
+>
+>> You can write record types directly in function signatures, right? That
+>> is, can anonymous records can be used across function boundaries? I
+>> think there's good value in not having to name the type.
+>>
+>
+> IMHO, you only get a benefit in not having to name the type if the record
+> type appears exactly once. Otherwise you're scattering the record type
+> definition throughout the code, making it harder to e.g. add new fields if
+> you need to. This is why, in practice, every record in the standard library
+> and rustc has a typedef.
+
+
+If you get type-inferred lambdas then does this case become more common?
+
+
+>
+>  Now that I've had more sleep, I also think that tuples aren't quite a
+>> good general replacement because you lose some documentation (the field
+>> name) when converting from records to tuples. Knowing what x[1] is is
+>> much harder than x.texture. This I definitely encountered in ML all the
+>> time when reading students' compilers (particularly things like the
+>> register allocation and other messy algorithmic stuff).
+>>
+>
+> Tuples aren't a good *general* replacement for records; they're a good
+> replacement for quick one-off records.
+>
+
+I think I would be ok with this if we have pattern matching so that I can
+name the tuple components. Is that a planned feature for Rust?
+
+
+> If you want the self-documenting aspect of records, then, well, use records
+> :) In fact, having to give each record a name arguably improves their
+> self-documenting nature.
+
+
+I want to avoid the case of coming up with awkward names for these types
+which are local to a particular module or function.
+
+-Rob
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110606/0a7809cb/attachment-0001.html>
+
+From marijnh at gmail.com  Mon Jun  6 10:16:58 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 6 Jun 2011 19:16:58 +0200
+Subject: [rust-dev] Proposal: nominal records
+In-Reply-To: <BANLkTik6cyHu8MP87UFcHhsEfDW__Mkqaw@mail.gmail.com>
+References: <4DEC5B6A.2060305@mozilla.com>
+	<BANLkTinXjnbNKrnqOkQ3CJ2g4ZNNVF0mgw@mail.gmail.com>
+	<4DEC6F42.7040808@mozilla.com>
+	<BANLkTi=HWOCx2-CfCajqBuaDJPSk8KSF8A@mail.gmail.com>
+	<4DECFE7C.4020601@mozilla.com>
+	<BANLkTik6cyHu8MP87UFcHhsEfDW__Mkqaw@mail.gmail.com>
+Message-ID: <BANLkTimDFuUj5gQ5u7zBtao+0=saX0G_Nw@mail.gmail.com>
+
+> I think I would be ok with this if we have pattern matching so that I can
+> name the tuple components. Is that a planned feature for Rust?
+
+Definitely. I hope to get to this soon (the pattern syntax in general
+is still up in the air though, that'll have to be resolved first).
+
+From brendan at mozilla.org  Mon Jun  6 10:18:25 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Mon, 6 Jun 2011 10:18:25 -0700
+Subject: [rust-dev] Proposal: nominal records
+In-Reply-To: <BANLkTik6cyHu8MP87UFcHhsEfDW__Mkqaw@mail.gmail.com>
+References: <4DEC5B6A.2060305@mozilla.com>
+	<BANLkTinXjnbNKrnqOkQ3CJ2g4ZNNVF0mgw@mail.gmail.com>
+	<4DEC6F42.7040808@mozilla.com>
+	<BANLkTi=HWOCx2-CfCajqBuaDJPSk8KSF8A@mail.gmail.com>
+	<4DECFE7C.4020601@mozilla.com>
+	<BANLkTik6cyHu8MP87UFcHhsEfDW__Mkqaw@mail.gmail.com>
+Message-ID: <C0FF9033-B7E0-4AF6-B4BD-DE3F4ADF47D9@mozilla.org>
+
+On Jun 6, 2011, at 10:08 AM, Rob Arnold wrote:
+
+> IMHO, you only get a benefit in not having to name the type if the record type appears exactly once. Otherwise you're scattering the record type definition throughout the code, making it harder to e.g. add new fields if you need to. This is why, in practice, every record in the standard library and rustc has a typedef.
+> 
+> If you get type-inferred lambdas then does this case become more common?
+
+Would hate for us to paint into a nominal-only corner short-term, then evolve longer-term in ways that reduced the pressure for nominal-only records.
+
+
+> If you want the self-documenting aspect of records, then, well, use records :) In fact, having to give each record a name arguably improves their self-documenting nature.
+> 
+> I want to avoid the case of coming up with awkward names for these types which are local to a particular module or function.
+
+This is one pain point. The other is the flip side of "scattering the record type definition throughout the code": having to depend on the one true name. If someone does "add new fields" then in large codebases, depending on how the record is used, structural types do not require all clients to be updated.
+
+(At least not in structurally typed systems I've seen -- sorry if I'm missing something deep that restricts Rust's structural types in the long term.)
+
+That's the beauty of structural types -- programming in the large without as much brittle nominal version locking. I'm told the CLR went structural after an early and way too brittle nominal assembly typing scheme.
+
+/be
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110606/61ed4704/attachment.html>
+
+From graydon at mozilla.com  Mon Jun  6 10:53:38 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 06 Jun 2011 10:53:38 -0700
+Subject: [rust-dev] Proposal: nominal records
+In-Reply-To: <BANLkTikvJ9GXDOLH_aVvTN0XG1EJB1DisA@mail.gmail.com>
+References: <4DEC5B6A.2060305@mozilla.com>
+	<BANLkTikvJ9GXDOLH_aVvTN0XG1EJB1DisA@mail.gmail.com>
+Message-ID: <4DED1422.60903@mozilla.com>
+
+On 11-06-06 08:22 AM, Peter Hull wrote:
+
+> Also, in Graydon's 'Syntax Changes' thread (18th May or so) I was
+> wondering whether tuples could be constructed with the same { } syntax
+> as recs, only omitting the field names. Were there any thoughts on
+> this idea - is it possible/desirable?
+
+Yeah; I've proposed elsewhere in syntax discussions (on the wiki) that 
+we remove tuples altogether and merge their use-cases (such as tag 
+arguments) into structural records. There are a variety of careful bits 
+to take care of here, but I think it's promising, and we're going to be 
+overhauling the structural declaration, constructor and pattern-matching 
+syntaxes to try to get a lot of these issues tidied up. We'll do some 
+experiments to find a sweet spot.
+
+Either way, I'd like to ask to defer this *particular* decision until 
+more progress has been made on basic plumbing. We have a somewhat 
+demanding, but tractable, list[1] of essential-and-major changes to get 
+through implementing.
+
+I don't think many (any?) of us want to fundamentally alter the 
+character of the language, so twiddling the nominal/structural bit on 
+records is an experiment we can run a bit later (few months from now) 
+when larger portions of the landscape have filled in.
+
+-Graydon
+
+[1] https://github.com/graydon/rust/issues?milestone=3
+
+From marijnh at gmail.com  Tue Jun  7 00:59:25 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 7 Jun 2011 09:59:25 +0200
+Subject: [rust-dev] alias analysis
+In-Reply-To: <BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>
+References: <4DE7FA6A.2070002@mozilla.com> <4DE94969.5010600@mozilla.com>
+	<4DE94CFF.2080301@mozilla.com> <4DE98F03.4080409@mozilla.com>
+	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>
+Message-ID: <BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>
+
+I committed a patch yesterday that I thought was a very good first
+start. However, this morning I've found some holes in it that make
+things look very bleak again.
+
+What my patch did was simply ensure one thing -- that whenever an
+alias was taken, it was verified that it was 'rooted' in a thing that
+would outlive it, where rooted means the value is either a local
+variable that isn't assigned to for the lifetime of the alias, or a
+local temporary value (which can't be assigned to), or it is a field
+directly dereferenced from another root, with the caveat that
+dereferencing a mutable field and then a box isn't allowed, because
+the mutable field could be reassigned, potentially freeing the box.
+
+This required only a handful changes to uses of aliases in our current
+code, and gets by without any kind of alias analysis. That's nice,
+because alias analysis is impossible to do perfectly, and since this
+is core behaviour, if we ever want to standardize Rust, we'd have to
+fix on some heuristic algorithm, describe it in the spec, and require
+every implementation to do exactly what our rustc does to be
+compatible. Since decent alias analysis is arbitrarily complex, this
+sound unattractive.
+
+Unfortunately, there's this hole I mentioned before. What this
+analysis guarantees is that the location pointed to by an alias will
+always hold a value of type X ? if you reassign to it, the alias will
+still be valid. Except when going through a tag type. If you have an
+alias inside a tag (as alt creates them) and you reassign its parent,
+your alias might not point at memory of the right type anymore.
+
+You can restrict values used for alt further, requiring that they are
+not just rooted, but 'rooted immutably' -- if they dereference their
+root, they may only do so through immutable fields/indices/unboxing. A
+very typical pattern in code is to take an alias and do an alt on
+that. Four ways to handle this case come to mind, all unattractive:
+
+ - Require all aliases to be immutably rooted. This breaks a *lot* of
+code, and would require much extra copying. If we went to a radically
+functional paradigm, this might work, but Rust is just not that kind
+of language.
+
+ - Don't allow stuff rooted in an alias to be matched with alt. Again,
+breaks tons of code, requires clunky copying to fix.
+
+ - Make alt implicitly (or explicitly) copy stuff. Not good for
+efficiency either.
+
+ - Have two kinds of aliases, those that must be immutably rooted and
+those that don't. Even more pointer types.
+
+I think I'm somewhat of out of ideas here. The scheme Patrick
+described with swapping unique pointers in and out would provide
+something of an solution that doesn't copy, but that moves Rust so far
+away from convenient simplicity that I really can't get behind it.
+You'd have a ritualized song and dance, with a bunch of leaky
+abstraction issues, every time you need to pass something by alias.
+It's important to keep in mind that if the avoidance of refcounting
+creates more indirection and overhead than the refcounting itself,
+we're on the wrong track.
+
+So, I'm about ready to try an 'everything is garbage collected'
+approach. There is a reason almost all recent languages have moved to
+that...
+
+Best,
+Marijn
+
+From pwalton at mozilla.com  Tue Jun  7 07:27:23 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Tue, 07 Jun 2011 07:27:23 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>
+References: <4DE7FA6A.2070002@mozilla.com>	<4DE94969.5010600@mozilla.com>	<4DE94CFF.2080301@mozilla.com>	<4DE98F03.4080409@mozilla.com>	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>
+	<BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>
+Message-ID: <4DEE354B.3090203@mozilla.com>
+
+On 6/7/11 12:59 AM, Marijn Haverbeke wrote:
+> Unfortunately, there's this hole I mentioned before. What this
+> analysis guarantees is that the location pointed to by an alias will
+> always hold a value of type X ? if you reassign to it, the alias will
+> still be valid. Except when going through a tag type. If you have an
+> alias inside a tag (as alt creates them) and you reassign its parent,
+> your alias might not point at memory of the right type anymore.
+
+Sorry if I'm misunderstanding, but I thought I covered that in my 
+previous email--we have to forbid access to the expression in an "alt" 
+statement inside the case blocks. This means that the expression obeys 
+normal alias rules, if it's an lval: there can only be one reference to 
+it so that forbidding access to that one lval actually forbids access to 
+the value.
+
+There's actually another problem I just thought of, but it's orthogonal 
+to this one. I have to get ready this morning, will elaborate in detail 
+later.
+
+Patrick
+
+From marijnh at gmail.com  Tue Jun  7 07:40:03 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 7 Jun 2011 16:40:03 +0200
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DEE354B.3090203@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com> <4DE94969.5010600@mozilla.com>
+	<4DE94CFF.2080301@mozilla.com> <4DE98F03.4080409@mozilla.com>
+	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>
+	<BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>
+	<4DEE354B.3090203@mozilla.com>
+Message-ID: <BANLkTinn524kzVVY5ZzhamNaoxS0xMxJdg@mail.gmail.com>
+
+> Sorry if I'm misunderstanding, but I thought I covered that in my previous
+> email--we have to forbid access to the expression in an "alt" statement
+> inside the case blocks.
+
+Your proposal seems to assume you'd only ever directly alias locals.
+That is a possible solution, but it seems excessively restrictive and
+awkward. I think there's at least 500 cases in rustc where we want to
+create an alias to a field or dereferenced box.
+
+From graydon at mozilla.com  Tue Jun  7 07:50:02 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 07 Jun 2011 07:50:02 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <BANLkTinn524kzVVY5ZzhamNaoxS0xMxJdg@mail.gmail.com>
+References: <4DE7FA6A.2070002@mozilla.com>	<4DE94969.5010600@mozilla.com>	<4DE94CFF.2080301@mozilla.com>	<4DE98F03.4080409@mozilla.com>	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>	<BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>	<4DEE354B.3090203@mozilla.com>
+	<BANLkTinn524kzVVY5ZzhamNaoxS0xMxJdg@mail.gmail.com>
+Message-ID: <4DEE3A9A.6010101@mozilla.com>
+
+On 07/06/2011 7:40 AM, Marijn Haverbeke wrote:
+>> Sorry if I'm misunderstanding, but I thought I covered that in my previous
+>> email--we have to forbid access to the expression in an "alt" statement
+>> inside the case blocks.
+>
+> Your proposal seems to assume you'd only ever directly alias locals.
+> That is a possible solution, but it seems excessively restrictive and
+> awkward. I think there's at least 500 cases in rustc where we want to
+> create an alias to a field or dereferenced box.
+
+Sure. But how many of them are potentially *interfering* with other 
+aliases in the same scope (under type-based and conservative root-based 
+analysis)?
+
+I'll reiterate my sense of surprise if we wind up with a system that 
+doesn't have to do pairwise analysis. I had always assumed this bug was 
+not about finding a local safety property that each referent needs to 
+obey, but rather a safe *relationship* between a referent and its 
+environment.
+
+-Graydon
+
+From marijnh at gmail.com  Tue Jun  7 07:52:48 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 7 Jun 2011 16:52:48 +0200
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DEE3A9A.6010101@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com> <4DE94969.5010600@mozilla.com>
+	<4DE94CFF.2080301@mozilla.com> <4DE98F03.4080409@mozilla.com>
+	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>
+	<BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>
+	<4DEE354B.3090203@mozilla.com>
+	<BANLkTinn524kzVVY5ZzhamNaoxS0xMxJdg@mail.gmail.com>
+	<4DEE3A9A.6010101@mozilla.com>
+Message-ID: <BANLkTikFRufMwrnv0jDS50acLcCxFNZQog@mail.gmail.com>
+
+> Sure. But how many of them are potentially *interfering* with other aliases
+> in the same scope (under type-based and conservative root-based analysis)?
+
+A lot. As I explained in my first email to this thread, type-based
+alias analysis is just not very helpful in our current type system.
+
+From gal at mozilla.com  Tue Jun  7 08:45:19 2011
+From: gal at mozilla.com (Andreas Gal)
+Date: Tue, 7 Jun 2011 08:45:19 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>
+References: <4DE7FA6A.2070002@mozilla.com> <4DE94969.5010600@mozilla.com>
+	<4DE94CFF.2080301@mozilla.com> <4DE98F03.4080409@mozilla.com>
+	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>
+	<BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>
+Message-ID: <699B20C4-702D-40DA-90D3-80848F700590@mozilla.com>
+
+> So, I'm about ready to try an 'everything is garbage collected'
+> approach. There is a reason almost all recent languages have moved to
+> that...
+
+Patrick and I were chatting about this yesterday. He feels that if we had unique pointers (which is really reference counting up to a maximum of 1 reference), a lot of places would use them (maybe even most applications where we use reference counting right now). The rest a GC could handle. If this is really the case, giving up generalized ref counting doesn't sound too bad.
+
+Andreas
+
+> 
+> Best,
+> Marijn
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From graydon at mozilla.com  Tue Jun  7 09:13:59 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 07 Jun 2011 09:13:59 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <699B20C4-702D-40DA-90D3-80848F700590@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com>
+	<4DE94969.5010600@mozilla.com>	<4DE94CFF.2080301@mozilla.com>
+	<4DE98F03.4080409@mozilla.com>	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>	<BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>
+	<699B20C4-702D-40DA-90D3-80848F700590@mozilla.com>
+Message-ID: <4DEE4E47.3090703@mozilla.com>
+
+On 07/06/2011 8:45 AM, Andreas Gal wrote:
+>> So, I'm about ready to try an 'everything is garbage collected'
+>> approach. There is a reason almost all recent languages have moved to
+>> that...
+>
+> Patrick and I were chatting about this yesterday. He feels that if we had unique pointers (which is really reference counting up to a maximum of 1 reference), a lot of places would use them (maybe even most applications where we use reference counting right now). The rest a GC could handle. If this is really the case, giving up generalized ref counting doesn't sound too bad.
+
+Ref counting is mostly orthogonal to the alias-analysis problem; there's 
+a relationship to one of the two induction hypotheses to prove, but even 
+then, only if you use a very conservative collector. Please don't 
+conflate the two. "Just use GC everywhere" does not solve the second 
+induction hypothesis (non-interference) so doesn't save us from having 
+to dig into this: you can still mutate a multiply-referenced interior 
+variant underfoot and cause someone to point into garbage memory.
+
+IOW: please, everyone, stop saying "let's just use GC". It's no more an 
+answer than "let's just do what C++ does" for scheduling. The problem is 
+not actually solved by that answer. It's a partial and unsafe answer 
+that paints us into a much harder to escape corner.
+
+(This is not to say we're not having a GC. We've been committed to 
+having a GC for the GC-allowed kinds of memory from ... at least a year 
+and a half. And we may lean on it more or less heavily depending on the 
+refcount costs we observe *once everything else is straightened out*. 
+But again, mostly orthogonal to alias analysis.)
+
+-Graydon
+
+
+From graydon at mozilla.com  Tue Jun  7 09:44:02 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 07 Jun 2011 09:44:02 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <BANLkTikFRufMwrnv0jDS50acLcCxFNZQog@mail.gmail.com>
+References: <4DE7FA6A.2070002@mozilla.com>	<4DE94969.5010600@mozilla.com>	<4DE94CFF.2080301@mozilla.com>	<4DE98F03.4080409@mozilla.com>	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>	<BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>	<4DEE354B.3090203@mozilla.com>	<BANLkTinn524kzVVY5ZzhamNaoxS0xMxJdg@mail.gmail.com>	<4DEE3A9A.6010101@mozilla.com>
+	<BANLkTikFRufMwrnv0jDS50acLcCxFNZQog@mail.gmail.com>
+Message-ID: <4DEE5552.5080908@mozilla.com>
+
+On 07/06/2011 7:52 AM, Marijn Haverbeke wrote:
+>> Sure. But how many of them are potentially *interfering* with other aliases
+>> in the same scope (under type-based and conservative root-based analysis)?
+>
+> A lot. As I explained in my first email to this thread, type-based
+> alias analysis is just not very helpful in our current type system.
+
+Sure. You explained this on friday, and we spent friday working out 
+details of how to manage the corner cases.
+
+There are two separate induction hypotheses to maintain:
+
+   - Every alias is outlived by its referent.
+
+   - An aliased memory cell can't be written-to by any other path
+     visible from the current scope.
+
+These two relate. That is, the referent-outlives-alias rule is only 
+possible to prove insofar as you can prove the no-alias-interference 
+rule (because, as you observed, someone could mutate the referent 
+through some other path).
+
+You thought you had proved the first in isolation with your patch 
+yesterday, for the most part. What patrick and I were discussing on 
+friday was how to prove the second, which we though to be a presequisite 
+for the first holding together. So when you told me yesterday that you 
+could get away with just proving the first in isolation, this is why I 
+was skeptical. We were quite aware of the "variant changes underfoot" 
+problem, and wanted to prohibit it (I think I stated it in my first 
+email to this thread). I still think we have to prove the second in 
+order to support the first.
+
+To enforce the second, we believe it suffices to show any of the following:
+
+   - Non-type-overlap between referent and any other alias in
+     scope at present.
+
+   - Non-pointer-equivalence between referent address and any other
+     alias in scope at present.
+
+     - Sub-cases:
+
+         - Referent is uniquely owned (local, interior-of-local, or
+           unique-pointer-from-local, ad infinitum) and other referent
+           is either in-a-shared-box or uniquely-owned from a different
+           path.
+
+         - Special cases patrick suggested: referent is the contents of
+           a *single level* of "immutable box held by a uniquely-owned
+           path", and we prove disjointness of that box address from all
+           other visible aliases either by static disjointness (as in
+           cases above) or, in the limit, by a shallow runtime test
+           against any ambiguous aliases currently in scope. This is
+           strictly to permit writing functions that by & so that they
+           can work on boxed or unboxed varieties of the same type.
+
+This also requires us to consider the LHS of an assignment to an upvar, 
+and the LHS of any assignment to a variable outside the scope of an alt, 
+as a short-lived alias. It might well be wise, for conservativeness 
+sake, to generalize this to all LHS-of-assignment. IOW consider each 
+assignment operator as a "call" to a function copy[T](&mutable T, &T) 
+and ensure that the 2 aliases formed by that rule aren't breaking any of 
+the rules above.
+
+(The receive operator |> probably goes in the same camp, and all the op= 
+operators, possibly a few more..)
+
+-Graydon
+
+From graydon at mozilla.com  Tue Jun  7 09:51:29 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 07 Jun 2011 09:51:29 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DEE5552.5080908@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com>	<4DE94969.5010600@mozilla.com>	<4DE94CFF.2080301@mozilla.com>	<4DE98F03.4080409@mozilla.com>	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>	<BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>	<4DEE354B.3090203@mozilla.com>	<BANLkTinn524kzVVY5ZzhamNaoxS0xMxJdg@mail.gmail.com>	<4DEE3A9A.6010101@mozilla.com>	<BANLkTikFRufMwrnv0jDS50acLcCxFNZQog@mail.gmail.com>
+	<4DEE5552.5080908@mozilla.com>
+Message-ID: <4DEE5711.9090209@mozilla.com>
+
+On 07/06/2011 9:44 AM, Graydon Hoare wrote:
+
+> - Special cases patrick suggested: referent is the contents of
+> a *single level* of "immutable box held by a uniquely-owned
+> path", and we prove disjointness of that box address from all
+> other visible aliases either by static disjointness (as in
+> cases above) or, in the limit, by a shallow runtime test
+> against any ambiguous aliases currently in scope. This is
+> strictly to permit writing functions that by & so that they
+> can work on boxed or unboxed varieties of the same type.
+
+Also be careful to note: this is shallow. This test does not involve 
+grovelling over an O(N) subgraph looking for pointer equality; it 
+involves O(K) checks where K is the set of possible conflicting aliases 
+in the local scope. It's shallow because it only traverses *one* shared 
+edge, and the induction hypothesis is that the caller could only have 
+done the same (so there's no way we'd have an alias in scope that 
+accessed the same box via a "deep" edge we forgot we have simultaneous 
+access to).
+
+I.e. it permits writing *foo or *x.y.z where there are no shared edges 
+between x and y or y and z, only between z and its referent.
+
+If you want to alias a shared box within a shared box, you need to pull 
+a copy of the pointer-to-the-box-you-want-to-alias aside into a local 
+and alias that. Can use the trick you wrote yesterday: write *{a.b.c} 
+rather than *a.b.c.
+
+It's a compromise between "expensive runtime test" and "prohibit all 
+aliasing of anything shared": only prohibit *deep* aliasing of anything 
+shared.
+
+-Graydon
+
+From graydon at mozilla.com  Tue Jun  7 12:24:57 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 07 Jun 2011 12:24:57 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DEE5711.9090209@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com>	<4DE94969.5010600@mozilla.com>	<4DE94CFF.2080301@mozilla.com>	<4DE98F03.4080409@mozilla.com>	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>	<BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>	<4DEE354B.3090203@mozilla.com>	<BANLkTinn524kzVVY5ZzhamNaoxS0xMxJdg@mail.gmail.com>	<4DEE3A9A.6010101@mozilla.com>	<BANLkTikFRufMwrnv0jDS50acLcCxFNZQog@mail.gmail.com>	<4DEE5552.5080908@mozilla.com>
+	<4DEE5711.9090209@mozilla.com>
+Message-ID: <4DEE7B09.70206@mozilla.com>
+
+On 11-06-07 09:51 AM, Graydon Hoare wrote:
+
+> It's a compromise between "expensive runtime test" and "prohibit all
+> aliasing of anything shared": only prohibit *deep* aliasing of anything
+> shared.
+
+As a further caveat: it requires that there be no mutable fields within 
+the direct referent of the aliased-part of the box. So in a local box 
+like this:
+
+     auto x = @rec(mutable a=10, b=@11, c=12);
+
+passing an alias to x, or x.a, or x.b is prohibited, but x.c is ok.
+
+(Patrick also made a bit of a digression on IRC about the possibility of 
+having a pattern-binding form &x rather than x to differentiate alt 
+pattern / destructuring-pattern bindings that copy rather than alias, 
+but we need rules for aliases that work, so I'm going to avoid derailing 
+this too much here.)
+
+If you like I'll write this up on a wiki page, to give it a bit more of 
+a permanent resting/refinement place.
+
+-Graydon
+
+From fw at deneb.enyo.de  Tue Jun  7 13:05:16 2011
+From: fw at deneb.enyo.de (Florian Weimer)
+Date: Tue, 07 Jun 2011 22:05:16 +0200
+Subject: [rust-dev] alias analysis
+In-Reply-To: <BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com> (Marijn
+	Haverbeke's message of "Tue, 7 Jun 2011 09:59:25 +0200")
+References: <4DE7FA6A.2070002@mozilla.com> <4DE94969.5010600@mozilla.com>
+	<4DE94CFF.2080301@mozilla.com> <4DE98F03.4080409@mozilla.com>
+	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>
+	<BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>
+Message-ID: <878vtdv24j.fsf@mid.deneb.enyo.de>
+
+* Marijn Haverbeke:
+
+> Unfortunately, there's this hole I mentioned before. What this
+> analysis guarantees is that the location pointed to by an alias will
+> always hold a value of type X ? if you reassign to it, the alias will
+> still be valid. Except when going through a tag type. If you have an
+> alias inside a tag (as alt creates them) and you reassign its parent,
+> your alias might not point at memory of the right type anymore.
+
+AFAICS, Ada has a somewhat similar issue (the affected types have
+"discriminants with defaults").  Over there, the prevalent feeling
+seems to be that destructive update of objects of types with
+discriminants with defaults is to blame, and not aliasing.
+Nevertheless, the language contains fairly complex rules which prevent
+obviously dangerous creation of aliases, but already Ada 83 gave up on
+dealing with aliased subprogram arguments, shifting responsibility to
+the programmer.
+
+From graydon at mozilla.com  Tue Jun  7 14:10:02 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 07 Jun 2011 14:10:02 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <878vtdv24j.fsf@mid.deneb.enyo.de>
+References: <4DE7FA6A.2070002@mozilla.com>
+	<4DE94969.5010600@mozilla.com>	<4DE94CFF.2080301@mozilla.com>
+	<4DE98F03.4080409@mozilla.com>	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>	<BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>
+	<878vtdv24j.fsf@mid.deneb.enyo.de>
+Message-ID: <4DEE93AA.6020307@mozilla.com>
+
+On 11-06-07 01:05 PM, Florian Weimer wrote:
+
+> AFAICS, Ada has a somewhat similar issue (the affected types have
+> "discriminants with defaults").  Over there, the prevalent feeling
+> seems to be that destructive update of objects of types with
+> discriminants with defaults is to blame, and not aliasing.
+> Nevertheless, the language contains fairly complex rules which prevent
+> obviously dangerous creation of aliases, but already Ada 83 gave up on
+> dealing with aliased subprogram arguments, shifting responsibility to
+> the programmer.
+
+Yeah. The story of Ada's not-quite-right approaches to memory-safe 
+aliasing have always weighed heavily on my mind. The Ada rationale 
+glares at me from my bookcase every night.
+
+In case anyone's got any illusions that this is some kind of a "new 
+thing" I was surprised to run across: I've long known there was going to 
+be an ugly set of cases here requiring a lot of delicate 
+arrangement-of-pieces. I convinced myself that there was enough 
+permutation-space in the design landscape, and enough instability in 
+other parts of the memory model, that I wasn't going to be able to nail 
+down the aliasing rules for most of this early development period. Too 
+much has been in flux (copy-on-write, GC, layer/kind system, uniqueness 
+guarantees, typestate system, mutability representation, temporaries 
+from expression-evaluation, etc. etc.)
+
+But I've worried about it nonetheless, and regularly returned to sketch 
+possibilities and try to convince myself we hadn't doomed all possible 
+solutions yet; been dreading this bug rising to "blocking" status since 
+well before firefox *2* shipped. This is probably my biggest area of 
+concern in the whole language. So if we can hold fast at the level of 
+complexity of the rules I outlined a couple messages ago in this thread, 
+I'll be deliriously happy and relieved.
+
+Please don't consider that level of complexity a failure. Anything we 
+can summarize in that "small" a list of rules, cases and runtime checks 
+would be a *total success*.
+
+-Graydon
+
+From dherman at mozilla.com  Tue Jun  7 21:54:53 2011
+From: dherman at mozilla.com (David Herman)
+Date: Tue, 7 Jun 2011 21:54:53 -0700
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DEE93AA.6020307@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com>
+	<4DE94969.5010600@mozilla.com>	<4DE94CFF.2080301@mozilla.com>
+	<4DE98F03.4080409@mozilla.com>	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>	<BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>
+	<878vtdv24j.fsf@mid.deneb.enyo.de> <4DEE93AA.6020307@mozilla.com>
+Message-ID: <6A6C95D1-6486-4012-ADAA-F7D3D7BA6F8F@mozilla.com>
+
+Indeed. This was always going to be one of the trickiest part of the design. In this latest iteration, we've only been attacking it for a couple of days. We can't expect a solution to just pop out that easily; we will have to bang our heads against it for a while. And we've already seen a number of creative and promising ideas.
+
+FWIW, I have a pretty good feeling that we're going to converge on something reasonable. Not perfect, but reasonable. Patience, everyone -- we'll get there!
+
+Dave
+
+On Jun 7, 2011, at 2:10 PM, Graydon Hoare wrote:
+
+> On 11-06-07 01:05 PM, Florian Weimer wrote:
+> 
+>> AFAICS, Ada has a somewhat similar issue (the affected types have
+>> "discriminants with defaults").  Over there, the prevalent feeling
+>> seems to be that destructive update of objects of types with
+>> discriminants with defaults is to blame, and not aliasing.
+>> Nevertheless, the language contains fairly complex rules which prevent
+>> obviously dangerous creation of aliases, but already Ada 83 gave up on
+>> dealing with aliased subprogram arguments, shifting responsibility to
+>> the programmer.
+> 
+> Yeah. The story of Ada's not-quite-right approaches to memory-safe aliasing have always weighed heavily on my mind. The Ada rationale glares at me from my bookcase every night.
+> 
+> In case anyone's got any illusions that this is some kind of a "new thing" I was surprised to run across: I've long known there was going to be an ugly set of cases here requiring a lot of delicate arrangement-of-pieces. I convinced myself that there was enough permutation-space in the design landscape, and enough instability in other parts of the memory model, that I wasn't going to be able to nail down the aliasing rules for most of this early development period. Too much has been in flux (copy-on-write, GC, layer/kind system, uniqueness guarantees, typestate system, mutability representation, temporaries from expression-evaluation, etc. etc.)
+> 
+> But I've worried about it nonetheless, and regularly returned to sketch possibilities and try to convince myself we hadn't doomed all possible solutions yet; been dreading this bug rising to "blocking" status since well before firefox *2* shipped. This is probably my biggest area of concern in the whole language. So if we can hold fast at the level of complexity of the rules I outlined a couple messages ago in this thread, I'll be deliriously happy and relieved.
+> 
+> Please don't consider that level of complexity a failure. Anything we can summarize in that "small" a list of rules, cases and runtime checks would be a *total success*.
+> 
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From marijnh at gmail.com  Thu Jun  9 04:35:19 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Thu, 9 Jun 2011 13:35:19 +0200
+Subject: [rust-dev] alias analysis
+In-Reply-To: <4DEE93AA.6020307@mozilla.com>
+References: <4DE7FA6A.2070002@mozilla.com> <4DE94969.5010600@mozilla.com>
+	<4DE94CFF.2080301@mozilla.com> <4DE98F03.4080409@mozilla.com>
+	<BANLkTi=pZRc4hD67jASS01scj6HaMEQpFg@mail.gmail.com>
+	<BANLkTim-U4Wx552ETHh4-RWEFC_jJ5U2Aw@mail.gmail.com>
+	<878vtdv24j.fsf@mid.deneb.enyo.de> <4DEE93AA.6020307@mozilla.com>
+Message-ID: <BANLkTikWenw=ASXDsYjmbL6uD8j335tQeQ@mail.gmail.com>
+
+Some details on the new alias checker are at
+https://github.com/graydon/rust/commit/beda82ddf1f482f286a8d9af3402626dc56d6fea
+
+A few remarks on its limitations at
+https://github.com/graydon/rust/commit/77c1b9650f055932bcad5983b9847517eba6c516
+
+From graydon at mozilla.com  Thu Jun  9 10:19:40 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 09 Jun 2011 10:19:40 -0700
+Subject: [rust-dev] LLVM version bump
+Message-ID: <4DF100AC.7070504@mozilla.com>
+
+Apologies for the late warning, I bumped the tinderbox version of LLVM 
+yesterday and accepted changes that depend on that bump.
+
+Tinderboxes are upgraded to 132756, but you can probably just take 
+"current svn" as that's all we did to pick it.
+
+-Graydon
+
+From pwalton at mozilla.com  Thu Jun  9 18:26:14 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 09 Jun 2011 18:26:14 -0700
+Subject: [rust-dev] Unique pointer syntax
+Message-ID: <4DF172B6.4050600@mozilla.com>
+
+I was going to use ~foo to construct a unique pointer to foo, but ~ 
+conflicts with bitwise not. We have to do something. Any ideas?
+
+Patrick
+
+From tellrob at gmail.com  Thu Jun  9 19:50:02 2011
+From: tellrob at gmail.com (Rob Arnold)
+Date: Thu, 9 Jun 2011 19:50:02 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <4DF172B6.4050600@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com>
+Message-ID: <BANLkTikPbivFS8vFx=_mkEGLJmfUn6OO2Q@mail.gmail.com>
+
+For some reason !foo seems nice to me (maybe it has some nice reference to
+logic?). Are unique pointers expected to be used a lot?
+
+-Rob
+
+On Thu, Jun 9, 2011 at 6:26 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+
+> I was going to use ~foo to construct a unique pointer to foo, but ~
+> conflicts with bitwise not. We have to do something. Any ideas?
+>
+> Patrick
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110609/20d873cf/attachment.html>
+
+From pwalton at mozilla.com  Thu Jun  9 19:50:41 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 09 Jun 2011 19:50:41 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <BANLkTikPbivFS8vFx=_mkEGLJmfUn6OO2Q@mail.gmail.com>
+References: <4DF172B6.4050600@mozilla.com>
+	<BANLkTikPbivFS8vFx=_mkEGLJmfUn6OO2Q@mail.gmail.com>
+Message-ID: <4DF18681.2050109@mozilla.com>
+
+On 6/9/11 7:50 PM, Rob Arnold wrote:
+> For some reason !foo seems nice to me (maybe it has some nice reference
+> to logic?). Are unique pointers expected to be used a lot?
+
+!foo is taken by unary !.
+
+Patrick
+
+From tellrob at gmail.com  Thu Jun  9 19:51:33 2011
+From: tellrob at gmail.com (Rob Arnold)
+Date: Thu, 9 Jun 2011 19:51:33 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <4DF18681.2050109@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com>
+	<BANLkTikPbivFS8vFx=_mkEGLJmfUn6OO2Q@mail.gmail.com>
+	<4DF18681.2050109@mozilla.com>
+Message-ID: <BANLkTimMhJzu7uCZR9O59bpmyxCRXjUs6Q@mail.gmail.com>
+
+Is foo a type or expression? I was assuming type in which case it would be
+unambiguous...
+
+On Thu, Jun 9, 2011 at 7:50 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+
+> On 6/9/11 7:50 PM, Rob Arnold wrote:
+>
+>> For some reason !foo seems nice to me (maybe it has some nice reference
+>> to logic?). Are unique pointers expected to be used a lot?
+>>
+>
+> !foo is taken by unary !.
+>
+> Patrick
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110609/9170c131/attachment.html>
+
+From pwalton at mozilla.com  Thu Jun  9 19:55:29 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 09 Jun 2011 19:55:29 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <BANLkTimMhJzu7uCZR9O59bpmyxCRXjUs6Q@mail.gmail.com>
+References: <4DF172B6.4050600@mozilla.com>	<BANLkTikPbivFS8vFx=_mkEGLJmfUn6OO2Q@mail.gmail.com>	<4DF18681.2050109@mozilla.com>
+	<BANLkTimMhJzu7uCZR9O59bpmyxCRXjUs6Q@mail.gmail.com>
+Message-ID: <4DF187A1.2080402@mozilla.com>
+
+On 6/9/11 7:51 PM, Rob Arnold wrote:
+> Is foo a type or expression? I was assuming type in which case it would
+> be unambiguous...
+
+Expression. This is for constructing unique pointers. ~ would be no 
+problem if we were only talking about the type language.
+
+Patrick
+
+From respindola at mozilla.com  Thu Jun  9 20:15:51 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Thu, 09 Jun 2011 23:15:51 -0400
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <4DF187A1.2080402@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com>	<BANLkTikPbivFS8vFx=_mkEGLJmfUn6OO2Q@mail.gmail.com>	<4DF18681.2050109@mozilla.com>	<BANLkTimMhJzu7uCZR9O59bpmyxCRXjUs6Q@mail.gmail.com>
+	<4DF187A1.2080402@mozilla.com>
+Message-ID: <4DF18C67.9070103@mozilla.com>
+
+On 11-06-09 10:55 PM, Patrick Walton wrote:
+> On 6/9/11 7:51 PM, Rob Arnold wrote:
+>> Is foo a type or expression? I was assuming type in which case it would
+>> be unambiguous...
+>
+> Expression. This is for constructing unique pointers. ~ would be no
+> problem if we were only talking about the type language.
+
+The c++ ish && maybe?
+
+> Patrick
+
+Cheers,
+Rafael
+
+From marijnh at gmail.com  Thu Jun  9 22:57:20 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 10 Jun 2011 07:57:20 +0200
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <4DF172B6.4050600@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com>
+Message-ID: <BANLkTin4fFmcNuxVPPE63xw-5k1GMTzE+w@mail.gmail.com>
+
+Unless we're committed to stay as close to C as possible, I'd move
+bitwise not (which is rather rare) to something else ('~~' maybe) and
+use ~ for unique pointers. It's important that we'll use something
+simple for uniques, as they are expected to be all over the place.
+
+From pwalton at mozilla.com  Thu Jun  9 23:05:17 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 09 Jun 2011 23:05:17 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <4DF172B6.4050600@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com>
+Message-ID: <4DF1B41D.4080607@mozilla.com>
+
+On 6/9/11 6:26 PM, Patrick Walton wrote:
+> I was going to use ~foo to construct a unique pointer to foo, but ~
+> conflicts with bitwise not. We have to do something. Any ideas?
+
+Dave (I think) suggested ^, which seems reasonable to me. Any objections?
+
+Patrick
+
+From graydon at mozilla.com  Thu Jun  9 23:23:51 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 09 Jun 2011 23:23:51 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <4DF1B41D.4080607@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com> <4DF1B41D.4080607@mozilla.com>
+Message-ID: <4DF1B877.1030504@mozilla.com>
+
+On 09/06/2011 11:05 PM, Patrick Walton wrote:
+> On 6/9/11 6:26 PM, Patrick Walton wrote:
+>> I was going to use ~foo to construct a unique pointer to foo, but ~
+>> conflicts with bitwise not. We have to do something. Any ideas?
+>
+> Dave (I think) suggested ^, which seems reasonable to me. Any objections?
+
+Personally I think I'd go with ~ and just merge boolean and bitwise !, 
+since in rust we don't auto-convert things to bool, and without 
+auto-bool conversion they're the same operator (just on different 
+domains). I doubt anyone would miss bitwise xor either, of course, but 
+I'd save ^ for some future act of sigil-stealing desperation.
+
+(Also ^ for pointers reminds people of Pascal, which we all know is To 
+Be Avoided At All Costs :)
+
+-Graydon
+
+From sebastian.sylvan at gmail.com  Fri Jun 10 00:14:59 2011
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Fri, 10 Jun 2011 00:14:59 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <4DF1B877.1030504@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com> <4DF1B41D.4080607@mozilla.com>
+	<4DF1B877.1030504@mozilla.com>
+Message-ID: <BANLkTik7_J6T+a0kOmNC=s7iQXdnxLhKVw@mail.gmail.com>
+
+On Thu, Jun 9, 2011 at 11:23 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+> (Also ^ for pointers reminds people of Pascal, which we all know is To Be
+> Avoided At All Costs :)
+
+Worse than Pascal, it's also used in C++/CLI!
+
+-- 
+Sebastian Sylvan
+
+From graydon at mozilla.com  Fri Jun 10 00:21:11 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 10 Jun 2011 00:21:11 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <BANLkTik7_J6T+a0kOmNC=s7iQXdnxLhKVw@mail.gmail.com>
+References: <4DF172B6.4050600@mozilla.com>	<4DF1B41D.4080607@mozilla.com>	<4DF1B877.1030504@mozilla.com>
+	<BANLkTik7_J6T+a0kOmNC=s7iQXdnxLhKVw@mail.gmail.com>
+Message-ID: <4DF1C5E7.2040603@mozilla.com>
+
+On 10/06/2011 12:14 AM, Sebastian Sylvan wrote:
+> On Thu, Jun 9, 2011 at 11:23 PM, Graydon Hoare<graydon at mozilla.com>  wrote:
+>> (Also ^ for pointers reminds people of Pascal, which we all know is To Be
+>> Avoided At All Costs :)
+>
+> Worse than Pascal, it's also used in C++/CLI!
+>
+
+That settles it, it's _cursed_.
+
+-Graydon
+
+
+From noelgrandin at gmail.com  Fri Jun 10 07:53:35 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Fri, 10 Jun 2011 16:53:35 +0200
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <4DF172B6.4050600@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com>
+Message-ID: <4DF22FEF.6010106@gmail.com>
+
+If it's not going to be used a large amount you could use a keyword:
+
+   uniq foo
+
+-- Noel
+
+Patrick Walton wrote:
+> I was going to use ~foo to construct a unique pointer to foo, but ~ conflicts with bitwise not. We have to do
+> something. Any ideas?
+>
+> Patrick
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From dherman at mozilla.com  Fri Jun 10 09:09:56 2011
+From: dherman at mozilla.com (David Herman)
+Date: Fri, 10 Jun 2011 09:09:56 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <4DF22FEF.6010106@gmail.com>
+References: <4DF172B6.4050600@mozilla.com> <4DF22FEF.6010106@gmail.com>
+Message-ID: <92F1CE54-82E6-4653-9937-B0EB44322395@mozilla.com>
+
+The intention is that it will be used a lot.
+
+Dave
+
+On Jun 10, 2011, at 7:53 AM, Noel Grandin wrote:
+
+> If it's not going to be used a large amount you could use a keyword:
+> 
+>   uniq foo
+> 
+> -- Noel
+> 
+> Patrick Walton wrote:
+>> I was going to use ~foo to construct a unique pointer to foo, but ~ conflicts with bitwise not. We have to do
+>> something. Any ideas?
+>> 
+>> Patrick
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From dherman at mozilla.com  Fri Jun 10 09:12:19 2011
+From: dherman at mozilla.com (David Herman)
+Date: Fri, 10 Jun 2011 09:12:19 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <BANLkTin4fFmcNuxVPPE63xw-5k1GMTzE+w@mail.gmail.com>
+References: <4DF172B6.4050600@mozilla.com>
+	<BANLkTin4fFmcNuxVPPE63xw-5k1GMTzE+w@mail.gmail.com>
+Message-ID: <2930BD6B-6828-4DEA-89D0-9C0CCCDB327A@mozilla.com>
+
+Since unlike C/C++ we have a distinct bool type, would it be possible to overload ! so that on numeric types it means bitwise not? This would free up ~ to use for unique pointers.
+
+Dave
+
+On Jun 9, 2011, at 10:57 PM, Marijn Haverbeke wrote:
+
+> Unless we're committed to stay as close to C as possible, I'd move
+> bitwise not (which is rather rare) to something else ('~~' maybe) and
+> use ~ for unique pointers. It's important that we'll use something
+> simple for uniques, as they are expected to be all over the place.
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From erick.tryzelaar at gmail.com  Fri Jun 10 09:25:23 2011
+From: erick.tryzelaar at gmail.com (Erick Tryzelaar)
+Date: Fri, 10 Jun 2011 09:25:23 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <2930BD6B-6828-4DEA-89D0-9C0CCCDB327A@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com>
+	<BANLkTin4fFmcNuxVPPE63xw-5k1GMTzE+w@mail.gmail.com>
+	<2930BD6B-6828-4DEA-89D0-9C0CCCDB327A@mozilla.com>
+Message-ID: <BANLkTimaFCQWN4Sq1cS1Ps0j3v9SfpMRaQ@mail.gmail.com>
+
+Or bitwise not could be turned into a keyword or intrinsic function.
+We did that with felix, with "bnot", "bor", and "band" since those
+functions aren't used that often.
+
+On Fri, Jun 10, 2011 at 9:12 AM, David Herman <dherman at mozilla.com> wrote:
+> Since unlike C/C++ we have a distinct bool type, would it be possible to overload ! so that on numeric types it means bitwise not? This would free up ~ to use for unique pointers.
+>
+> Dave
+>
+> On Jun 9, 2011, at 10:57 PM, Marijn Haverbeke wrote:
+>
+>> Unless we're committed to stay as close to C as possible, I'd move
+>> bitwise not (which is rather rare) to something else ('~~' maybe) and
+>> use ~ for unique pointers. It's important that we'll use something
+>> simple for uniques, as they are expected to be all over the place.
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+From tellrob at gmail.com  Fri Jun 10 09:34:20 2011
+From: tellrob at gmail.com (Rob Arnold)
+Date: Fri, 10 Jun 2011 09:34:20 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <92F1CE54-82E6-4653-9937-B0EB44322395@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com> <4DF22FEF.6010106@gmail.com>
+	<92F1CE54-82E6-4653-9937-B0EB44322395@mozilla.com>
+Message-ID: <BANLkTi=R_YZOWeqnb_Qq_J3rq-9KP+GZ=g@mail.gmail.com>
+
+Should it be the default then w/non-unique pointers growing some syntax
+instead?
+
+-Rob
+
+On Fri, Jun 10, 2011 at 9:09 AM, David Herman <dherman at mozilla.com> wrote:
+
+> The intention is that it will be used a lot.
+>
+> Dave
+>
+> On Jun 10, 2011, at 7:53 AM, Noel Grandin wrote:
+>
+> > If it's not going to be used a large amount you could use a keyword:
+> >
+> >   uniq foo
+> >
+> > -- Noel
+> >
+> > Patrick Walton wrote:
+> >> I was going to use ~foo to construct a unique pointer to foo, but ~
+> conflicts with bitwise not. We have to do
+> >> something. Any ideas?
+> >>
+> >> Patrick
+> >> _______________________________________________
+> >> Rust-dev mailing list
+> >> Rust-dev at mozilla.org
+> >> https://mail.mozilla.org/listinfo/rust-dev
+> >
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org
+> > https://mail.mozilla.org/listinfo/rust-dev
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110610/9e7b0fe1/attachment.html>
+
+From dherman at mozilla.com  Fri Jun 10 09:53:08 2011
+From: dherman at mozilla.com (David Herman)
+Date: Fri, 10 Jun 2011 09:53:08 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <BANLkTi=R_YZOWeqnb_Qq_J3rq-9KP+GZ=g@mail.gmail.com>
+References: <4DF172B6.4050600@mozilla.com> <4DF22FEF.6010106@gmail.com>
+	<92F1CE54-82E6-4653-9937-B0EB44322395@mozilla.com>
+	<BANLkTi=R_YZOWeqnb_Qq_J3rq-9KP+GZ=g@mail.gmail.com>
+Message-ID: <F86A3557-C6B3-43AD-9410-7420EE2CBBBE@mozilla.com>
+
+The default is containment, not a pointer. (Non-unique pointers are spelled with @.) There's strong C/C++ precedent for containment to be the default.
+
+Dave
+
+On Jun 10, 2011, at 9:34 AM, Rob Arnold wrote:
+
+> Should it be the default then w/non-unique pointers growing some syntax instead?
+> 
+> -Rob
+> 
+> On Fri, Jun 10, 2011 at 9:09 AM, David Herman <dherman at mozilla.com> wrote:
+> The intention is that it will be used a lot.
+> 
+> Dave
+> 
+> On Jun 10, 2011, at 7:53 AM, Noel Grandin wrote:
+> 
+> > If it's not going to be used a large amount you could use a keyword:
+> >
+> >   uniq foo
+> >
+> > -- Noel
+> >
+> > Patrick Walton wrote:
+> >> I was going to use ~foo to construct a unique pointer to foo, but ~ conflicts with bitwise not. We have to do
+> >> something. Any ideas?
+> >>
+> >> Patrick
+> >> _______________________________________________
+> >> Rust-dev mailing list
+> >> Rust-dev at mozilla.org
+> >> https://mail.mozilla.org/listinfo/rust-dev
+> >
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org
+> > https://mail.mozilla.org/listinfo/rust-dev
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+> 
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110610/7fe15065/attachment.html>
+
+From graydon at mozilla.com  Fri Jun 10 09:58:49 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 10 Jun 2011 09:58:49 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <2930BD6B-6828-4DEA-89D0-9C0CCCDB327A@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com>	<BANLkTin4fFmcNuxVPPE63xw-5k1GMTzE+w@mail.gmail.com>
+	<2930BD6B-6828-4DEA-89D0-9C0CCCDB327A@mozilla.com>
+Message-ID: <4DF24D49.1040409@mozilla.com>
+
+On 11-06-10 09:12 AM, David Herman wrote:
+> Since unlike C/C++ we have a distinct bool type, would it be possible to overload ! so that on numeric types it means bitwise not? This would free up ~ to use for unique pointers.
+
+... That's what I said last night (and have said every other time we 
+discuss this :)
+
+-Graydon
+
+From dherman at mozilla.com  Fri Jun 10 10:08:36 2011
+From: dherman at mozilla.com (David Herman)
+Date: Fri, 10 Jun 2011 10:08:36 -0700
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <4DF24D49.1040409@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com>	<BANLkTin4fFmcNuxVPPE63xw-5k1GMTzE+w@mail.gmail.com>
+	<2930BD6B-6828-4DEA-89D0-9C0CCCDB327A@mozilla.com>
+	<4DF24D49.1040409@mozilla.com>
+Message-ID: <862C71EA-9ED9-4B16-830C-FF5278AE190E@mozilla.com>
+
+So you did -- sorry I missed that.
+
+Dave
+
+On Jun 10, 2011, at 9:58 AM, Graydon Hoare wrote:
+
+> On 11-06-10 09:12 AM, David Herman wrote:
+>> Since unlike C/C++ we have a distinct bool type, would it be possible to overload ! so that on numeric types it means bitwise not? This would free up ~ to use for unique pointers.
+> 
+> ... That's what I said last night (and have said every other time we discuss this :)
+> 
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From respindola at mozilla.com  Fri Jun 10 12:29:11 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Fri, 10 Jun 2011 15:29:11 -0400
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <4DF1B877.1030504@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com> <4DF1B41D.4080607@mozilla.com>
+	<4DF1B877.1030504@mozilla.com>
+Message-ID: <4DF27087.5090302@mozilla.com>
+
+On 11-06-10 02:23 AM, Graydon Hoare wrote:
+>
+> Personally I think I'd go with ~ and just merge boolean and bitwise !
+
+I like that!
+
+Cheers,
+Rafael
+
+From brendan at mozilla.org  Fri Jun 10 12:52:19 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Fri, 10 Jun 2011 14:52:19 -0500
+Subject: [rust-dev] Unique pointer syntax
+In-Reply-To: <4DF27087.5090302@mozilla.com>
+References: <4DF172B6.4050600@mozilla.com> <4DF1B41D.4080607@mozilla.com>
+	<4DF1B877.1030504@mozilla.com> <4DF27087.5090302@mozilla.com>
+Message-ID: <7D5DDFF0-277C-492F-BA22-A478D09007C7@mozilla.org>
+
+On Jun 10, 2011, at 2:29 PM, Rafael Avila de Espindola wrote:
+
+> On 11-06-10 02:23 AM, Graydon Hoare wrote:
+>> 
+>> Personally I think I'd go with ~ and just merge boolean and bitwise !
+> 
+> I like that!
+
+As a HAKMEM print-out owner and long time C bit-twiddler I will be sad, but I'll get over it.
+
+/be
+
+From rafael.espindola at gmail.com  Mon Jun 13 13:16:15 2011
+From: rafael.espindola at gmail.com (Rafael Avila de Espindola)
+Date: Mon, 13 Jun 2011 16:16:15 -0400
+Subject: [rust-dev] Fwd: Re: [cfe-dev] Detecting ARC via #if(def)?
+Message-ID: <4DF6700F.8030001@gmail.com>
+
+BTW, ARC looks a bit like what rust does, should be interesting to see 
+how it was implemented.
+
+-------- Original Message --------
+Subject: Re: [cfe-dev] Detecting ARC via #if(def)?
+Date: Mon, 13 Jun 2011 09:29:10 -0700
+From: Chris Lattner <clattner at apple.com>
+To: Eli Friedman <eli.friedman at gmail.com>
+CC: cfe-dev at cs.uiuc.edu
+
+
+On Jun 13, 2011, at 9:14 AM, Eli Friedman wrote:
+
+> On Mon, Jun 13, 2011 at 8:45 AM, marc hoffman <mh at elitedev.com> wrote:
+>> i'm hoping this is not NDA-covered, but with LLV/Clang itself being open
+>> source i assume it's not:
+>> at WWDC i was told there is a functionality in clang/LLVM to check for
+>> availability of specific features in general, and for whether the current
+>> code is being compiled with ARC or not, specifically, via an #if(def) - the
+>> goal being ro write a piece of code that can compile with and w/o ARC, by
+>> #if(def)ing a handful of retain/release calls.
+>> i was told this was well documented in the clang docs, but i've been unable
+>> to find anything regarding this - is anyone here aware of this featyre (and
+>> of the option to check for that represents ARC) and could point me into the
+>> right direction?
+>
+> ARC hasn't landed in the public repository yet.
+
+FYI, ETA is ~Wednesday.
+
+-Chris
+_______________________________________________
+cfe-dev mailing list
+cfe-dev at cs.uiuc.edu
+http://lists.cs.uiuc.edu/mailman/listinfo/cfe-dev
+
+From noelgrandin at gmail.com  Thu Jun 16 00:17:30 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Thu, 16 Jun 2011 09:17:30 +0200
+Subject: [rust-dev] automatic reference counting in objective-C
+Message-ID: <BANLkTiktcRWSkeXv3nQBEVxmKRocrpe17g@mail.gmail.com>
+
+Hi
+
+Possibily of interest - this is the just released spec for automatic
+referencing counting in Objective-C.
+
+http://clang.llvm.org/docs/AutomaticReferenceCounting.html
+
+-- Noel
+
+From marijnh at gmail.com  Mon Jun 20 15:05:39 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 21 Jun 2011 00:05:39 +0200
+Subject: [rust-dev] What I did to the AST
+Message-ID: <BANLkTik_uOHE8u7k5EdrAU-OR3jNiqpSnw@mail.gmail.com>
+
+Just an update, so that people don't get confused...
+
+Not being mentally capable of anything more advanced (air travel), I
+spent today simplifying our AST representation a little. Most
+importantly, nodes no longer carry both def_ids and anns, but just a
+single node_id, which is an int, by which they are identified. To get
+from this (in-crate) id number to a full def_id, call ast::local_def
+on it, which returns the traditional (crate_num, node_id) pair. Most
+code only looks at local nodes, though, and doesn't need def_ids. This
+change was a bit more invasive than I originally imagined, so the
+patch is huge.
+
+Beyond that, I added an ast_map pass that indexes all exprs and items
+by node_id, and then wired things so that that table is passed to the
+various passes that need such an index, instead of building one up
+again and again (four tables were replaced). Do use this table
+whenever you need to look nodes up by id, and extend it when you need
+nodes that are not currently indexed (local defs, methods...)
+
+Cheers,
+Marijn
+
+From respindola at mozilla.com  Tue Jun 21 21:28:55 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Wed, 22 Jun 2011 00:28:55 -0400
+Subject: [rust-dev] [graydon/rust] edf73f: Setting rt optimization on OS
+ X to -O0 when using ...
+In-Reply-To: <mailman.25280.1308687457.15846.rust-commits@mozilla.org>
+References: <mailman.25280.1308687457.15846.rust-commits@mozilla.org>
+Message-ID: <4E016F87.90707@mozilla.com>
+
+On 11-06-21 4:17 PM, rust-commits at mozilla.org wrote:
+> Branch: refs/heads/master Home:   https://github.com/graydon/rust
+>
+> Commit: edf73f051270b0dadf2f6d24070cfe98be6a41e2
+> https://github.com/graydon/rust/commit/edf73f051270b0dadf2f6d24070cfe98be6a41e2
+>
+>
+Author: Eric Holk<eholk at mozilla.com>
+> Date:   2011-06-21 (Tue, 21 Jun 2011)
+>
+> Changed paths: M mk/platform.mk
+>
+> Log Message: ----------- Setting rt optimization on OS X to -O0 when
+> using clang, like we already do with gcc. Tail-call elimination was
+> causing valgrind errors with stack switching. Closes #494.
+
+What version of clang are you using? This sounds like a bug I fixed some 
+time ago:
+
+http://llvm.org/viewvc/llvm-project?view=rev&revision=131399
+
+Cheers,
+Rafael
+
+From eholk at mozilla.com  Wed Jun 22 11:08:51 2011
+From: eholk at mozilla.com (Eric Holk)
+Date: Wed, 22 Jun 2011 11:08:51 -0700 (PDT)
+Subject: [rust-dev] [graydon/rust] edf73f: Setting rt optimization on OS
+ X to -O0 when using ...
+In-Reply-To: <4E016F87.90707@mozilla.com>
+Message-ID: <732054554.301703.1308766131452.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+Thanks, Rafael! I'm using revision 133533, so your fix should be in there.
+
+We aren't exactly using setjmp, instead we're using some hand-written assembly that performs basically the same task. I'm guessing this is why you fix didn't catch this issue.
+
+Is there an attribute or annotation I can put on my function that says "never use tail call elimination on calls to this function?" If so, that might be a better way to fix it. Writing the whole swap context function in assembly would probably work as well...
+
+-Eric
+
+----- Original Message -----
+From: "Rafael ?vila de Esp?ndola" <respindola at mozilla.com>
+To: rust-dev at mozilla.org
+Sent: Tuesday, June 21, 2011 9:28:55 PM
+Subject: Re: [rust-dev] [graydon/rust] edf73f: Setting rt optimization on OS X to -O0 when using ...
+
+On 11-06-21 4:17 PM, rust-commits at mozilla.org wrote:
+> Branch: refs/heads/master Home:   https://github.com/graydon/rust
+>
+> Commit: edf73f051270b0dadf2f6d24070cfe98be6a41e2
+> https://github.com/graydon/rust/commit/edf73f051270b0dadf2f6d24070cfe98be6a41e2
+>
+>
+Author: Eric Holk<eholk at mozilla.com>
+> Date:   2011-06-21 (Tue, 21 Jun 2011)
+>
+> Changed paths: M mk/platform.mk
+>
+> Log Message: ----------- Setting rt optimization on OS X to -O0 when
+> using clang, like we already do with gcc. Tail-call elimination was
+> causing valgrind errors with stack switching. Closes #494.
+
+What version of clang are you using? This sounds like a bug I fixed some 
+time ago:
+
+http://llvm.org/viewvc/llvm-project?view=rev&revision=131399
+
+Cheers,
+Rafael
+_______________________________________________
+Rust-dev mailing list
+Rust-dev at mozilla.org
+https://mail.mozilla.org/listinfo/rust-dev
+
+From respindola at mozilla.com  Wed Jun 22 12:45:25 2011
+From: respindola at mozilla.com (=?UTF-8?B?UmFmYWVsIMOBdmlsYSBkZSBFc3DDrW5kb2xh?=)
+Date: Wed, 22 Jun 2011 15:45:25 -0400
+Subject: [rust-dev] [graydon/rust] edf73f: Setting rt optimization on OS
+ X to -O0 when using ...
+In-Reply-To: <732054554.301703.1308766131452.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+References: <732054554.301703.1308766131452.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+Message-ID: <4E024655.7050303@mozilla.com>
+
+On 11-06-22 2:08 PM, Eric Holk wrote:
+> Thanks, Rafael! I'm using revision 133533, so your fix should be in
+> there.
+>
+> We aren't exactly using setjmp, instead we're using some hand-written
+> assembly that performs basically the same task. I'm guessing this is
+> why you fix didn't catch this issue.
+>
+> Is there an attribute or annotation I can put on my function that
+> says "never use tail call elimination on calls to this function?" If
+> so, that might be a better way to fix it. Writing the whole swap
+> context function in assembly would probably work as well...
+
+What is the problem that doing tail calls is causing? With setjmp the 
+problem is that the called function will corrupt the stack for when 
+longjmp is called. If the problem in here is that we are doing something 
+like
+
+a = get_state();
+yield();
+
+with yield being tail called, maybe we can combine it in a 
+save_state_and_yield?
+
+> -Eric
+
+Cheers,
+Rafael
+
+From eholk at mozilla.com  Wed Jun 22 14:12:01 2011
+From: eholk at mozilla.com (Eric Holk)
+Date: Wed, 22 Jun 2011 14:12:01 -0700 (PDT)
+Subject: [rust-dev] [graydon/rust] edf73f: Setting rt optimization on OS
+ X to -O0 when using ...
+In-Reply-To: <4E024655.7050303@mozilla.com>
+Message-ID: <671743948.305110.1308777121313.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+
+
+> What is the problem that doing tail calls is causing? With setjmp the
+> problem is that the called function will corrupt the stack for when
+> longjmp is called. If the problem in here is that we are doing
+> something
+> like
+> 
+> a = get_state();
+> yield();
+> 
+> with yield being tail called, maybe we can combine it in a
+> save_state_and_yield?
+
+Correct, this is the problem. Right now there is get_registers and set_registers written in assembly, and a C++ function swap, which calls both of them. I think writing swap in assembly will fix this problem, because we can control exactly how the calls are made. 
+
+I have opened issue #548 to track this.
+
+-Eric
+
+> Cheers,
+> Rafael
+
+From respindola at mozilla.com  Thu Jun 23 12:17:43 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Thu, 23 Jun 2011 15:17:43 -0400
+Subject: [rust-dev] Fwd: Fancy Friday Lunch!
+In-Reply-To: <4E03898E.2070203@mozilla.com>
+References: <4E03898E.2070203@mozilla.com>
+Message-ID: <4E039157.5090904@mozilla.com>
+
+
+
+-------- Original Message --------
+Subject: Fancy Friday Lunch!
+Date: Thu, 23 Jun 2011 14:44:30 -0400
+From: Hilary Hall <hhall at mozilla.com>
+To: toronto-all <toronto-all at mozilla.com>
+
+Hi All,
+
+It's almost that special day of the week!!
+
+You know the drill: http://lunch.mozilla.org:9000/toronto-lunch
+
+Feel free to make resto suggestions on the e-pad
+
+<3,
+
+hillzy
+
+From andersrb at gmail.com  Thu Jun 23 12:51:51 2011
+From: andersrb at gmail.com (Brian Anderson)
+Date: Thu, 23 Jun 2011 12:51:51 -0700
+Subject: [rust-dev] Notes on standard library requirements
+Message-ID: <BANLkTim1kM2Z2=88wqqUdafy2e=-_ASLfg@mail.gmail.com>
+
+We had a discussion today about what belongs in the standard library.
+Here are the notes, which are also available on the wiki.
+
+# Things the standard library might want
+
+* collections
+ * list, hash, deque, vec, stack, queue, prioque, trees, set, bitv
+ * bitv
+ * iteration
+* IO
+ * AIO, SIO, stdio
+ * filesystem
+ * path manipulation
+ * <> or fileinput
+ * timers
+* string manipulation
+ * slicing w/o copy, stringref
+ * regexp
+ * ropes
+* networking
+ * HTTP client / server
+ * zeromq
+* date / time
+* math, random
+* compression
+* libicu
+* serialization (protobuf / thrift / json)
+* xml
+* crypto
+* concurrency
+ * task management, actor, OTP, mapreduce, pools
+* low-level OS services
+* unit testing
+* FFI, ctypes
+* dlopen, os proceses
+* standard predicates
+ * text, numeric, sorted
+* error-trapping wrappers, in-place task?
+ * Consistent error handling
+* quotas, accounting
+* reflection
+
+# Things that do not belong in std
+* DB API
+* ZeroMQ
+* GUI
+
+# Missing language features
+* big
+* any
+* claim
+* note
+
+From arelius at gmail.com  Thu Jun 23 13:35:43 2011
+From: arelius at gmail.com (Nicholas Ray)
+Date: Thu, 23 Jun 2011 13:35:43 -0700
+Subject: [rust-dev] Notes on standard library requirements
+In-Reply-To: <BANLkTim1kM2Z2=88wqqUdafy2e=-_ASLfg@mail.gmail.com>
+References: <BANLkTim1kM2Z2=88wqqUdafy2e=-_ASLfg@mail.gmail.com>
+Message-ID: <-3989367876444981@unknownmsgid>
+
+Note, you have zeromq on things it might want, and ZeroMQ on things
+you don't. Is this intentional?
+
+Indy
+
+On Jun 23, 2011, at 1:19 PM, Brian Anderson <andersrb at gmail.com> wrote:
+
+> We had a discussion today about what belongs in the standard library.
+> Here are the notes, which are also available on the wiki.
+>
+> # Things the standard library might want
+>
+> * collections
+> * list, hash, deque, vec, stack, queue, prioque, trees, set, bitv
+> * bitv
+> * iteration
+> * IO
+> * AIO, SIO, stdio
+> * filesystem
+> * path manipulation
+> * <> or fileinput
+> * timers
+> * string manipulation
+> * slicing w/o copy, stringref
+> * regexp
+> * ropes
+> * networking
+> * HTTP client / server
+> * zeromq
+> * date / time
+> * math, random
+> * compression
+> * libicu
+> * serialization (protobuf / thrift / json)
+> * xml
+> * crypto
+> * concurrency
+> * task management, actor, OTP, mapreduce, pools
+> * low-level OS services
+> * unit testing
+> * FFI, ctypes
+> * dlopen, os proceses
+> * standard predicates
+> * text, numeric, sorted
+> * error-trapping wrappers, in-place task?
+> * Consistent error handling
+> * quotas, accounting
+> * reflection
+>
+> # Things that do not belong in std
+> * DB API
+> * ZeroMQ
+> * GUI
+>
+> # Missing language features
+> * big
+> * any
+> * claim
+> * note
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+From andersrb at gmail.com  Thu Jun 23 14:16:39 2011
+From: andersrb at gmail.com (Brian Anderson)
+Date: Thu, 23 Jun 2011 14:16:39 -0700
+Subject: [rust-dev] Notes on standard library requirements
+In-Reply-To: <-3989367876444981@unknownmsgid>
+References: <BANLkTim1kM2Z2=88wqqUdafy2e=-_ASLfg@mail.gmail.com>
+	<-3989367876444981@unknownmsgid>
+Message-ID: <BANLkTikc6uxQ5cv+MxQYTzJzyT+ZGn+98A@mail.gmail.com>
+
+On Thu, Jun 23, 2011 at 1:35 PM, Nicholas Ray <arelius at gmail.com> wrote:
+> Note, you have zeromq on things it might want, and ZeroMQ on things
+> you don't. Is this intentional?
+
+
+Not at all. Some of us like ZeroMQ, but there was consensus that it
+does not belong in std.
+
+From mike.capp at gmail.com  Thu Jun 23 15:09:54 2011
+From: mike.capp at gmail.com (Mike Capp)
+Date: Thu, 23 Jun 2011 23:09:54 +0100
+Subject: [rust-dev] Notes on standard library requirements
+In-Reply-To: <BANLkTim1kM2Z2=88wqqUdafy2e=-_ASLfg@mail.gmail.com>
+References: <BANLkTim1kM2Z2=88wqqUdafy2e=-_ASLfg@mail.gmail.com>
+Message-ID: <BANLkTikGRd2rAfkjtQkFCZFKj3EaWQOUEw@mail.gmail.com>
+
+On 23 June 2011 20:51, Brian Anderson <andersrb at gmail.com> wrote:
+> We had a discussion today about what belongs in the standard library.
+> Here are the notes, which are also available on the wiki.
+
+Hmm, no mention of logging. Did this come up at all?
+
+>From what I can see, Rust's logging facilities are geared toward
+current dogfood usage, i.e. line-based direct to stderr. For server
+apps running as part of a big farm, or thick-client apps running on an
+end-user desktop, this isn't very helpful; what's wanted is to batch
+up the error log with any note logs associated with it, and send it
+off to a central logging DB.
+
+In itself this isn't too scary; one can envisage plugging in a log
+handler backend that can batch/sort/filter/flush individual log lines,
+trigger notifications etc. These backends probably don't belong in
+std. But the hooks for them do, especially since they may point to
+syntax changes. For example, I think there's a case to be made for
+combining the current
+
+    log_err("oops");
+    fail;
+
+idiom into a single
+
+    fail("oops");
+
+expression, because in the idiomatic version there's no way for a
+batching log handler to unambiguously associate the error log with the
+failure, and thus with any note logs associated with the failure's
+unwinding.
+
+(I'm also having trouble seeing how I could get high-level context,
+e.g. from top-level or intermediate task scope, included in a log
+batch. Current docs mention callers getting notified of task failure,
+but I haven't found any specifics.)
+
+cheers,
+Mike
+
+Disclaimer: as a noncontributing lurker, all opinions expressed above
+should be multiplied by a meritocratic weighting factor of 0.
+
+From pwalton at mozilla.com  Thu Jun 23 15:18:43 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 23 Jun 2011 18:18:43 -0400
+Subject: [rust-dev] Notes on standard library requirements
+In-Reply-To: <BANLkTikGRd2rAfkjtQkFCZFKj3EaWQOUEw@mail.gmail.com>
+References: <BANLkTim1kM2Z2=88wqqUdafy2e=-_ASLfg@mail.gmail.com>
+	<BANLkTikGRd2rAfkjtQkFCZFKj3EaWQOUEw@mail.gmail.com>
+Message-ID: <4E03BBC3.6080208@mozilla.com>
+
+On 6/23/11 6:09 PM, Mike Capp wrote:
+> For example, I think there's a case to be made for
+> combining the current
+>
+>      log_err("oops");
+>      fail;
+>
+> idiom into a single
+>
+>      fail("oops");
+>
+> expression, because in the idiomatic version there's no way for a
+> batching log handler to unambiguously associate the error log with the
+> failure, and thus with any note logs associated with the failure's
+> unwinding.
+
+You'll be happy to know that this is already implemented and working :)
+
+Patrick
+
+From andersrb at gmail.com  Thu Jun 23 15:42:52 2011
+From: andersrb at gmail.com (Brian Anderson)
+Date: Thu, 23 Jun 2011 15:42:52 -0700
+Subject: [rust-dev] Notes on standard library requirements
+In-Reply-To: <BANLkTikGRd2rAfkjtQkFCZFKj3EaWQOUEw@mail.gmail.com>
+References: <BANLkTim1kM2Z2=88wqqUdafy2e=-_ASLfg@mail.gmail.com>
+	<BANLkTikGRd2rAfkjtQkFCZFKj3EaWQOUEw@mail.gmail.com>
+Message-ID: <BANLkTikFmTZDYGbWpXNx1-q07DM_OrFrJQ@mail.gmail.com>
+
+On Thu, Jun 23, 2011 at 3:09 PM, Mike Capp <mike.capp at gmail.com> wrote:
+> On 23 June 2011 20:51, Brian Anderson <andersrb at gmail.com> wrote:
+>> We had a discussion today about what belongs in the standard library.
+>> Here are the notes, which are also available on the wiki.
+>
+> Hmm, no mention of logging. Did this come up at all?
+
+Not in this discussion, but it has come up recently. More robust
+logging is definitely on the radar.
+
+>
+> From what I can see, Rust's logging facilities are geared toward
+> current dogfood usage, i.e. line-based direct to stderr. For server
+> apps running as part of a big farm, or thick-client apps running on an
+> end-user desktop, this isn't very helpful; what's wanted is to batch
+> up the error log with any note logs associated with it, and send it
+> off to a central logging DB.
+
+There will be some sort of interface for hooking into the logging
+mechanism. As you say, the current logging capabilities are minimal.
+
+>
+> In itself this isn't too scary; one can envisage plugging in a log
+> handler backend that can batch/sort/filter/flush individual log lines,
+> trigger notifications etc. These backends probably don't belong in
+> std. But the hooks for them do, especially since they may point to
+> syntax changes. For example, I think there's a case to be made for
+> combining the current
+>
+> ? ?log_err("oops");
+> ? ?fail;
+>
+> idiom into a single
+>
+> ? ?fail("oops");
+
+I believe this form of fail was added to the language recently.
+
+>
+> expression, because in the idiomatic version there's no way for a
+> batching log handler to unambiguously associate the error log with the
+> failure, and thus with any note logs associated with the failure's
+> unwinding.
+>
+> (I'm also having trouble seeing how I could get high-level context,
+> e.g. from top-level or intermediate task scope, included in a log
+> batch. Current docs mention callers getting notified of task failure,
+> but I haven't found any specifics.)
+
+There aren't a lot of specifics yet, but I believe everything you are
+hoping for here will be possible (someday).
+
+>
+> cheers,
+> Mike
+>
+> Disclaimer: as a noncontributing lurker, all opinions expressed above
+> should be multiplied by a meritocratic weighting factor of 0.
+>
+
+From noelgrandin at gmail.com  Fri Jun 24 00:33:41 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Fri, 24 Jun 2011 09:33:41 +0200
+Subject: [rust-dev] Notes on standard library requirements
+In-Reply-To: <BANLkTim1kM2Z2=88wqqUdafy2e=-_ASLfg@mail.gmail.com>
+References: <BANLkTim1kM2Z2=88wqqUdafy2e=-_ASLfg@mail.gmail.com>
+Message-ID: <4E043DD5.2070208@gmail.com>
+
+Suggestions
+
+* complex math
+* matrix math
+* json
+
+-- Noel Grandin
+
+Brian Anderson wrote:
+> We had a discussion today about what belongs in the standard library.
+> Here are the notes, which are also available on the wiki.
+>
+> # Things the standard library might want
+>
+> * collections
+>  * list, hash, deque, vec, stack, queue, prioque, trees, set, bitv
+>  * bitv
+>  * iteration
+> * IO
+>  * AIO, SIO, stdio
+>  * filesystem
+>  * path manipulation
+>  * <> or fileinput
+>  * timers
+> * string manipulation
+>  * slicing w/o copy, stringref
+>  * regexp
+>  * ropes
+> * networking
+>  * HTTP client / server
+>  * zeromq
+> * date / time
+> * math, random
+> * compression
+> * libicu
+> * serialization (protobuf / thrift / json)
+> * xml
+> * crypto
+> * concurrency
+>  * task management, actor, OTP, mapreduce, pools
+> * low-level OS services
+> * unit testing
+> * FFI, ctypes
+> * dlopen, os proceses
+> * standard predicates
+>  * text, numeric, sorted
+> * error-trapping wrappers, in-place task?
+>  * Consistent error handling
+> * quotas, accounting
+> * reflection
+>
+> # Things that do not belong in std
+> * DB API
+> * ZeroMQ
+> * GUI
+>
+> # Missing language features
+> * big
+> * any
+> * claim
+> * note
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From dirkjan at ochtman.nl  Fri Jun 24 01:07:01 2011
+From: dirkjan at ochtman.nl (Dirkjan Ochtman)
+Date: Fri, 24 Jun 2011 10:07:01 +0200
+Subject: [rust-dev] Notes on standard library requirements
+In-Reply-To: <4E043DD5.2070208@gmail.com>
+References: <BANLkTim1kM2Z2=88wqqUdafy2e=-_ASLfg@mail.gmail.com>
+	<4E043DD5.2070208@gmail.com>
+Message-ID: <BANLkTi=7ddrXZZZtfiOWBtDgZB1zmD0SRQ@mail.gmail.com>
+
+On Fri, Jun 24, 2011 at 09:33, Noel Grandin <noelgrandin at gmail.com> wrote:
+> Suggestions
+>
+> * complex math
+> * matrix math
+> * json
+
+JSON is in there (under serializations).
+
+Cheers,
+
+Dirkjan
+
+From alex at scienceforums.net  Fri Jun 24 10:49:31 2011
+From: alex at scienceforums.net (Alex R.)
+Date: Fri, 24 Jun 2011 12:49:31 -0500
+Subject: [rust-dev] Notes on standard library requirements
+In-Reply-To: <BANLkTim1kM2Z2=88wqqUdafy2e=-_ASLfg@mail.gmail.com>
+References: <BANLkTim1kM2Z2=88wqqUdafy2e=-_ASLfg@mail.gmail.com>
+Message-ID: <63D746C7-E9A3-4298-A313-B4D5069781E5@scienceforums.net>
+
+On Jun 23, 2011, at 2:51 PM, Brian Anderson wrote:
+
+> * crypto
+> * concurrency
+
+
+I saw these two listed and had a thought. Cryptography is generally computationally intensive, but it seems to me one could use the Rust task system to fix things. Suppose we have a server which must receive some data, decrypt it, and then process it:
+
+1. Dedicated task receives data and spawns crypto task, providing it a channel.
+2. Crypto task accepts ciphertext on its port, decrypts it, and sends cleartext out the provided channel.
+3. Handler/processor task takes the cleartext and does whatever needs to be done.
+
+If the Rust scheduler is decent, this would mean further data could be received while the ciphertext is being decrypted, and data could be received and buffered without waiting for crypto to complete.
+
+Is that roughly feasible under the intended design of the tasks system? I'm not entirely sure of its details or intended functionality at this point. In any case, I may try writing some basic crypto code to get a feel for the language.
+
+- Alex Reinhart
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110624/22b61e4b/attachment.html>
+
+From eholk at mozilla.com  Fri Jun 24 11:30:02 2011
+From: eholk at mozilla.com (Eric Holk)
+Date: Fri, 24 Jun 2011 11:30:02 -0700 (PDT)
+Subject: [rust-dev] Notes on standard library requirements
+In-Reply-To: <63D746C7-E9A3-4298-A313-B4D5069781E5@scienceforums.net>
+Message-ID: <1352628547.329176.1308940202920.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+Hi Alex,
+
+I think this sort of thing is exactly how we intended for the task system to be used!
+
+-Eric
+
+
+----- Original Message -----
+From: "Alex R." <alex at scienceforums.net>
+To: "Brian Anderson" <andersrb at gmail.com>
+Cc: rust-dev at mozilla.org
+Sent: Friday, June 24, 2011 10:49:31 AM
+Subject: Re: [rust-dev] Notes on standard library requirements
+
+
+
+
+On Jun 23, 2011, at 2:51 PM, Brian Anderson wrote: 
+
+
+* crypto 
+* concurrency 
+
+I saw these two listed and had a thought. Cryptography is generally computationally intensive, but it seems to me one could use the Rust task system to fix things. Suppose we have a server which must receive some data, decrypt it, and then process it: 
+
+
+1. Dedicated task receives data and spawns crypto task, providing it a channel. 
+2. Crypto task accepts ciphertext on its port, decrypts it, and sends cleartext out the provided channel. 
+3. Handler/processor task takes the cleartext and does whatever needs to be done. 
+
+
+If the Rust scheduler is decent, this would mean further data could be received while the ciphertext is being decrypted, and data could be received and buffered without waiting for crypto to complete. 
+
+
+Is that roughly feasible under the intended design of the tasks system? I'm not entirely sure of its details or intended functionality at this point. In any case, I may try writing some basic crypto code to get a feel for the language. 
+
+
+
+- Alex Reinhart 
+
+
+
+
+_______________________________________________
+Rust-dev mailing list
+Rust-dev at mozilla.org
+https://mail.mozilla.org/listinfo/rust-dev
+
+From marijnh at gmail.com  Tue Jun 28 09:17:23 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 28 Jun 2011 18:17:23 +0200
+Subject: [rust-dev] We have 'resources' now
+Message-ID: <BANLkTinzZGmZrk2gMsbuyM3W2g7dBXnqTA@mail.gmail.com>
+
+(Just to keep everybody in the loop.) These will replace object
+destructors in the future (and I'll start phasing those out as soon as
+someone does a checkpoint, so that we can start using resources in the
+compiler). The syntax is:
+
+resource file_descriptor(int fd) {
+    libc::close(fd);
+}
+
+You then get a function file_descriptor of one int argument, which
+will return a non-copyable value of type file_descriptor (which is
+nominal). When such a value is dropped, its destructor body is ran,
+with the variable fd bound to the wrapped int. Resource values can be
+dereferenced with *, like boxes, so this logs the fd:
+
+auto my_fd <- file_descriptor(0);
+log *my_fd;
+
+I've only tested minimally, and there are some rough edges in move
+semantics that might still break some use cases.
+

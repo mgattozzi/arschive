@@ -1,0 +1,941 @@
+From suncha629 at gmail.com  Tue May 19 12:21:34 2015
+From: suncha629 at gmail.com (Mohi Us Sunnat)
+Date: Tue, 19 May 2015 18:21:34 +0600
+Subject: [rust-dev] Help for a RUST Release Party in Bangladesh
+Message-ID: <CACvu-qJWvvXOEH+vdF+VL8mASz+i1SPVo+TZP_wErCHNDf9p+g@mail.gmail.com>
+
+Hey all,
+
+I am a Mozillian from Bangladesh and a new contributor of Rust. I am
+learning RUST for last 1 week and already I have fallen in love. :)
+
+I want to organize a RUST release party (or something like this) in
+Bangladesh. I need a good plan to success this release party. In this
+event, We will invite some developers and Mozillians. We will take an intro
+session and show some good demos of this language. We can show them the
+future of this language and many more.
+Besides, I want to find out some awesome developers who will continue,
+learn and teach others.
+
+Now my request to all that please help me to make a good plan. I need a
+demo plan of this event and the resources which will be used in the event.
+If this event will success, I can organize more events for RUST.
+
+Last but not least, I just need your help me to organize this event and I
+promise, it will be an awesome and successful event. :)
+
+
+Best Regards,
+-- 
+
+S. M. Mohi-Us Sunnat
+ReMo, Dhaka, Bangladesh
+
+*Mobile App Developer <http://www.dreamogrammers.com/> | ReMo
+<https://reps.mozilla.org/u/Sunnat/> | Linkedin
+<https://www.linkedin.com/in/sunnat> | Twitter
+<https://twitter.com/sunnat629>** | Facebook
+<https://www.facebook.com/sunnat>*
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150519/4595c662/attachment.html>
+
+From techabc at gmail.com  Wed May 20 08:05:42 2015
+From: techabc at gmail.com (techabc)
+Date: Wed, 20 May 2015 16:05:42 +0800
+Subject: [rust-dev] rust-dev will be shut down soon
+In-Reply-To: <CABtDyP1LN0oOWJBED7m6_UsUtB=NEXeE1yKFGhbHw+rkWJaA2w@mail.gmail.com>
+References: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+	<20150123063328.GS18219@shirio>
+	<CABtDyP1LN0oOWJBED7m6_UsUtB=NEXeE1yKFGhbHw+rkWJaA2w@mail.gmail.com>
+Message-ID: <CAPPwZt6bHE-X=ZoaxxdH6OZNaxEMKei6dPO8AmUkHMpACPF3dg@mail.gmail.com>
+
+Is there a way(i.e. a robot) to mirror the contents in read only mode of
+reddit/r/rust to this mailling lists?
+
+2015-01-24 4:39 GMT+08:00 Brian Anderson <banderson at mozilla.com>:
+
+> Tomi,
+>
+> Once the new discourse instance is set up it will be publicized on the
+> home page, and we may also decide then to put the internals forum there as
+> well, since it's purpose will be less easily confused.
+>
+> On Thu, Jan 22, 2015 at 10:33 PM, Tomi Pievil?inen <
+> tomi.pievilainen at iki.fi> wrote:
+>
+>> My last comment about visibility of the discourse pretty much
+>> immediately side-tracked into the merits and flaws of mailing lists...
+>> But nobody really answered whether the absence of links from the Rust
+>> homepage to the discourse was intentional.
+>>
+>> Does internal use then mean that it is meant only for those "in the
+>> know", and only the future general discourse will be put on the home
+>> page? At least I'm interested in following the dev discussion, even if
+>> I'm not an insider, and I heard of it purely by accident.
+>>
+>> --
+>> Tomi Pievil?inen, +358 400 487 504
+>> A: Because it disrupts the natural way of thinking.
+>> Q: Why is top posting frowned upon?
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150520/d9e7c58f/attachment.html>
+
+From manishsmail at gmail.com  Wed May 20 08:27:34 2015
+From: manishsmail at gmail.com (Manish Goregaokar)
+Date: Wed, 20 May 2015 13:57:34 +0530
+Subject: [rust-dev] rust-dev will be shut down soon
+In-Reply-To: <CAPPwZt6bHE-X=ZoaxxdH6OZNaxEMKei6dPO8AmUkHMpACPF3dg@mail.gmail.com>
+References: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+	<20150123063328.GS18219@shirio>
+	<CABtDyP1LN0oOWJBED7m6_UsUtB=NEXeE1yKFGhbHw+rkWJaA2w@mail.gmail.com>
+	<CAPPwZt6bHE-X=ZoaxxdH6OZNaxEMKei6dPO8AmUkHMpACPF3dg@mail.gmail.com>
+Message-ID: <CACpkpxmQTK+f+WyhmfmAFfY=sRdMj74nCpnzz8-6apkPDcCfRQ@mail.gmail.com>
+
+Should be simple as an IFTT recipe..
+
+-Manish Goregaokar
+
+On Wed, May 20, 2015 at 1:35 PM, techabc <techabc at gmail.com> wrote:
+
+> Is there a way(i.e. a robot) to mirror the contents in read only mode of
+> reddit/r/rust to this mailling lists?
+>
+> 2015-01-24 4:39 GMT+08:00 Brian Anderson <banderson at mozilla.com>:
+>
+>> Tomi,
+>>
+>> Once the new discourse instance is set up it will be publicized on the
+>> home page, and we may also decide then to put the internals forum there as
+>> well, since it's purpose will be less easily confused.
+>>
+>> On Thu, Jan 22, 2015 at 10:33 PM, Tomi Pievil?inen <
+>> tomi.pievilainen at iki.fi> wrote:
+>>
+>>> My last comment about visibility of the discourse pretty much
+>>> immediately side-tracked into the merits and flaws of mailing lists...
+>>> But nobody really answered whether the absence of links from the Rust
+>>> homepage to the discourse was intentional.
+>>>
+>>> Does internal use then mean that it is meant only for those "in the
+>>> know", and only the future general discourse will be put on the home
+>>> page? At least I'm interested in following the dev discussion, even if
+>>> I'm not an insider, and I heard of it purely by accident.
+>>>
+>>> --
+>>> Tomi Pievil?inen, +358 400 487 504
+>>> A: Because it disrupts the natural way of thinking.
+>>> Q: Why is top posting frowned upon?
+>>>
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150520/3a2c111d/attachment.html>
+
+From damien at iwi.me  Wed May 20 11:47:36 2015
+From: damien at iwi.me (=?utf-8?Q?Damien_G=C3=A9rard?=)
+Date: Wed, 20 May 2015 13:47:36 +0200
+Subject: [rust-dev] rust-dev will be shut down soon
+In-Reply-To: <CAPPwZt6bHE-X=ZoaxxdH6OZNaxEMKei6dPO8AmUkHMpACPF3dg@mail.gmail.com>
+References: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+	<20150123063328.GS18219@shirio>
+	<CABtDyP1LN0oOWJBED7m6_UsUtB=NEXeE1yKFGhbHw+rkWJaA2w@mail.gmail.com>
+	<CAPPwZt6bHE-X=ZoaxxdH6OZNaxEMKei6dPO8AmUkHMpACPF3dg@mail.gmail.com>
+Message-ID: <C729F5F2-16EF-4FB5-BC6A-C2C1B33851E2@iwi.me>
+
+
+> On 20 May 2015, at 10:05, techabc <techabc at gmail.com> wrote:
+> 
+> Is there a way(i.e. a robot) to mirror the contents in read only mode of reddit/r/rust to this mailling lists?
+
+Reddit provides a RSS feed.
+https://www.reddit.com/r/rust/.rss
+
+
+
+> 
+> 2015-01-24 4:39 GMT+08:00 Brian Anderson <banderson at mozilla.com>:
+> Tomi,
+> 
+> Once the new discourse instance is set up it will be publicized on the home page, and we may also decide then to put the internals forum there as well, since it's purpose will be less easily confused.
+> 
+> On Thu, Jan 22, 2015 at 10:33 PM, Tomi Pievil?inen <tomi.pievilainen at iki.fi> wrote:
+> My last comment about visibility of the discourse pretty much
+> immediately side-tracked into the merits and flaws of mailing lists...
+> But nobody really answered whether the absence of links from the Rust
+> homepage to the discourse was intentional.
+> 
+> Does internal use then mean that it is meant only for those "in the
+> know", and only the future general discourse will be put on the home
+> page? At least I'm interested in following the dev discussion, even if
+> I'm not an insider, and I heard of it purely by accident.
+> 
+> --
+> Tomi Pievil?inen, +358 400 487 504
+> A: Because it disrupts the natural way of thinking.
+> Q: Why is top posting frowned upon?
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+> 
+> 
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+> 
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From techabc at gmail.com  Wed May 20 16:29:22 2015
+From: techabc at gmail.com (techabc)
+Date: Thu, 21 May 2015 00:29:22 +0800
+Subject: [rust-dev] rust-dev will be shut down soon
+In-Reply-To: <C729F5F2-16EF-4FB5-BC6A-C2C1B33851E2@iwi.me>
+References: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+	<20150123063328.GS18219@shirio>
+	<CABtDyP1LN0oOWJBED7m6_UsUtB=NEXeE1yKFGhbHw+rkWJaA2w@mail.gmail.com>
+	<CAPPwZt6bHE-X=ZoaxxdH6OZNaxEMKei6dPO8AmUkHMpACPF3dg@mail.gmail.com>
+	<C729F5F2-16EF-4FB5-BC6A-C2C1B33851E2@iwi.me>
+Message-ID: <CAPPwZt5nXepNVhfDWWPdPzEzqfdDA3WRuqJCKT8OADBPxJkwFg@mail.gmail.com>
+
+thanks a lot.
+I find https://blogtrottr.com, hope to figuer it out.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150521/c36690d0/attachment.html>
+
+From dynamicstability at gmail.com  Sat May 30 18:49:50 2015
+From: dynamicstability at gmail.com (Eric Stutzenberger)
+Date: Sat, 30 May 2015 11:49:50 -0700
+Subject: [rust-dev] Bare-metal Rust linking with C static library
+Message-ID: <CAGG3uoTYFrO_6Lk4GO_XVp3nN9GpEnSu55ziWL4yCK2pAaib6g@mail.gmail.com>
+
+I'm working on building out a Rust interface to the nRF51x series parts.  I
+have a bare metal system working quite well.  The nRF51x has a bluetooth
+stack (called Softdevice).  This stack requires the use of supervisor calls
+to request the stack to perform certain functions.  My plan is to write a C
+library wrapper around these service calls, compile with arm-none-wabi-gcc
+and then link this to my Bare-metal rust system.  A large chunk of the work
+I have done thus far is based off of STM32 example work done by Jorge
+Aparicio (https://github.com/japaric).
+
+Since I have the basics up and running, I am working on trying to get a C
+static library built with arm-none-eabi-gcc and archived with
+arm-none-eabi-ar to properly link in with my Rust code.
+
+I have the following (very basic) .c file:
+uint32_t sum(uint32_t a, uint32_t b)
+{
+return a + b;
+}
+
+I am compiling and linking with the following commands:
+
+arm-none-eabi-gcc -Wall -mcpu=cortex-m0 -mthumb -fPIC --specs=nosys.specs
+-shared test.c -o test.o
+
+arm-none-eabi-ar -rs libtest.a test.o
+
+
+In my rust file:
+
+[link(name="test", kind="static")]
+
+extern {
+
+pub fn sum(a: u32, b: u32) -> u32;
+
+}
+
+
+I then invoke it as a test:
+
+pub fn main() {
+
+        let test_sum = unsafe { sum(2, 3) };
+
+}
+
+
+I am using a Makefile to execute the rust compiler for some specific
+arguments, such as my specific target:
+
+# rustc target
+
+TARGET = thumbv6m-none-eabi
+
+
+# toolchain prefix
+
+TRIPLE = arm-none-eabi
+
+
+APP_DIR = src/app
+
+OUT_DIR = target/$(TARGET)/release
+
+
+DEPS_DIR = $(OUT_DIR)/deps
+
+
+BINS = $(OUT_DIR)/%.hex
+
+HEXS = $(OUT_DIR)/%.hex
+
+ELFS = $(OUT_DIR)/%.elf
+
+OBJECTS = $(OUT_DIR)/intermediate/%.o
+
+SOURCES = $(APP_DIR)/%.rs
+
+
+APPS = $(patsubst $(SOURCES),$(BINS),$(wildcard $(APP_DIR)/*.rs))
+
+
+RUSTC_FLAGS := -C lto -g $(RUSTC_FLAGS)
+
+
+# don't delete my elf files!
+
+.SECONDARY:
+
+
+all: rlibs  $(APPS)
+
+
+clean:
+
+cargo clean
+
+
+# TODO $(APPS) should get recompiled when the `rlibs` change
+
+
+$(OBJECTS): $(SOURCES)
+
+mkdir -p $(dir $@)
+
+rustc \
+
+$(RUSTC_FLAGS) \
+
+--crate-type staticlib \
+
+--emit obj \
+
+--target $(TARGET) \
+
+-L $(DEPS_DIR) \
+
+-L ../sd110_lib \
+
+--verbose \
+
+-o $@ \
+
+-ltest \
+
+$<
+
+
+$(ELFS): $(OBJECTS)
+
+$(TRIPLE)-ld \
+
+--gc-sections \
+
+-T layout.ld \
+
+-o $@ \
+
+$<
+
+#size $@
+
+
+$(BINS): $(ELFS)
+
+$(TRIPLE)-objcopy \
+
+-O ihex \
+
+$< \
+
+$@
+
+
+rlibs:
+
+cargo build --target $(TARGET) --verbose --release
+
+
+The cargo.toml is as follows:
+
+[package]
+
+name = "bmd200eval"
+
+version = "0.1.0"
+
+authors = ["Eric Stutzenberger <eric.stutzenberger at rigado.com>"]
+
+
+[dependencies.nrf51822]
+
+path = "../nrf51822.rs"
+
+
+When I run make, I get the following output:
+
+.
+
+.
+
+.
+
+mkdir -p target/thumbv6m-none-eabi/release/intermediate/
+
+rustc \
+
+-C lto -g  \
+
+--crate-type staticlib \
+
+--emit obj \
+
+--target thumbv6m-none-eabi \
+
+-L target/thumbv6m-none-eabi/release/deps \
+
+-L ../sd110_lib \
+
+--verbose \
+
+-o target/thumbv6m-none-eabi/release/intermediate/blink.o \
+
+-ltest \
+
+src/app/blink.rs
+
+src/app/blink.rs:42:9: 42:17 warning: unused variable: `test_sum`,
+#[warn(unused_variables)] on by default
+
+src/app/blink.rs:42     let test_sum = unsafe { sum(2, 3) };
+
+                            ^~~~~~~~
+
+arm-none-eabi-ld \
+
+--gc-sections \
+
+-T layout.ld \
+
+-o target/thumbv6m-none-eabi/release/blink.elf \
+
+target/thumbv6m-none-eabi/release/intermediate/blink.o
+
+target/thumbv6m-none-eabi/release/intermediate/blink.o: In function
+`blink::main':
+
+git/rust-nrf/bmd200eval.rs/src/app/blink.rs:42: undefined reference to `sum'
+
+
+
+I have found numerous different references to linking Rust with C and
+calling C from Rust but I haven't found a specific answer as to why this
+will not link.  As you can see in the Makefile, I have tried to
+force rustc's hand in finding and linking against the library, but this
+doesn't seem to make a difference.
+
+
+Is there an issue with how I am building a library?
+
+Since rustc is generating a staticlib in this case, is there some different
+method that needs to be used?
+
+
+Note that I am avoiding the Clang compiler for the moment due to the
+following:
+
+https://devzone.nordicsemi.com/question/29628/using-clang-and-the-s110-issues-with-supervisor-calls-to-the-softdevice/
+
+
+Essentially, the gist of the above is that Clang is not quite producing the
+correct supervisor assembly code for calling in to the bluetooth stack,
+especially when optimizations are enabled.
+
+
+Cheers,
+
+Eric
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150530/e7d431c6/attachment.html>
+
+From matthieu.monrocq at gmail.com  Sat May 30 19:51:13 2015
+From: matthieu.monrocq at gmail.com (Matthieu Monrocq)
+Date: Sat, 30 May 2015 21:51:13 +0200
+Subject: [rust-dev] Bare-metal Rust linking with C static library
+In-Reply-To: <CAGG3uoTYFrO_6Lk4GO_XVp3nN9GpEnSu55ziWL4yCK2pAaib6g@mail.gmail.com>
+References: <CAGG3uoTYFrO_6Lk4GO_XVp3nN9GpEnSu55ziWL4yCK2pAaib6g@mail.gmail.com>
+Message-ID: <CAKE6RfgpM=VPaDdE0s92tAkSK=+hK2-SpgXOfiB2jnyERb8WJw@mail.gmail.com>
+
+Hello Eric,
+
+Please note that the rust-dev list is (for better or worse) abandonned.
+
+You may ask questions on either IRC (
+https://chat.mibbit.com/?server=irc.mozilla.org&channel=%23rust), the users
+forum (https://users.rust-lang.org/) or StackOverflow.
+
+You may also ask on Reddit (https://reddit.com/r/rust), however it's more
+used for announcements than questions in general.
+
+Note that all the community links I gave are accessible directly from
+http://www.rust-lang.org/
+
+Good luck with your project!
+
+
+On Sat, May 30, 2015 at 8:49 PM, Eric Stutzenberger <
+dynamicstability at gmail.com> wrote:
+
+> I'm working on building out a Rust interface to the nRF51x series parts.
+> I have a bare metal system working quite well.  The nRF51x has a bluetooth
+> stack (called Softdevice).  This stack requires the use of supervisor calls
+> to request the stack to perform certain functions.  My plan is to write a C
+> library wrapper around these service calls, compile with arm-none-wabi-gcc
+> and then link this to my Bare-metal rust system.  A large chunk of the work
+> I have done thus far is based off of STM32 example work done by Jorge
+> Aparicio (https://github.com/japaric).
+>
+> Since I have the basics up and running, I am working on trying to get a C
+> static library built with arm-none-eabi-gcc and archived with
+> arm-none-eabi-ar to properly link in with my Rust code.
+>
+> I have the following (very basic) .c file:
+> uint32_t sum(uint32_t a, uint32_t b)
+> {
+> return a + b;
+> }
+>
+> I am compiling and linking with the following commands:
+>
+> arm-none-eabi-gcc -Wall -mcpu=cortex-m0 -mthumb -fPIC --specs=nosys.specs
+> -shared test.c -o test.o
+>
+> arm-none-eabi-ar -rs libtest.a test.o
+>
+>
+> In my rust file:
+>
+> [link(name="test", kind="static")]
+>
+> extern {
+>
+> pub fn sum(a: u32, b: u32) -> u32;
+>
+> }
+>
+>
+> I then invoke it as a test:
+>
+> pub fn main() {
+>
+>         let test_sum = unsafe { sum(2, 3) };
+>
+> }
+>
+>
+> I am using a Makefile to execute the rust compiler for some specific
+> arguments, such as my specific target:
+>
+> # rustc target
+>
+> TARGET = thumbv6m-none-eabi
+>
+>
+> # toolchain prefix
+>
+> TRIPLE = arm-none-eabi
+>
+>
+> APP_DIR = src/app
+>
+> OUT_DIR = target/$(TARGET)/release
+>
+>
+> DEPS_DIR = $(OUT_DIR)/deps
+>
+>
+> BINS = $(OUT_DIR)/%.hex
+>
+> HEXS = $(OUT_DIR)/%.hex
+>
+> ELFS = $(OUT_DIR)/%.elf
+>
+> OBJECTS = $(OUT_DIR)/intermediate/%.o
+>
+> SOURCES = $(APP_DIR)/%.rs
+>
+>
+> APPS = $(patsubst $(SOURCES),$(BINS),$(wildcard $(APP_DIR)/*.rs))
+>
+>
+> RUSTC_FLAGS := -C lto -g $(RUSTC_FLAGS)
+>
+>
+> # don't delete my elf files!
+>
+> .SECONDARY:
+>
+>
+> all: rlibs  $(APPS)
+>
+>
+> clean:
+>
+> cargo clean
+>
+>
+> # TODO $(APPS) should get recompiled when the `rlibs` change
+>
+>
+> $(OBJECTS): $(SOURCES)
+>
+> mkdir -p $(dir $@)
+>
+> rustc \
+>
+> $(RUSTC_FLAGS) \
+>
+> --crate-type staticlib \
+>
+> --emit obj \
+>
+> --target $(TARGET) \
+>
+> -L $(DEPS_DIR) \
+>
+> -L ../sd110_lib \
+>
+> --verbose \
+>
+> -o $@ \
+>
+> -ltest \
+>
+> $<
+>
+>
+> $(ELFS): $(OBJECTS)
+>
+> $(TRIPLE)-ld \
+>
+> --gc-sections \
+>
+> -T layout.ld \
+>
+> -o $@ \
+>
+> $<
+>
+> #size $@
+>
+>
+> $(BINS): $(ELFS)
+>
+> $(TRIPLE)-objcopy \
+>
+> -O ihex \
+>
+> $< \
+>
+> $@
+>
+>
+> rlibs:
+>
+> cargo build --target $(TARGET) --verbose --release
+>
+>
+> The cargo.toml is as follows:
+>
+> [package]
+>
+> name = "bmd200eval"
+>
+> version = "0.1.0"
+>
+> authors = ["Eric Stutzenberger <eric.stutzenberger at rigado.com>"]
+>
+>
+> [dependencies.nrf51822]
+>
+> path = "../nrf51822.rs"
+>
+>
+> When I run make, I get the following output:
+>
+> .
+>
+> .
+>
+> .
+>
+> mkdir -p target/thumbv6m-none-eabi/release/intermediate/
+>
+> rustc \
+>
+> -C lto -g  \
+>
+> --crate-type staticlib \
+>
+> --emit obj \
+>
+> --target thumbv6m-none-eabi \
+>
+> -L target/thumbv6m-none-eabi/release/deps \
+>
+> -L ../sd110_lib \
+>
+> --verbose \
+>
+> -o target/thumbv6m-none-eabi/release/intermediate/blink.o \
+>
+> -ltest \
+>
+> src/app/blink.rs
+>
+> src/app/blink.rs:42:9: 42:17 warning: unused variable: `test_sum`,
+> #[warn(unused_variables)] on by default
+>
+> src/app/blink.rs:42     let test_sum = unsafe { sum(2, 3) };
+>
+>                             ^~~~~~~~
+>
+> arm-none-eabi-ld \
+>
+> --gc-sections \
+>
+> -T layout.ld \
+>
+> -o target/thumbv6m-none-eabi/release/blink.elf \
+>
+> target/thumbv6m-none-eabi/release/intermediate/blink.o
+>
+> target/thumbv6m-none-eabi/release/intermediate/blink.o: In function
+> `blink::main':
+>
+> git/rust-nrf/bmd200eval.rs/src/app/blink.rs:42: undefined reference to
+> `sum'
+>
+>
+> I have found numerous different references to linking Rust with C and
+> calling C from Rust but I haven't found a specific answer as to why this
+> will not link.  As you can see in the Makefile, I have tried to
+> force rustc's hand in finding and linking against the library, but this
+> doesn't seem to make a difference.
+>
+>
+> Is there an issue with how I am building a library?
+>
+> Since rustc is generating a staticlib in this case, is there some
+> different method that needs to be used?
+>
+>
+> Note that I am avoiding the Clang compiler for the moment due to the
+> following:
+>
+>
+> https://devzone.nordicsemi.com/question/29628/using-clang-and-the-s110-issues-with-supervisor-calls-to-the-softdevice/
+>
+>
+> Essentially, the gist of the above is that Clang is not quite producing
+> the correct supervisor assembly code for calling in to the bluetooth stack,
+> especially when optimizations are enabled.
+>
+>
+> Cheers,
+>
+> Eric
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150530/8d819a32/attachment.html>
+
+From bendietze at yahoo.de  Sun May 31 12:14:57 2015
+From: bendietze at yahoo.de (Benjamin Dietze)
+Date: Sun, 31 May 2015 13:14:57 +0100
+Subject: [rust-dev] Rust-dev Digest, Vol 58, Issue 3
+In-Reply-To: <mailman.42.1433073604.19771.rust-dev@mozilla.org>
+Message-ID: <1433074497.70401.YahooMailAndroidMobile@web172804.mail.ir2.yahoo.com>
+
+Please unsubscribe me!!!
+
+Gesendet ?ber Yahoo Mail f?r Android
+
+Von:"rust-dev-request at mozilla.org" <rust-dev-request at mozilla.org>
+Datum:So., 31. Mai 2015 um 14:00
+Betreff:Rust-dev Digest, Vol 58, Issue 3
+
+Send Rust-dev mailing list submissions to
+??? rust-dev at mozilla.org
+
+To subscribe or unsubscribe via the World Wide Web, visit
+??? https://mail.mozilla.org/listinfo/rust-dev
+or, via email, send a message with subject or body 'help' to
+??? rust-dev-request at mozilla.org
+
+You can reach the person managing the list at
+??? rust-dev-owner at mozilla.org
+
+When replying, please edit your Subject line so it is more specific
+than "Re: Contents of Rust-dev digest..."
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150531/998d3b24/attachment.html>
+
+From flavius.as at gmail.com  Sun May 31 13:09:05 2015
+From: flavius.as at gmail.com (Flavius Aspra)
+Date: Sun, 31 May 2015 15:09:05 +0200
+Subject: [rust-dev] Rationale for closing this mailing list
+Message-ID: <CAJ0jH2qmikCf_pEsY9ZNjAVH8XVqOM1ThVJ9eTzedsNX-Wtjzw@mail.gmail.com>
+
+Hi
+
+What are the rationale for closing this mailing list?
+
+Old rusty hackers are used to MLs.
+
+Could you please point me to the discussion where this has been decided?
+
+Regards
+Flavius Aspra
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150531/09860c90/attachment.html>
+
+From eg1290 at gmail.com  Sun May 31 15:27:20 2015
+From: eg1290 at gmail.com (Evan G)
+Date: Sun, 31 May 2015 15:27:20 +0000
+Subject: [rust-dev] Rationale for closing this mailing list
+In-Reply-To: <CAJ0jH2qmikCf_pEsY9ZNjAVH8XVqOM1ThVJ9eTzedsNX-Wtjzw@mail.gmail.com>
+References: <CAJ0jH2qmikCf_pEsY9ZNjAVH8XVqOM1ThVJ9eTzedsNX-Wtjzw@mail.gmail.com>
+Message-ID: <CAJY4u8HfVkBX_y0sP0ZiFyD8Y6XRADJwJYgL1qDRGoXormbbRA@mail.gmail.com>
+
+The mailing list is not closed, which is why you can still use it to ask
+this question. It is merely dead, as conversation split into the two
+forums, users.rust-lang.org and internal.rust-lang.org.
+
+There are configuration options you can set in Discourse to make it work
+more like a mailing list, if you would prefer.
+
+On Sun, May 31, 2015 at 8:09 AM Flavius Aspra <flavius.as at gmail.com> wrote:
+
+> Hi
+>
+> What are the rationale for closing this mailing list?
+>
+> Old rusty hackers are used to MLs.
+>
+> Could you please point me to the discussion where this has been decided?
+>
+> Regards
+> Flavius Aspra
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150531/79ce1dec/attachment.html>
+
+From flavius.as at gmail.com  Sun May 31 17:54:36 2015
+From: flavius.as at gmail.com (Flavius Aspra)
+Date: Sun, 31 May 2015 19:54:36 +0200
+Subject: [rust-dev] Rationale for closing this mailing list
+In-Reply-To: <CAJY4u8HfVkBX_y0sP0ZiFyD8Y6XRADJwJYgL1qDRGoXormbbRA@mail.gmail.com>
+References: <CAJ0jH2qmikCf_pEsY9ZNjAVH8XVqOM1ThVJ9eTzedsNX-Wtjzw@mail.gmail.com>
+	<CAJY4u8HfVkBX_y0sP0ZiFyD8Y6XRADJwJYgL1qDRGoXormbbRA@mail.gmail.com>
+Message-ID: <CAJ0jH2rCtH8Pg0mn4ZtNA7j=7Yt8Ru5iR8m6BqvhDgsNt-R6fQ@mail.gmail.com>
+
+On Sun, May 31, 2015 at 5:27 PM, Evan G <eg1290 at gmail.com> wrote:
+
+> The mailing list is not closed, which is why you can still use it to ask
+> this question. It is merely dead, as conversation split into the two
+> forums, users.rust-lang.org and internal.rust-lang.org.
+>
+> There are configuration options you can set in Discourse to make it work
+> more like a mailing list, if you would prefer.
+>
+
+So... why?
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150531/46fd06ed/attachment.html>
+
+From jamslam at gmail.com  Sun May 31 18:01:05 2015
+From: jamslam at gmail.com (Andrew Gallant)
+Date: Sun, 31 May 2015 14:01:05 -0400
+Subject: [rust-dev] Rationale for closing this mailing list
+In-Reply-To: <CAJ0jH2rCtH8Pg0mn4ZtNA7j=7Yt8Ru5iR8m6BqvhDgsNt-R6fQ@mail.gmail.com>
+References: <CAJ0jH2qmikCf_pEsY9ZNjAVH8XVqOM1ThVJ9eTzedsNX-Wtjzw@mail.gmail.com>
+	<CAJY4u8HfVkBX_y0sP0ZiFyD8Y6XRADJwJYgL1qDRGoXormbbRA@mail.gmail.com>
+	<CAJ0jH2rCtH8Pg0mn4ZtNA7j=7Yt8Ru5iR8m6BqvhDgsNt-R6fQ@mail.gmail.com>
+Message-ID: <CAMfjfuH1oLh4_Uhxjp5oYHawjBRSY=Zwap4Mk=ywOc6cHit1gw@mail.gmail.com>
+
+> So... why?
+
+https://mail.mozilla.org/pipermail/rust-dev/2015-January/011558.html
+

@@ -1,0 +1,4755 @@
+From kerinin at gmail.com  Mon Dec  1 07:59:20 2014
+From: kerinin at gmail.com (Ryan Michael)
+Date: Mon, 01 Dec 2014 15:59:20 +0000
+Subject: [rust-dev] Encapsulating mutiple generic types
+Message-ID: <CAPi5qsQcW7M7v+D1DT1zu3P2O0hMkiEL36SORnYoJ0Z0eBk7dg@mail.gmail.com>
+
+I'm curious if the community has some design approaches to encapsulating
+interfaces to multiple generic implementations.  For example, imagine I was
+writing an abstract database interface with multiple backing
+implementations for different stores (sqlite, pgsql, mysql, etc) and
+logging data to different types of loggers (stdout, file, network-attached,
+etc).  The goal would be to implement some shared methods (insert, query,
+delete) to be delegated to different stores, with logging about the results.
+
+My first approach to this was to create traits, and use them in a struct
+
+trait Logger {
+  fn log(&mut self, message: String),
+}
+
+trait Store {
+  fn insert(&mut self, value: String),
+  fn query(&mut self, conditions: String) -> Vec<String>,
+  fn delete(&mut self, value: String),
+}
+
+struct Database {
+  db: Store,
+  logger: Logger,
+}
+
+AFAICT, this isn't possible - struct fields seem to require concrete types.
+
+Another approach I've considered is using a function with a communication
+channel, something like (code probably broken in multiple ways):
+
+enum Event {
+  Insert(value: String),
+  Query(conditions, response: channel<String>),
+  Delete(value: String),
+}
+fn database(db: Database, logger: Logger, events: chan<Event>) {
+  loop {
+    match events.recv() {
+      // do stuff
+    }
+  }
+}
+let (tx, rx) = channel()
+spawn {
+  database(db, logger, rx);
+}
+tx.send(Query(my_query));
+
+This seems like it would work, but feels like a hack.  Is there a better
+way to do this than using channels?
+
+-Ryan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141201/ae510891/attachment.html>
+
+From ravasio.federico at gmail.com  Mon Dec  1 08:04:57 2014
+From: ravasio.federico at gmail.com (Federico Ravasio)
+Date: Mon, 1 Dec 2014 17:04:57 +0100
+Subject: [rust-dev] Encapsulating mutiple generic types
+In-Reply-To: <CAPi5qsQcW7M7v+D1DT1zu3P2O0hMkiEL36SORnYoJ0Z0eBk7dg@mail.gmail.com>
+References: <CAPi5qsQcW7M7v+D1DT1zu3P2O0hMkiEL36SORnYoJ0Z0eBk7dg@mail.gmail.com>
+Message-ID: <2843277EC7F048BF86EA8873577A95CA@gmail.com>
+
+???????????, 1 ??????? 2014 ?. ? 16:59, Ryan Michael ???????:
+> I'm curious if the community has some design approaches to encapsulating interfaces to multiple generic implementations. For example, imagine I was writing an abstract database interface with multiple backing implementations for different stores (sqlite, pgsql, mysql, etc) and logging data to different types of loggers (stdout, file, network-attached, etc). The goal would be to implement some shared methods (insert, query, delete) to be delegated to different stores, with logging about the results.
+>  
+> My first approach to this was to create traits, and use them in a struct
+>  
+> trait Logger {
+> fn log(&mut self, message: String),
+> }
+>  
+> trait Store {
+> fn insert(&mut self, value: String),
+> fn query(&mut self, conditions: String) -> Vec<String>,
+> fn delete(&mut self, value: String),
+> }
+>  
+> struct Database {
+> db: Store,
+> logger: Logger,
+> }
+>  
+> AFAICT, this isn't possible - struct fields seem to require concrete types.
+>  
+Hello Ryan,
+I?ve had some luck by wrapping trait fields into boxes, with explicit lifetimes.
+
+This should work:
+
+struct Database<'a> {
+    db: Box<Store + 'a>,
+    logger: Box<Logger + 'a>,
+}
+
+
+Now, I?m not sure if that?s a community-accepted solution. Let?s see what the others think. :)
+
+Cheers,
+Federico
+
+
+From blastrock0 at free.fr  Mon Dec  1 11:48:29 2014
+From: blastrock0 at free.fr (Philippe Daouadi)
+Date: Mon, 01 Dec 2014 20:48:29 +0100
+Subject: [rust-dev] Encapsulating mutiple generic types
+In-Reply-To: <2843277EC7F048BF86EA8873577A95CA@gmail.com>
+References: <CAPi5qsQcW7M7v+D1DT1zu3P2O0hMkiEL36SORnYoJ0Z0eBk7dg@mail.gmail.com>
+	<2843277EC7F048BF86EA8873577A95CA@gmail.com>
+Message-ID: <547CC60D.6050500@free.fr>
+
+Hi,
+
+In my project, I use something like:
+
+struct Database {
+     db: Box<Store + 'static>,
+     logger: Box<Logger + 'static>,
+}
+
+Does anyone know what is the difference? They seem to work the same to me.
+
+Philippe
+
+On 12/01/2014 05:04 PM, Federico Ravasio wrote:
+> ???????????, 1 ??????? 2014 ?. ? 16:59, Ryan Michael ???????:
+>> I'm curious if the community has some design approaches to encapsulating interfaces to multiple generic implementations. For example, imagine I was writing an abstract database interface with multiple backing implementations for different stores (sqlite, pgsql, mysql, etc) and logging data to different types of loggers (stdout, file, network-attached, etc). The goal would be to implement some shared methods (insert, query, delete) to be delegated to different stores, with logging about the results.
+>>   
+>> My first approach to this was to create traits, and use them in a struct
+>>   
+>> trait Logger {
+>> fn log(&mut self, message: String),
+>> }
+>>   
+>> trait Store {
+>> fn insert(&mut self, value: String),
+>> fn query(&mut self, conditions: String) -> Vec<String>,
+>> fn delete(&mut self, value: String),
+>> }
+>>   
+>> struct Database {
+>> db: Store,
+>> logger: Logger,
+>> }
+>>   
+>> AFAICT, this isn't possible - struct fields seem to require concrete types.
+>>   
+> Hello Ryan,
+> I?ve had some luck by wrapping trait fields into boxes, with explicit lifetimes.
+>
+> This should work:
+>
+> struct Database<'a> {
+>      db: Box<Store + 'a>,
+>      logger: Box<Logger + 'a>,
+> }
+>
+>
+> Now, I?m not sure if that?s a community-accepted solution. Let?s see what the others think. :)
+>
+> Cheers,
+> Federico
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From tkuehn at cmu.edu  Mon Dec  1 12:25:41 2014
+From: tkuehn at cmu.edu (Tim Kuehn)
+Date: Mon, 1 Dec 2014 12:25:41 -0800
+Subject: [rust-dev] Encapsulating mutiple generic types
+In-Reply-To: <547CC60D.6050500@free.fr>
+References: <CAPi5qsQcW7M7v+D1DT1zu3P2O0hMkiEL36SORnYoJ0Z0eBk7dg@mail.gmail.com>
+	<2843277EC7F048BF86EA8873577A95CA@gmail.com> <547CC60D.6050500@free.fr>
+Message-ID: <CACVDHKnFi2wa8XNx751ALFDgMFyayJ4FpZfbECLxt8OqcJ4nUA@mail.gmail.com>
+
+Can you use a trait for that?
+
+trait Database: Store + Logger {}
+
+On Mon, Dec 1, 2014 at 11:48 AM, Philippe Daouadi <blastrock0 at free.fr>
+wrote:
+
+> Hi,
+>
+> In my project, I use something like:
+>
+> struct Database {
+>     db: Box<Store + 'static>,
+>     logger: Box<Logger + 'static>,
+> }
+>
+> Does anyone know what is the difference? They seem to work the same to me.
+>
+> Philippe
+>
+>
+> On 12/01/2014 05:04 PM, Federico Ravasio wrote:
+>
+>> ???????????, 1 ??????? 2014 ?. ? 16:59, Ryan Michael ???????:
+>>
+>>> I'm curious if the community has some design approaches to encapsulating
+>>> interfaces to multiple generic implementations. For example, imagine I was
+>>> writing an abstract database interface with multiple backing
+>>> implementations for different stores (sqlite, pgsql, mysql, etc) and
+>>> logging data to different types of loggers (stdout, file, network-attached,
+>>> etc). The goal would be to implement some shared methods (insert, query,
+>>> delete) to be delegated to different stores, with logging about the results.
+>>>   My first approach to this was to create traits, and use them in a
+>>> struct
+>>>   trait Logger {
+>>> fn log(&mut self, message: String),
+>>> }
+>>>   trait Store {
+>>> fn insert(&mut self, value: String),
+>>> fn query(&mut self, conditions: String) -> Vec<String>,
+>>> fn delete(&mut self, value: String),
+>>> }
+>>>   struct Database {
+>>> db: Store,
+>>> logger: Logger,
+>>> }
+>>>   AFAICT, this isn't possible - struct fields seem to require concrete
+>>> types.
+>>>
+>>>
+>> Hello Ryan,
+>> I?ve had some luck by wrapping trait fields into boxes, with explicit
+>> lifetimes.
+>>
+>> This should work:
+>>
+>> struct Database<'a> {
+>>      db: Box<Store + 'a>,
+>>      logger: Box<Logger + 'a>,
+>> }
+>>
+>>
+>> Now, I?m not sure if that?s a community-accepted solution. Let?s see what
+>> the others think. :)
+>>
+>> Cheers,
+>> Federico
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141201/607b9b3f/attachment.html>
+
+From benjamin.foppa at gmail.com  Mon Dec  1 12:37:02 2014
+From: benjamin.foppa at gmail.com (Ben Foppa)
+Date: Mon, 1 Dec 2014 12:37:02 -0800
+Subject: [rust-dev] Encapsulating mutiple generic types
+In-Reply-To: <547CC60D.6050500@free.fr>
+References: <CAPi5qsQcW7M7v+D1DT1zu3P2O0hMkiEL36SORnYoJ0Z0eBk7dg@mail.gmail.com>
+	<2843277EC7F048BF86EA8873577A95CA@gmail.com>
+	<547CC60D.6050500@free.fr>
+Message-ID: <CADu1bNQB0GX2QWJmeSEZY6wYGp1aZwrCdphj1Mtnz2Eihu6B8w@mail.gmail.com>
+
+I think 'static is the global lifetime - that might require that the
+objects can exist for as long as the program does.
+
+also FWIW, I'm pretty sure these kinds of discussions are better-suited for
+stack overflow. The mailing list is somewhat deprecated, at least
+unofficially.
+
+On Mon, Dec 1, 2014 at 11:48 AM, Philippe Daouadi <blastrock0 at free.fr>
+wrote:
+
+> Hi,
+>
+> In my project, I use something like:
+>
+> struct Database {
+>     db: Box<Store + 'static>,
+>     logger: Box<Logger + 'static>,
+> }
+>
+> Does anyone know what is the difference? They seem to work the same to me.
+>
+> Philippe
+>
+>
+> On 12/01/2014 05:04 PM, Federico Ravasio wrote:
+>
+>> ???????????, 1 ??????? 2014 ?. ? 16:59, Ryan Michael ???????:
+>>
+>>> I'm curious if the community has some design approaches to encapsulating
+>>> interfaces to multiple generic implementations. For example, imagine I was
+>>> writing an abstract database interface with multiple backing
+>>> implementations for different stores (sqlite, pgsql, mysql, etc) and
+>>> logging data to different types of loggers (stdout, file, network-attached,
+>>> etc). The goal would be to implement some shared methods (insert, query,
+>>> delete) to be delegated to different stores, with logging about the results.
+>>>   My first approach to this was to create traits, and use them in a
+>>> struct
+>>>   trait Logger {
+>>> fn log(&mut self, message: String),
+>>> }
+>>>   trait Store {
+>>> fn insert(&mut self, value: String),
+>>> fn query(&mut self, conditions: String) -> Vec<String>,
+>>> fn delete(&mut self, value: String),
+>>> }
+>>>   struct Database {
+>>> db: Store,
+>>> logger: Logger,
+>>> }
+>>>   AFAICT, this isn't possible - struct fields seem to require concrete
+>>> types.
+>>>
+>>>
+>> Hello Ryan,
+>> I?ve had some luck by wrapping trait fields into boxes, with explicit
+>> lifetimes.
+>>
+>> This should work:
+>>
+>> struct Database<'a> {
+>>      db: Box<Store + 'a>,
+>>      logger: Box<Logger + 'a>,
+>> }
+>>
+>>
+>> Now, I?m not sure if that?s a community-accepted solution. Let?s see what
+>> the others think. :)
+>>
+>> Cheers,
+>> Federico
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141201/b72ce374/attachment.html>
+
+From ckkashyap at gmail.com  Wed Dec  3 09:34:00 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Wed, 3 Dec 2014 23:04:00 +0530
+Subject: [rust-dev] A question about implementation of &str
+Message-ID: <CAGdT1goXczhOu3oat1t_q402cOpo6nP3WhCDCxNvjCvSfHZBgw@mail.gmail.com>
+
+Hi,
+I am stuck in my kernel development where I find that I am not able to
+iterate over a &str. The code is here -
+https://github.com/ckkashyap/unix/blob/master/kernel/uart.rs in the
+function uart_putc I find that the for-loop loops the right number of times
+but it does not print the right character. To me it appears to be a linking
+problem with my kernel. However, to debug this issue I wanted to get a
+better understanding of what happens when we iterate over &str. I was
+surprised to see that the length of the string literal that is determined
+at compile time is being sent as an argument.
+
+I'd appreciate any insights into how I can debug this.
+
+Regards,
+Kashyap
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141203/b08a7f75/attachment.html>
+
+From ckkashyap at gmail.com  Wed Dec  3 09:36:31 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Wed, 3 Dec 2014 23:06:31 +0530
+Subject: [rust-dev] Info about Rust modules
+Message-ID: <CAGdT1gpPsqJ6YU6Vfy_XtEZbW4vEfzPANTcZaAAdfcHSoiE6xQ@mail.gmail.com>
+
+Hi,
+Could someone please point me to a good article/doc where I could read
+about Rust's module system? I''ve gone through
+http://doc.rust-lang.org/guide.html#crates-and-modules but it does not seem
+adequate in terms of understanding what modules are and what happens when I
+use the "use" keyword.
+Regards,
+Kashyap
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141203/1bbef64f/attachment.html>
+
+From matthieu.monrocq at gmail.com  Wed Dec  3 09:57:40 2014
+From: matthieu.monrocq at gmail.com (Matthieu Monrocq)
+Date: Wed, 3 Dec 2014 18:57:40 +0100
+Subject: [rust-dev] A question about implementation of &str
+In-Reply-To: <CAGdT1goXczhOu3oat1t_q402cOpo6nP3WhCDCxNvjCvSfHZBgw@mail.gmail.com>
+References: <CAGdT1goXczhOu3oat1t_q402cOpo6nP3WhCDCxNvjCvSfHZBgw@mail.gmail.com>
+Message-ID: <CAKE6RfiugSKY35+rx=rbjjw1_hVjMiQi5-4dvuVOEpjMfofsfw@mail.gmail.com>
+
+&str is simply a pair (length, pointer).
+
+The reason that even for a literal the length is packed as an argument is
+that &str does not ONLY work for literals (complete type &'static str) but
+for any slice of characters, such as those produced by String::as_slice()
+in which case the lifetime is different (only live as long as the
+particular String instance) and the length is not necessarily known at
+compile-time.
+
+On Wed, Dec 3, 2014 at 6:34 PM, C K Kashyap <ckkashyap at gmail.com> wrote:
+
+> Hi,
+> I am stuck in my kernel development where I find that I am not able to
+> iterate over a &str. The code is here -
+> https://github.com/ckkashyap/unix/blob/master/kernel/uart.rs in the
+> function uart_putc I find that the for-loop loops the right number of
+> times but it does not print the right character. To me it appears to be a
+> linking problem with my kernel. However, to debug this issue I wanted to
+> get a better understanding of what happens when we iterate over &str. I was
+> surprised to see that the length of the string literal that is determined
+> at compile time is being sent as an argument.
+>
+> I'd appreciate any insights into how I can debug this.
+>
+> Regards,
+> Kashyap
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141203/25361a1e/attachment.html>
+
+From steve at steveklabnik.com  Wed Dec  3 11:43:36 2014
+From: steve at steveklabnik.com (Steve Klabnik)
+Date: Wed, 3 Dec 2014 20:43:36 +0100
+Subject: [rust-dev] Info about Rust modules
+In-Reply-To: <CAGdT1gpPsqJ6YU6Vfy_XtEZbW4vEfzPANTcZaAAdfcHSoiE6xQ@mail.gmail.com>
+References: <CAGdT1gpPsqJ6YU6Vfy_XtEZbW4vEfzPANTcZaAAdfcHSoiE6xQ@mail.gmail.com>
+Message-ID: <8DDBC314-57D7-4ADC-B81D-E000802D5B3D@steveklabnik.com>
+
+http://doc.rust-lang.org/guide-crates.html is much more in-depth.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141203/af3f0ff8/attachment.html>
+
+From ckkashyap at gmail.com  Wed Dec  3 19:04:50 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Thu, 4 Dec 2014 08:34:50 +0530
+Subject: [rust-dev] A question about implementation of &str
+In-Reply-To: <CAKE6RfiugSKY35+rx=rbjjw1_hVjMiQi5-4dvuVOEpjMfofsfw@mail.gmail.com>
+References: <CAGdT1goXczhOu3oat1t_q402cOpo6nP3WhCDCxNvjCvSfHZBgw@mail.gmail.com>
+	<CAKE6RfiugSKY35+rx=rbjjw1_hVjMiQi5-4dvuVOEpjMfofsfw@mail.gmail.com>
+Message-ID: <CAGdT1gqPDKRZCrDt0T9jjvCJ+3dTv8V3zR+VCxO_kVDW9L7tgA@mail.gmail.com>
+
+Thanks Matthieu.
+Regards,
+Kashyap
+
+On Wed, Dec 3, 2014 at 11:27 PM, Matthieu Monrocq <
+matthieu.monrocq at gmail.com> wrote:
+
+> &str is simply a pair (length, pointer).
+>
+> The reason that even for a literal the length is packed as an argument is
+> that &str does not ONLY work for literals (complete type &'static str) but
+> for any slice of characters, such as those produced by String::as_slice()
+> in which case the lifetime is different (only live as long as the
+> particular String instance) and the length is not necessarily known at
+> compile-time.
+>
+> On Wed, Dec 3, 2014 at 6:34 PM, C K Kashyap <ckkashyap at gmail.com> wrote:
+>
+>> Hi,
+>> I am stuck in my kernel development where I find that I am not able to
+>> iterate over a &str. The code is here -
+>> https://github.com/ckkashyap/unix/blob/master/kernel/uart.rs in the
+>> function uart_putc I find that the for-loop loops the right number of
+>> times but it does not print the right character. To me it appears to be a
+>> linking problem with my kernel. However, to debug this issue I wanted to
+>> get a better understanding of what happens when we iterate over &str. I was
+>> surprised to see that the length of the string literal that is determined
+>> at compile time is being sent as an argument.
+>>
+>> I'd appreciate any insights into how I can debug this.
+>>
+>> Regards,
+>> Kashyap
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141204/ec5f6082/attachment.html>
+
+From mage at mage.li  Fri Dec  5 03:33:43 2014
+From: mage at mage.li (=?UTF-8?B?UMOpdGVyIE3Ds3plcyBNZXJs?=)
+Date: Fri, 05 Dec 2014 12:33:43 +0100
+Subject: [rust-dev] Rust Guide 22 and 23
+Message-ID: <54819817.1010609@mage.li>
+
+        Hi Everyone,
+
+after long years of working with scripting languages I have finally
+found a strongly-typed language that is worth to learn (for me). Cheers.
+
+The Guide is awesome. There is only one thing I missed and that?s
+between chapters 22 and 23, Generics and Traits. The Guide says that we
+have to learn about Traits to fix this message:
+
+error: binary operation `==` cannot be applied to type `T`
+
+I think the example how to fix it at the end is missing. I am not sure
+whether this is the right place to provide such a feedback, however, I
+could not find a link in the Guide.
+
+Thank you.
+
+        P?ter
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141205/77dfa370/attachment.html>
+
+From nathanrsizemore at gmail.com  Fri Dec  5 05:15:08 2014
+From: nathanrsizemore at gmail.com (Nathan Sizemore)
+Date: Fri, 5 Dec 2014 08:15:08 -0500
+Subject: [rust-dev] Rust Guide 22 and 23
+In-Reply-To: <54819817.1010609@mage.li>
+References: <54819817.1010609@mage.li>
+Message-ID: <CAB9dCz4Wwpfzd4r865sa_pi6i6wZgWik2E9csTyBBtE0MY-kcw@mail.gmail.com>
+
+I believe that was just showing an example of the error the compiler will
+generate when not using trait constraints.  If you read a little further, a
+similar error is produced from
+
+fn print_area<T>(shape: T) {
+    println!("This shape has an area of {}", shape.area());
+}
+
+Because T can be any type, we can't be sure that it implements the area method.
+But we can add a *trait constraint* to our generic T, ensuring that it does:
+
+fn print_area<T: HasArea>(shape: T) {
+    println!("This shape has an area of {}", shape.area());
+}
+
+
+If you're wanting to do comparisons, you will probably want to place a
+trait constraint on your functions from the following module:
+http://doc.rust-lang.org/std/cmp/index.html#traits
+
+
+Nathan Sizemore
+@nathansizemore | 937.823.7229
+
+
+On Fri, Dec 5, 2014 at 6:33 AM, P?ter M?zes Merl <mage at mage.li> wrote:
+
+>          Hi Everyone,
+>
+> after long years of working with scripting languages I have finally found
+> a strongly-typed language that is worth to learn (for me). Cheers.
+>
+> The Guide is awesome. There is only one thing I missed and that?s between
+> chapters 22 and 23, Generics and Traits. The Guide says that we have to
+> learn about Traits to fix this message:
+>
+> error: binary operation `==` cannot be applied to type `T`
+>
+> I think the example how to fix it at the end is missing. I am not sure
+> whether this is the right place to provide such a feedback, however, I
+> could not find a link in the Guide.
+>
+> Thank you.
+>
+>         P?ter
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141205/82d3bd2d/attachment.html>
+
+From mage at mage.li  Fri Dec  5 06:52:47 2014
+From: mage at mage.li (=?UTF-8?B?UMOpdGVyIE3Ds3plcyBNZXJs?=)
+Date: Fri, 05 Dec 2014 15:52:47 +0100
+Subject: [rust-dev] Rust Guide 22 and 23
+In-Reply-To: <CAB9dCz4Wwpfzd4r865sa_pi6i6wZgWik2E9csTyBBtE0MY-kcw@mail.gmail.com>
+References: <54819817.1010609@mage.li>
+	<CAB9dCz4Wwpfzd4r865sa_pi6i6wZgWik2E9csTyBBtE0MY-kcw@mail.gmail.com>
+Message-ID: <5481C6BF.4070600@mage.li>
+
+Am 05/12/14 um 14:15 schrieb Nathan Sizemore:
+>
+> If you're wanting to do comparisons, you will probably want to place a
+> trait constraint on your functions from the following
+> module: http://doc.rust-lang.org/std/cmp/index.html#traits
+>
+I tried to write the function (my second Rust code ever). I thought that
+returning T makes no sense since the inverse of an integer should be a
+float.
+
+Is this the right way?
+
+use std::num;
+
+fn main() {
+    fn inverse<T: num::NumCast>(x: T) -> Result<f64, String> {
+        let local: f64 = num::cast(x).unwrap();
+        if 0f64 == local { return Err("x cannot be zero!".to_string()); }
+        Ok(1f64 / local)
+    }
+
+    match inverse(5.2f32) {
+        Ok(n) => println!("{}", n),
+        Err(s) => println!("{}", s)
+    }
+
+    match inverse(4i) {
+        Ok(n) => println!("{}", n),
+        Err(s) => println!("{}", s)
+    }
+}
+
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141205/7c0a106c/attachment.html>
+
+From nodakai at gmail.com  Fri Dec  5 15:59:00 2014
+From: nodakai at gmail.com (Kai Noda)
+Date: Sat, 6 Dec 2014 07:59:00 +0800
+Subject: [rust-dev] Rust Guide 22 and 23
+In-Reply-To: <5481C6BF.4070600@mage.li>
+References: <54819817.1010609@mage.li>
+	<CAB9dCz4Wwpfzd4r865sa_pi6i6wZgWik2E9csTyBBtE0MY-kcw@mail.gmail.com>
+	<5481C6BF.4070600@mage.li>
+Message-ID: <CAHx8Srm69kWNgkUCLz-BEpjiX-+jmGWrs845kJnhsZZuK0rcDg@mail.gmail.com>
+
+Hi Peter,
+
+I would do in this way:
+
+use std::fmt::Show;
+use std::num::{mod, NumCast};
+
+fn inverse<T: NumCast>(x: T) -> Result<f64, String> {
+    let local = num::cast(x).expect("fail to cast into f64");
+    if 0. == local { Err("x cannot be zero!".to_string()); }
+    Ok(1. / local)
+}
+
+fn dotest<T: NumCast + Show + Clone> (x: T) {
+    println!("1/{} => {}", x.clone(), inverse(x));
+}
+
+fn main() {
+    dotest(5.2f32);
+    dotest(4i32);
+    dotest(0i);
+}
+
+(Disclaimer: it's only three months since I started to learn Rust!)
+
+There is an online compiler, though it's one month old and details of
+the language and the stdlib somewhat differ from those of the nightly
+version:
+http://is.gd/13zBYc (Hit the [evaluate] button)
+I think Reddit, StackOverflow and IRC (there's a web interface) are more
+active than this list.
+
+Hope this helps.
+
+Kai
+
+??  ? <nodakai at gmail.com>
+
+2014-12-05 22:52 GMT+08:00 P?ter M?zes Merl <mage at mage.li>:
+
+>  Am 05/12/14 um 14:15 schrieb Nathan Sizemore:
+>
+>
+> If you're wanting to do comparisons, you will probably want to place a
+> trait constraint on your functions from the following module:
+> http://doc.rust-lang.org/std/cmp/index.html#traits
+>
+>  I tried to write the function (my second Rust code ever). I thought that
+> returning T makes no sense since the inverse of an integer should be a
+> float.
+>
+> Is this the right way?
+>
+> use std::num;fn main() {
+>     fn inverse<T: num::NumCast>(x: T) -> Result<f64, String> {
+>         let local: f64 = num::cast(x).unwrap();        if 0f64 == local { return Err("x cannot be zero!".to_string()); }
+>         Ok(1f64 / local)
+>     }
+>
+>     match inverse(5.2f32) {
+>         Ok(n) => println!("{}", n),        Err(s) => println!("{}", s)
+>     }
+>
+>     match inverse(4i) {
+>         Ok(n) => println!("{}", n),        Err(s) => println!("{}", s)
+>     }
+> }
+>
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141206/28d0f9a9/attachment.html>
+
+From daniel.trstenjak at gmail.com  Sun Dec  7 13:27:10 2014
+From: daniel.trstenjak at gmail.com (Daniel Trstenjak)
+Date: Sun, 7 Dec 2014 22:27:10 +0100
+Subject: [rust-dev] [ANN] rusty-tags: create tags for a cargo project and
+ all of its dependencies
+Message-ID: <20141207212710.GA14422@machine>
+
+
+Hi all,
+
+https://github.com/dan-t/rusty-tags
+
+Have fun!
+
+
+Greetings,
+Daniel
+
+From com.liigo at gmail.com  Sun Dec  7 16:15:38 2014
+From: com.liigo at gmail.com (Liigo Zhuang)
+Date: Mon, 8 Dec 2014 08:15:38 +0800
+Subject: [rust-dev] [ANN] rusty-tags: create tags for a cargo project
+ and all of its dependencies
+In-Reply-To: <20141207212710.GA14422@machine>
+References: <20141207212710.GA14422@machine>
+Message-ID: <CAH8Jz7gA+yZ2X-MjtHDS+zCYLhpmu7oL8RHKHo-0tOdf-nQtiw@mail.gmail.com>
+
+nice!
+2014?12?8? ??5:27? "Daniel Trstenjak" <daniel.trstenjak at gmail.com>???
+
+>
+> Hi all,
+>
+> https://github.com/dan-t/rusty-tags
+>
+> Have fun!
+>
+>
+> Greetings,
+> Daniel
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141208/2f1a45d5/attachment.html>
+
+From gsingh_2011 at yahoo.com  Sun Dec  7 21:17:43 2014
+From: gsingh_2011 at yahoo.com (Gulshan Singh)
+Date: Mon, 08 Dec 2014 05:17:43 +0000
+Subject: [rust-dev] [ANN] rusty-tags: create tags for a cargo project
+ and all of its dependencies
+References: <20141207212710.GA14422@machine>
+Message-ID: <CANEZYrcu9x2Z8ZtD5_VhFE-ceo156Tap3s=mAFaJXOQzhvSMSA@mail.gmail.com>
+
+Awesome, I might try hacking on the emacs tags in a week or two.
+
+On Sun Dec 07 2014 at 4:27:23 PM Daniel Trstenjak <
+daniel.trstenjak at gmail.com> wrote:
+
+>
+> Hi all,
+>
+> https://github.com/dan-t/rusty-tags
+>
+> Have fun!
+>
+>
+> Greetings,
+> Daniel
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141208/243e73ef/attachment.html>
+
+From ckkashyap at gmail.com  Tue Dec  9 02:44:55 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Tue, 9 Dec 2014 16:14:55 +0530
+Subject: [rust-dev] target json documentation
+Message-ID: <CAGdT1gojNhw-rggih3TaBEosVAZkSWUupQTTUYbt+CH8dk7e2g@mail.gmail.com>
+
+Hi,
+Can someone please point me to the documentation around the valid contents
+of target json file that can be passed to the compiler?
+Regards,
+Kashyap
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141209/3b58bcdb/attachment.html>
+
+From nathanrsizemore at gmail.com  Tue Dec  9 04:43:30 2014
+From: nathanrsizemore at gmail.com (Nathan Sizemore)
+Date: Tue, 9 Dec 2014 07:43:30 -0500
+Subject: [rust-dev] target json documentation
+In-Reply-To: <CAGdT1gojNhw-rggih3TaBEosVAZkSWUupQTTUYbt+CH8dk7e2g@mail.gmail.com>
+References: <CAGdT1gojNhw-rggih3TaBEosVAZkSWUupQTTUYbt+CH8dk7e2g@mail.gmail.com>
+Message-ID: <CAB9dCz54-+_T4tL7PX0x+XxytSSenLDLvH6zPeWo-V0xAo2Bgg@mail.gmail.com>
+
+Hello,
+
+I'm not aware of an option to rustc that allows a json file to passed for
+compilation options (I'm assuming this is what you're referring to)?
+
+Documentation for building a crate using Cargo -
+http://doc.crates.io/guide.html
+Or
+>From a terminal, run "man rustc" or "rustc --help" for list of options you
+can pass the compiler.
+
+For JSON implementation in the language itself -
+http://doc.rust-lang.org/serialize/json/index.html
+
+
+Hopefully, one of those will help?
+
+- Nathan
+
+
+Nathan Sizemore
+@nathansizemore | 937.823.7229
+
+On Tue, Dec 9, 2014 at 5:44 AM, C K Kashyap <ckkashyap at gmail.com> wrote:
+
+> Hi,
+> Can someone please point me to the documentation around the valid contents
+> of target json file that can be passed to the compiler?
+> Regards,
+> Kashyap
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141209/2849baf7/attachment.html>
+
+From ckkashyap at gmail.com  Tue Dec  9 05:02:01 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Tue, 9 Dec 2014 18:32:01 +0530
+Subject: [rust-dev] target json documentation
+In-Reply-To: <CAB9dCz54-+_T4tL7PX0x+XxytSSenLDLvH6zPeWo-V0xAo2Bgg@mail.gmail.com>
+References: <CAGdT1gojNhw-rggih3TaBEosVAZkSWUupQTTUYbt+CH8dk7e2g@mail.gmail.com>
+	<CAB9dCz54-+_T4tL7PX0x+XxytSSenLDLvH6zPeWo-V0xAo2Bgg@mail.gmail.com>
+Message-ID: <CAGdT1go7isJ=H3Kk4JgtP0eu-sk3Spm61C6yc5XoZ-R8n-2B+g@mail.gmail.com>
+
+Hi Nathan,
+
+I've used it here -
+https://github.com/ckkashyap/unix/blob/master/kernel/Makefile and it
+appears that the compiler does honor the contents of the json file that is
+passed.
+
+Regards,
+Kashyap
+
+On Tue, Dec 9, 2014 at 6:13 PM, Nathan Sizemore <nathanrsizemore at gmail.com>
+wrote:
+
+> Hello,
+>
+> I'm not aware of an option to rustc that allows a json file to passed for
+> compilation options (I'm assuming this is what you're referring to)?
+>
+> Documentation for building a crate using Cargo -
+> http://doc.crates.io/guide.html
+> Or
+> From a terminal, run "man rustc" or "rustc --help" for list of options you
+> can pass the compiler.
+>
+> For JSON implementation in the language itself -
+> http://doc.rust-lang.org/serialize/json/index.html
+>
+>
+> Hopefully, one of those will help?
+>
+> - Nathan
+>
+>
+> Nathan Sizemore
+> @nathansizemore | 937.823.7229
+>
+> On Tue, Dec 9, 2014 at 5:44 AM, C K Kashyap <ckkashyap at gmail.com> wrote:
+>
+>> Hi,
+>> Can someone please point me to the documentation around the valid
+>> contents of target json file that can be passed to the compiler?
+>> Regards,
+>> Kashyap
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141209/6aed4c11/attachment.html>
+
+From nathanrsizemore at gmail.com  Tue Dec  9 05:09:23 2014
+From: nathanrsizemore at gmail.com (Nathan Sizemore)
+Date: Tue, 9 Dec 2014 08:09:23 -0500
+Subject: [rust-dev] target json documentation
+In-Reply-To: <CAGdT1go7isJ=H3Kk4JgtP0eu-sk3Spm61C6yc5XoZ-R8n-2B+g@mail.gmail.com>
+References: <CAGdT1gojNhw-rggih3TaBEosVAZkSWUupQTTUYbt+CH8dk7e2g@mail.gmail.com>
+	<CAB9dCz54-+_T4tL7PX0x+XxytSSenLDLvH6zPeWo-V0xAo2Bgg@mail.gmail.com>
+	<CAGdT1go7isJ=H3Kk4JgtP0eu-sk3Spm61C6yc5XoZ-R8n-2B+g@mail.gmail.com>
+Message-ID: <CAB9dCz5mLp95+Lzbk_7eJp=1qW_ygzhV5BUPs=COC-0o4ABK5Q@mail.gmail.com>
+
+Huh, never knew that was possible.  Unfortunately, I have nothing to help
+with that...  Hopefully someone else will have something for you.
+
+Nathan
+
+Nathan Sizemore
+@nathansizemore | 937.823.7229
+
+On Tue, Dec 9, 2014 at 8:02 AM, C K Kashyap <ckkashyap at gmail.com> wrote:
+
+> Hi Nathan,
+>
+> I've used it here -
+> https://github.com/ckkashyap/unix/blob/master/kernel/Makefile and it
+> appears that the compiler does honor the contents of the json file that is
+> passed.
+>
+> Regards,
+> Kashyap
+>
+> On Tue, Dec 9, 2014 at 6:13 PM, Nathan Sizemore <nathanrsizemore at gmail.com
+> > wrote:
+>
+>> Hello,
+>>
+>> I'm not aware of an option to rustc that allows a json file to passed for
+>> compilation options (I'm assuming this is what you're referring to)?
+>>
+>> Documentation for building a crate using Cargo -
+>> http://doc.crates.io/guide.html
+>> Or
+>> From a terminal, run "man rustc" or "rustc --help" for list of options
+>> you can pass the compiler.
+>>
+>> For JSON implementation in the language itself -
+>> http://doc.rust-lang.org/serialize/json/index.html
+>>
+>>
+>> Hopefully, one of those will help?
+>>
+>> - Nathan
+>>
+>>
+>> Nathan Sizemore
+>> @nathansizemore | 937.823.7229
+>>
+>> On Tue, Dec 9, 2014 at 5:44 AM, C K Kashyap <ckkashyap at gmail.com> wrote:
+>>
+>>> Hi,
+>>> Can someone please point me to the documentation around the valid
+>>> contents of target json file that can be passed to the compiler?
+>>> Regards,
+>>> Kashyap
+>>>
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>>
+>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141209/565214ec/attachment.html>
+
+From ckkashyap at gmail.com  Tue Dec  9 05:48:17 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Tue, 9 Dec 2014 19:18:17 +0530
+Subject: [rust-dev] compiler option --target json documentation
+Message-ID: <CAGdT1gqctQ7JUcWzX-j8Zod0zRGgQO+rrYoLXYvDPRHOJ25Oog@mail.gmail.com>
+
+Updated the subject -
+
+On Tue, Dec 9, 2014 at 6:39 PM, Nathan Sizemore <nathanrsizemore at gmail.com>
+wrote:
+
+> Huh, never knew that was possible.  Unfortunately, I have nothing to help
+> with that...  Hopefully someone else will have something for you.
+>
+> Nathan
+>
+> Nathan Sizemore
+> @nathansizemore | 937.823.7229
+>
+> On Tue, Dec 9, 2014 at 8:02 AM, C K Kashyap <ckkashyap at gmail.com> wrote:
+>
+>> Hi Nathan,
+>>
+>> I've used it here -
+>> https://github.com/ckkashyap/unix/blob/master/kernel/Makefile and it
+>> appears that the compiler does honor the contents of the json file that is
+>> passed.
+>>
+>> Regards,
+>> Kashyap
+>>
+>> On Tue, Dec 9, 2014 at 6:13 PM, Nathan Sizemore <
+>> nathanrsizemore at gmail.com> wrote:
+>>
+>>> Hello,
+>>>
+>>> I'm not aware of an option to rustc that allows a json file to passed
+>>> for compilation options (I'm assuming this is what you're referring to)?
+>>>
+>>> Documentation for building a crate using Cargo -
+>>> http://doc.crates.io/guide.html
+>>> Or
+>>> From a terminal, run "man rustc" or "rustc --help" for list of options
+>>> you can pass the compiler.
+>>>
+>>> For JSON implementation in the language itself -
+>>> http://doc.rust-lang.org/serialize/json/index.html
+>>>
+>>>
+>>> Hopefully, one of those will help?
+>>>
+>>> - Nathan
+>>>
+>>>
+>>> Nathan Sizemore
+>>> @nathansizemore | 937.823.7229
+>>>
+>>> On Tue, Dec 9, 2014 at 5:44 AM, C K Kashyap <ckkashyap at gmail.com> wrote:
+>>>
+>>>> Hi,
+>>>> Can someone please point me to the documentation around the valid
+>>>> contents of target json file that can be passed to the compiler?
+>>>> Regards,
+>>>> Kashyap
+>>>>
+>>>> _______________________________________________
+>>>> Rust-dev mailing list
+>>>> Rust-dev at mozilla.org
+>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>>
+>>>>
+>>>
+>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141209/5527542e/attachment.html>
+
+From valerii.hiora at gmail.com  Tue Dec  9 05:55:40 2014
+From: valerii.hiora at gmail.com (Valerii Hiora)
+Date: Tue, 09 Dec 2014 15:55:40 +0200
+Subject: [rust-dev] target json documentation
+In-Reply-To: <CAGdT1go7isJ=H3Kk4JgtP0eu-sk3Spm61C6yc5XoZ-R8n-2B+g@mail.gmail.com>
+References: <CAGdT1gojNhw-rggih3TaBEosVAZkSWUupQTTUYbt+CH8dk7e2g@mail.gmail.com>	<CAB9dCz54-+_T4tL7PX0x+XxytSSenLDLvH6zPeWo-V0xAo2Bgg@mail.gmail.com>
+	<CAGdT1go7isJ=H3Kk4JgtP0eu-sk3Spm61C6yc5XoZ-R8n-2B+g@mail.gmail.com>
+Message-ID: <5486FF5C.2040106@gmail.com>
+
+Hi Kashyap,
+
+> I've used it here -
+> https://github.com/ckkashyap/unix/blob/master/kernel/Makefile and it 
+> appears that the compiler does honor the contents of the json file
+> that is passed.
+
+  Corey Richardson can help you with that.
+
+-- 
+
+  Valerii
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 801 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141209/2c21f436/attachment.sig>
+
+From corey at octayn.net  Tue Dec  9 09:17:31 2014
+From: corey at octayn.net (Corey Richardson)
+Date: Tue, 9 Dec 2014 12:17:31 -0500
+Subject: [rust-dev] target json documentation
+In-Reply-To: <5486FF5C.2040106@gmail.com>
+References: <CAGdT1gojNhw-rggih3TaBEosVAZkSWUupQTTUYbt+CH8dk7e2g@mail.gmail.com>
+	<CAB9dCz54-+_T4tL7PX0x+XxytSSenLDLvH6zPeWo-V0xAo2Bgg@mail.gmail.com>
+	<CAGdT1go7isJ=H3Kk4JgtP0eu-sk3Spm61C6yc5XoZ-R8n-2B+g@mail.gmail.com>
+	<5486FF5C.2040106@gmail.com>
+Message-ID: <CA++BO6SvTkW37Omk0f8E6GMH7eBasUtUvJKaczCwia17T=wxZw@mail.gmail.com>
+
+http://static.rust-lang.org/doc/master/rustc_back/target/index.html
+
+On Tue, Dec 9, 2014 at 8:55 AM, Valerii Hiora <valerii.hiora at gmail.com>
+wrote:
+
+> Hi Kashyap,
+>
+> > I've used it here -
+> > https://github.com/ckkashyap/unix/blob/master/kernel/Makefile and it
+> > appears that the compiler does honor the contents of the json file
+> > that is passed.
+>
+>   Corey Richardson can help you with that.
+>
+> --
+>
+>   Valerii
+>
+>
+
+
+-- 
+http://octayn.net/
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141209/1b02e5c9/attachment.html>
+
+From ckkashyap at gmail.com  Tue Dec  9 17:57:01 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Wed, 10 Dec 2014 07:27:01 +0530
+Subject: [rust-dev] target json documentation
+In-Reply-To: <CA++BO6SvTkW37Omk0f8E6GMH7eBasUtUvJKaczCwia17T=wxZw@mail.gmail.com>
+References: <CAGdT1gojNhw-rggih3TaBEosVAZkSWUupQTTUYbt+CH8dk7e2g@mail.gmail.com>
+	<CAB9dCz54-+_T4tL7PX0x+XxytSSenLDLvH6zPeWo-V0xAo2Bgg@mail.gmail.com>
+	<CAGdT1go7isJ=H3Kk4JgtP0eu-sk3Spm61C6yc5XoZ-R8n-2B+g@mail.gmail.com>
+	<5486FF5C.2040106@gmail.com>
+	<CA++BO6SvTkW37Omk0f8E6GMH7eBasUtUvJKaczCwia17T=wxZw@mail.gmail.com>
+Message-ID: <CAGdT1goWZ8TekeaRY3QgV+x+u0_jioGE98GXL_V+svksUe6H_g@mail.gmail.com>
+
+Excellent - just what  I was looking for.
+Thanks Corey and Valerii!
+Regards,
+Kashyap
+
+On Tue, Dec 9, 2014 at 10:47 PM, Corey Richardson <corey at octayn.net> wrote:
+
+> http://static.rust-lang.org/doc/master/rustc_back/target/index.html
+>
+> On Tue, Dec 9, 2014 at 8:55 AM, Valerii Hiora <valerii.hiora at gmail.com>
+> wrote:
+>
+>> Hi Kashyap,
+>>
+>> > I've used it here -
+>> > https://github.com/ckkashyap/unix/blob/master/kernel/Makefile and it
+>> > appears that the compiler does honor the contents of the json file
+>> > that is passed.
+>>
+>>   Corey Richardson can help you with that.
+>>
+>> --
+>>
+>>   Valerii
+>>
+>>
+>
+>
+> --
+> http://octayn.net/
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141210/7197ae0b/attachment.html>
+
+From ckkashyap at gmail.com  Tue Dec  9 19:43:43 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Wed, 10 Dec 2014 09:13:43 +0530
+Subject: [rust-dev] Curious about instruction pointer being used to compute
+	string offset
+Message-ID: <CAGdT1groOUSgmuakgw8KFdYNDTY5sQsqbheM4=CTTO8x-eEeyA@mail.gmail.com>
+
+Hi,
+
+Looks like on my ubuntu 64 bit, when I compile
+
+   hello("ABCD");
+
+I get
+
+    719e:       48 8d 05 e0 68 04 00    lea    0x468e0(%rip),%rax        #
+4da85 <str1405>
+    71a5:       48 89 44 24 08             mov    %rax,0x8(%rsp)
+    71aa:       48 c7 44 24 10 04 00    movq   $0x4,0x10(%rsp)
+    71b1:       00 00
+    71b3:       e8 88 f6 ff ff                 callq  6840
+<_ZN5hello20h8ed5f876da0c3862eaaE>
+
+
+I was wondering why is %rip being used for getting to the string? Or am I
+understanding it incorrectly?
+
+Regards,
+Kashyap
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141210/904b41fe/attachment.html>
+
+From danielmicay at gmail.com  Tue Dec  9 19:51:45 2014
+From: danielmicay at gmail.com (Daniel Micay)
+Date: Tue, 09 Dec 2014 22:51:45 -0500
+Subject: [rust-dev] Curious about instruction pointer being used to
+ compute string offset
+In-Reply-To: <CAGdT1groOUSgmuakgw8KFdYNDTY5sQsqbheM4=CTTO8x-eEeyA@mail.gmail.com>
+References: <CAGdT1groOUSgmuakgw8KFdYNDTY5sQsqbheM4=CTTO8x-eEeyA@mail.gmail.com>
+Message-ID: <5487C351.9050009@gmail.com>
+
+On 09/12/14 10:43 PM, C K Kashyap wrote:
+> Hi,
+> 
+> Looks like on my ubuntu 64 bit, when I compile 
+> 
+>    hello("ABCD");
+> 
+> I get 
+> 
+>     719e:       48 8d 05 e0 68 04 00    lea    0x468e0(%rip),%rax      
+>  # 4da85 <str1405>
+>     71a5:       48 89 44 24 08             mov    %rax,0x8(%rsp)
+>     71aa:       48 c7 44 24 10 04 00    movq   $0x4,0x10(%rsp)
+>     71b1:       00 00
+>     71b3:       e8 88 f6 ff ff                 callq  6840
+> <_ZN5hello20h8ed5f876da0c3862eaaE>
+> 
+> 
+> I was wondering why is %rip being used for getting to the string? Or am
+> I understanding it incorrectly?
+> 
+> Regards,
+> Kashyap
+
+That's what position independent code looks like on x86_64.
+
+https://en.wikipedia.org/wiki/Position-independent_code
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141209/5d2f4314/attachment.sig>
+
+From ckkashyap at gmail.com  Tue Dec  9 20:00:15 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Wed, 10 Dec 2014 09:30:15 +0530
+Subject: [rust-dev] Curious about instruction pointer being used to
+ compute string offset
+In-Reply-To: <5487C351.9050009@gmail.com>
+References: <CAGdT1groOUSgmuakgw8KFdYNDTY5sQsqbheM4=CTTO8x-eEeyA@mail.gmail.com>
+	<5487C351.9050009@gmail.com>
+Message-ID: <CAGdT1gqay8YGzi3BA0HsUSMyv_6EorwCRGua7Uo0hGTZPgHoMw@mail.gmail.com>
+
+oh nice ... In my kernel I am running into an issue where I am looping
+though an &str but it does not get the right characters (all zeros
+actually) - https://github.com/ckkashyap/unix/blob/master/kernel/uart.rs
+
+While I've used the PIC option several times, I had not realized that rip
+relative addressing is how it's done :) Thanks for the pointer.
+
+Now I need to find out what the problem is in my kernel code ...
+
+Thanks Daniel.
+
+Regards,
+Kashyap
+
+
+On Wed, Dec 10, 2014 at 9:21 AM, Daniel Micay <danielmicay at gmail.com> wrote:
+
+> On 09/12/14 10:43 PM, C K Kashyap wrote:
+> > Hi,
+> >
+> > Looks like on my ubuntu 64 bit, when I compile
+> >
+> >    hello("ABCD");
+> >
+> > I get
+> >
+> >     719e:       48 8d 05 e0 68 04 00    lea    0x468e0(%rip),%rax
+> >  # 4da85 <str1405>
+> >     71a5:       48 89 44 24 08             mov    %rax,0x8(%rsp)
+> >     71aa:       48 c7 44 24 10 04 00    movq   $0x4,0x10(%rsp)
+> >     71b1:       00 00
+> >     71b3:       e8 88 f6 ff ff                 callq  6840
+> > <_ZN5hello20h8ed5f876da0c3862eaaE>
+> >
+> >
+> > I was wondering why is %rip being used for getting to the string? Or am
+> > I understanding it incorrectly?
+> >
+> > Regards,
+> > Kashyap
+>
+> That's what position independent code looks like on x86_64.
+>
+> https://en.wikipedia.org/wiki/Position-independent_code
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141210/bc627b04/attachment.html>
+
+From ch4ppy at gmail.com  Wed Dec 10 10:08:40 2014
+From: ch4ppy at gmail.com (Matt)
+Date: Wed, 10 Dec 2014 13:08:40 -0500
+Subject: [rust-dev] Reading numbers from a mmap
+Message-ID: <D2B2197F-BF9C-4E9E-A6CA-1E78E0AA283E@gmail.com>
+
+Sorry if this has been covered before, and also that I'm a complete noob, but I'm thinking about trying a first project in Rust, and trying to learn enough to get started. 
+
+My plan is for an on-disk key-value store. I'm going to end up writing arrays of numbers to disk, and then needing to efficiently read them out of a mmap-ed file. So I'm wondering how in Rust you efficiently/zero-copy-ly take some slice of a read-only mmap and treat it as e.g. a vector of ints?
+
+I see Vec.from_raw_parts() and Vec.from_raw_buf(), but I don't really understand the difference between them, and also they seem like they just give you a vector of the pointer's type, so I don't know how you use them convert the u8s you get from MemoryMap.data() into a vector of a different type, e.g. 32 bit ints.
+
+It seems like there should be a higher level API for this kind of thing, where "casting" a slice of a read-only memory buffer into an immutable vector is not an unsafe operation (I mean, you can do that in Python ;) Either I don't see it in the docs, or it doesn't exist yet; just wondering which :)
+
+Thanks!
+
+Matt
+
+
+From danielmicay at gmail.com  Wed Dec 10 10:13:01 2014
+From: danielmicay at gmail.com (Daniel Micay)
+Date: Wed, 10 Dec 2014 13:13:01 -0500
+Subject: [rust-dev] Reading numbers from a mmap
+In-Reply-To: <D2B2197F-BF9C-4E9E-A6CA-1E78E0AA283E@gmail.com>
+References: <D2B2197F-BF9C-4E9E-A6CA-1E78E0AA283E@gmail.com>
+Message-ID: <54888D2D.9050708@gmail.com>
+
+On 10/12/14 01:08 PM, Matt wrote:
+> Sorry if this has been covered before, and also that I'm a complete noob, but I'm thinking about trying a first project in Rust, and trying to learn enough to get started. 
+> 
+> My plan is for an on-disk key-value store. I'm going to end up writing arrays of numbers to disk, and then needing to efficiently read them out of a mmap-ed file. So I'm wondering how in Rust you efficiently/zero-copy-ly take some slice of a read-only mmap and treat it as e.g. a vector of ints?
+> 
+> I see Vec.from_raw_parts() and Vec.from_raw_buf(), but I don't really understand the difference between them, and also they seem like they just give you a vector of the pointer's type, so I don't know how you use them convert the u8s you get from MemoryMap.data() into a vector of a different type, e.g. 32 bit ints.
+> 
+> It seems like there should be a higher level API for this kind of thing, where "casting" a slice of a read-only memory buffer into an immutable vector is not an unsafe operation (I mean, you can do that in Python ;) Either I don't see it in the docs, or it doesn't exist yet; just wondering which :)
+> 
+> Thanks!
+> 
+> Matt
+
+Keep in mind that the file won't be portable if you do this. It's why
+it's not a common pattern.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141210/50f8470a/attachment.sig>
+
+From erick.tryzelaar at gmail.com  Wed Dec 10 10:25:19 2014
+From: erick.tryzelaar at gmail.com (Erick Tryzelaar)
+Date: Wed, 10 Dec 2014 10:25:19 -0800
+Subject: [rust-dev] Reading numbers from a mmap
+In-Reply-To: <54888D2D.9050708@gmail.com>
+References: <D2B2197F-BF9C-4E9E-A6CA-1E78E0AA283E@gmail.com>
+	<54888D2D.9050708@gmail.com>
+Message-ID: <CALdfqQL=T+nUtxMG3YCu7t3cO4_wRZNZ2QsBXwcGhAwkRmCo_A@mail.gmail.com>
+
+You could try the Cap'n Proto bindings
+https://github.com/dwrensha/capnproto-rust, which supports this zero-copy
+pattern, and should be fast enough to saturate most disks.
+
+
+
+
+On Wed, Dec 10, 2014 at 10:13 AM, Daniel Micay <danielmicay at gmail.com>
+wrote:
+
+> On 10/12/14 01:08 PM, Matt wrote:
+> > Sorry if this has been covered before, and also that I'm a complete
+> noob, but I'm thinking about trying a first project in Rust, and trying to
+> learn enough to get started.
+> >
+> > My plan is for an on-disk key-value store. I'm going to end up writing
+> arrays of numbers to disk, and then needing to efficiently read them out of
+> a mmap-ed file. So I'm wondering how in Rust you efficiently/zero-copy-ly
+> take some slice of a read-only mmap and treat it as e.g. a vector of ints?
+> >
+> > I see Vec.from_raw_parts() and Vec.from_raw_buf(), but I don't really
+> understand the difference between them, and also they seem like they just
+> give you a vector of the pointer's type, so I don't know how you use them
+> convert the u8s you get from MemoryMap.data() into a vector of a different
+> type, e.g. 32 bit ints.
+> >
+> > It seems like there should be a higher level API for this kind of thing,
+> where "casting" a slice of a read-only memory buffer into an immutable
+> vector is not an unsafe operation (I mean, you can do that in Python ;)
+> Either I don't see it in the docs, or it doesn't exist yet; just wondering
+> which :)
+> >
+> > Thanks!
+> >
+> > Matt
+>
+> Keep in mind that the file won't be portable if you do this. It's why
+> it's not a common pattern.
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141210/8543b45e/attachment.html>
+
+From simon.sapin at exyr.org  Wed Dec 10 10:53:36 2014
+From: simon.sapin at exyr.org (Simon Sapin)
+Date: Wed, 10 Dec 2014 18:53:36 +0000
+Subject: [rust-dev] Reading numbers from a mmap
+In-Reply-To: <D2B2197F-BF9C-4E9E-A6CA-1E78E0AA283E@gmail.com>
+References: <D2B2197F-BF9C-4E9E-A6CA-1E78E0AA283E@gmail.com>
+Message-ID: <548896B0.2080909@exyr.org>
+
+On 10/12/14 18:08, Matt wrote:
+> Sorry if this has been covered before, and also that I'm a complete
+> noob, but I'm thinking about trying a first project in Rust, and
+> trying to learn enough to get started.
+>
+> My plan is for an on-disk key-value store. I'm going to end up
+> writing arrays of numbers to disk, and then needing to efficiently
+> read them out of a mmap-ed file. So I'm wondering how in Rust you
+> efficiently/zero-copy-ly take some slice of a read-only mmap and
+> treat it as e.g. a vector of ints?
+>
+> I see Vec.from_raw_parts() and Vec.from_raw_buf(), but I don't really
+> understand the difference between them, and also they seem like they
+> just give you a vector of the pointer's type, so I don't know how you
+> use them convert the u8s you get from MemoryMap.data() into a vector
+> of a different type, e.g. 32 bit ints.
+>
+> It seems like there should be a higher level API for this kind of
+> thing, where "casting" a slice of a read-only memory buffer into an
+> immutable vector is not an unsafe operation (I mean, you can do that
+> in Python ;) Either I don't see it in the docs, or it doesn't exist
+> yet; just wondering which :)
+
+Vec is probably not what you want, as it owns its memory and frees it 
+when going out of scope. Use a slice instead. Assuming that?s what you 
+get from mmap, you can create a slice from a raw pointer and a length:
+
+http://doc.rust-lang.org/std/slice/fn.from_raw_mut_buf.html
+http://doc.rust-lang.org/std/slice/fn.from_raw_buf.html
+
+Something like (untested):
+
+   use std::slice::from_raw_mut_buf;
+   use std::mem::size_of;
+   use libc::c_void;
+
+   // Whatever you do for mmap:
+   let (void_pointer, byte_length): (*mut c_void, uint) = ...;
+
+   let i32_pointer: *mut i32 = void_pointer as *mut i32;
+   let i32_length: uint = byte_length / size_of::<i32>();
+   let slice: &mut [i32] = from_raw_mut_buf(&i32_pointer, i32_length);
+
+Then you can index into `slice`. You?re responsible for making sure that 
+the mmap lives at least as long as `slice` does. (Its lifetime it tied 
+to that of `i32_pointer`.) Most type annotations can probably be 
+inferred, I added them to show what?s going on.
+
+-- 
+Simon Sapin
+
+From diwic at ubuntu.com  Wed Dec 10 18:44:56 2014
+From: diwic at ubuntu.com (David Henningsson)
+Date: Thu, 11 Dec 2014 03:44:56 +0100
+Subject: [rust-dev] Reading numbers from a mmap
+In-Reply-To: <D2B2197F-BF9C-4E9E-A6CA-1E78E0AA283E@gmail.com>
+References: <D2B2197F-BF9C-4E9E-A6CA-1E78E0AA283E@gmail.com>
+Message-ID: <54890528.8050906@ubuntu.com>
+
+
+
+On 2014-12-10 19:08, Matt wrote:
+> Sorry if this has been covered before, and also that I'm a complete noob, but I'm thinking about trying a first project in Rust, and trying to learn enough to get started.
+>
+> My plan is for an on-disk key-value store. I'm going to end up writing arrays of numbers to disk, and then needing to efficiently read them out of a mmap-ed file. So I'm wondering how in Rust you efficiently/zero-copy-ly take some slice of a read-only mmap and treat it as e.g. a vector of ints?
+>
+> I see Vec.from_raw_parts() and Vec.from_raw_buf(), but I don't really understand the difference between them, and also they seem like they just give you a vector of the pointer's type, so I don't know how you use them convert the u8s you get from MemoryMap.data() into a vector of a different type, e.g. 32 bit ints.
+>
+> It seems like there should be a higher level API for this kind of thing, where "casting" a slice of a read-only memory buffer into an immutable vector is not an unsafe operation (I mean, you can do that in Python ;) Either I don't see it in the docs, or it doesn't exist yet; just wondering which :)
+
+Maybe this function will help you:
+
+http://doc.rust-lang.org/std/os/struct.MemoryMap.html
+
+At least on Linux you should be able to open a file, get its fd using 
+as_raw_fd() and pass that into the call to MemoryMap::new (see 
+MapOption::MapFd()).
+
+// David
+
+From jakub at jakub.cc  Thu Dec 11 02:45:15 2014
+From: jakub at jakub.cc (Jakub Bukaj)
+Date: Thu, 11 Dec 2014 11:45:15 +0100
+Subject: [rust-dev] First Rust gathering in Beijing, China - 17 January 2015
+Message-ID: <CAAa_5TNgz9Ty0ffA7vFr4QUHT=3mdjt2E7qMVM9pR4wHeQPPUg@mail.gmail.com>
+
+Hello Rustaceans!
+
+I am pleased to inform you that there will be a Rust meet-up in
+Beijing, China on Saturday, the 17th of January 2015. Mozilla China
+has kindly agreed to host us at their Beijing office so we'll meet
+there at 14:00.
+
+I will be visiting Beijing at that time and will hold an introductory
+session about Rust and Servo. Otherwise we'll keep it fairly free-form
+and I hope there'll be lots of interesting discussions about
+developments in the Rust ecosystem. If you're in Beijing and would be
+interested in giving a talk about a community project or even your own
+project using Rust, please do let me know! :)
+
+See the Eventbrite page for this event:
+https://www.eventbrite.com/e/rust-meet-up-in-beijing-tickets-14905925023.
+There will also be more details about the gathering posted on the
+community website. [0]
+
+I hope to see you there!
+Jakub
+
+[0] http://mozilla.com.cn/
+
+From fantix.king at gmail.com  Thu Dec 11 02:53:05 2014
+From: fantix.king at gmail.com (Fantix King)
+Date: Thu, 11 Dec 2014 18:53:05 +0800
+Subject: [rust-dev] First Rust gathering in Beijing,
+	China - 17 January 2015
+In-Reply-To: <CAAa_5TNgz9Ty0ffA7vFr4QUHT=3mdjt2E7qMVM9pR4wHeQPPUg@mail.gmail.com>
+References: <CAAa_5TNgz9Ty0ffA7vFr4QUHT=3mdjt2E7qMVM9pR4wHeQPPUg@mail.gmail.com>
+Message-ID: <CAM93+=yz3v16udBSt2Q+QYRfVyLPgDSBScC65iySqYF9V+W+PA@mail.gmail.com>
+
+This is great! Definitely a must-to-attend! I'll post this great news in a
+local QQ group of Chinese Rustaceans (also http://rust.cc community)
+
+Thanks a thousand for organizing this!
+
+
+BR,
+Fantix
+--
+http://about.me/fantix
+
+On Thu, Dec 11, 2014 at 6:45 PM, Jakub Bukaj <jakub at jakub.cc> wrote:
+
+> Hello Rustaceans!
+>
+> I am pleased to inform you that there will be a Rust meet-up in
+> Beijing, China on Saturday, the 17th of January 2015. Mozilla China
+> has kindly agreed to host us at their Beijing office so we'll meet
+> there at 14:00.
+>
+> I will be visiting Beijing at that time and will hold an introductory
+> session about Rust and Servo. Otherwise we'll keep it fairly free-form
+> and I hope there'll be lots of interesting discussions about
+> developments in the Rust ecosystem. If you're in Beijing and would be
+> interested in giving a talk about a community project or even your own
+> project using Rust, please do let me know! :)
+>
+> See the Eventbrite page for this event:
+> https://www.eventbrite.com/e/rust-meet-up-in-beijing-tickets-14905925023.
+> There will also be more details about the gathering posted on the
+> community website. [0]
+>
+> I hope to see you there!
+> Jakub
+>
+> [0] http://mozilla.com.cn/
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141211/878c0872/attachment.html>
+
+From banderson at mozilla.com  Thu Dec 11 10:23:39 2014
+From: banderson at mozilla.com (Brian Anderson)
+Date: Thu, 11 Dec 2014 10:23:39 -0800
+Subject: [rust-dev] First Rust gathering in Beijing,
+ China - 17 January 2015
+In-Reply-To: <CAM93+=yz3v16udBSt2Q+QYRfVyLPgDSBScC65iySqYF9V+W+PA@mail.gmail.com>
+References: <CAAa_5TNgz9Ty0ffA7vFr4QUHT=3mdjt2E7qMVM9pR4wHeQPPUg@mail.gmail.com>
+	<CAM93+=yz3v16udBSt2Q+QYRfVyLPgDSBScC65iySqYF9V+W+PA@mail.gmail.com>
+Message-ID: <5489E12B.5000507@mozilla.com>
+
+I added rust.cc to the list of user groups on the wiki: 
+https://github.com/rust-lang/rust/wiki/Docs
+
+On 12/11/2014 02:53 AM, Fantix King wrote:
+> This is great! Definitely a must-to-attend! I'll post this great news 
+> in a local QQ group of Chinese Rustaceans (also http://rust.cc community)
+>
+> Thanks a thousand for organizing this!
+>
+>
+> BR,
+> Fantix
+> --
+> http://about.me/fantix
+>
+> On Thu, Dec 11, 2014 at 6:45 PM, Jakub Bukaj <jakub at jakub.cc 
+> <mailto:jakub at jakub.cc>> wrote:
+>
+>     Hello Rustaceans!
+>
+>     I am pleased to inform you that there will be a Rust meet-up in
+>     Beijing, China on Saturday, the 17th of January 2015. Mozilla China
+>     has kindly agreed to host us at their Beijing office so we'll meet
+>     there at 14:00.
+>
+>     I will be visiting Beijing at that time and will hold an introductory
+>     session about Rust and Servo. Otherwise we'll keep it fairly free-form
+>     and I hope there'll be lots of interesting discussions about
+>     developments in the Rust ecosystem. If you're in Beijing and would be
+>     interested in giving a talk about a community project or even your own
+>     project using Rust, please do let me know! :)
+>
+>     See the Eventbrite page for this event:
+>     https://www.eventbrite.com/e/rust-meet-up-in-beijing-tickets-14905925023.
+>     There will also be more details about the gathering posted on the
+>     community website. [0]
+>
+>     I hope to see you there!
+>     Jakub
+>
+>     [0] http://mozilla.com.cn/
+>     _______________________________________________
+>     Rust-dev mailing list
+>     Rust-dev at mozilla.org <mailto:Rust-dev at mozilla.org>
+>     https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141211/51bfad28/attachment.html>
+
+From moorekang at gmail.com  Thu Dec 11 18:48:50 2014
+From: moorekang at gmail.com (Yukang Chen)
+Date: Fri, 12 Dec 2014 10:48:50 +0800
+Subject: [rust-dev] First Rust gathering in Beijing,
+	China - 17 January 2015
+In-Reply-To: <CAAa_5TNgz9Ty0ffA7vFr4QUHT=3mdjt2E7qMVM9pR4wHeQPPUg@mail.gmail.com>
+References: <CAAa_5TNgz9Ty0ffA7vFr4QUHT=3mdjt2E7qMVM9pR4wHeQPPUg@mail.gmail.com>
+Message-ID: <CAGw+hMVHN8vmoVzuTA-=N2wJ7O8W0AtepkDK5bCF1Zt3Y4i_jw@mail.gmail.com>
+
+Great!, let's meet up in Shenzhen
+
+2014-12-11 18:45 GMT+08:00 Jakub Bukaj <jakub at jakub.cc>:
+>
+> Hello Rustaceans!
+>
+> I am pleased to inform you that there will be a Rust meet-up in
+> Beijing, China on Saturday, the 17th of January 2015. Mozilla China
+> has kindly agreed to host us at their Beijing office so we'll meet
+> there at 14:00.
+>
+> I will be visiting Beijing at that time and will hold an introductory
+> session about Rust and Servo. Otherwise we'll keep it fairly free-form
+> and I hope there'll be lots of interesting discussions about
+> developments in the Rust ecosystem. If you're in Beijing and would be
+> interested in giving a talk about a community project or even your own
+> project using Rust, please do let me know! :)
+>
+> See the Eventbrite page for this event:
+> https://www.eventbrite.com/e/rust-meet-up-in-beijing-tickets-14905925023.
+> There will also be more details about the gathering posted on the
+> community website. [0]
+>
+> I hope to see you there!
+> Jakub
+>
+> [0] http://mozilla.com.cn/
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+
+-- 
+                                                              Best regards.
+                                                              Yukang
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141212/b7dd9dcc/attachment.html>
+
+From fantix.king at gmail.com  Thu Dec 11 18:50:30 2014
+From: fantix.king at gmail.com (Fantix King)
+Date: Fri, 12 Dec 2014 10:50:30 +0800
+Subject: [rust-dev] First Rust gathering in Beijing,
+	China - 17 January 2015
+In-Reply-To: <5489E12B.5000507@mozilla.com>
+References: <CAAa_5TNgz9Ty0ffA7vFr4QUHT=3mdjt2E7qMVM9pR4wHeQPPUg@mail.gmail.com>
+	<CAM93+=yz3v16udBSt2Q+QYRfVyLPgDSBScC65iySqYF9V+W+PA@mail.gmail.com>
+	<5489E12B.5000507@mozilla.com>
+Message-ID: <CAM93+=z1TKLskkuURNm_CA65V8tJ71LByrYVYNfPDC0Gpboy3Q@mail.gmail.com>
+
+Thanks, Brian!
+
+We(rust.cc) are actually the same group of people from the ???? hosted on
+Google Plus led by the same liigo.
+
+Great to be a part of the bigger group!
+
+
+BR,
+Fantix
+--
+http://about.me/fantix
+
+On Fri, Dec 12, 2014 at 2:23 AM, Brian Anderson <banderson at mozilla.com>
+wrote:
+
+>  I added rust.cc to the list of user groups on the wiki:
+> https://github.com/rust-lang/rust/wiki/Docs
+>
+>
+> On 12/11/2014 02:53 AM, Fantix King wrote:
+>
+> This is great! Definitely a must-to-attend! I'll post this great news in a
+> local QQ group of Chinese Rustaceans (also http://rust.cc community)
+>
+>  Thanks a thousand for organizing this!
+>
+>
+>    BR,
+> Fantix
+> --
+> http://about.me/fantix
+>
+> On Thu, Dec 11, 2014 at 6:45 PM, Jakub Bukaj <jakub at jakub.cc> wrote:
+>
+>> Hello Rustaceans!
+>>
+>> I am pleased to inform you that there will be a Rust meet-up in
+>> Beijing, China on Saturday, the 17th of January 2015. Mozilla China
+>> has kindly agreed to host us at their Beijing office so we'll meet
+>> there at 14:00.
+>>
+>> I will be visiting Beijing at that time and will hold an introductory
+>> session about Rust and Servo. Otherwise we'll keep it fairly free-form
+>> and I hope there'll be lots of interesting discussions about
+>> developments in the Rust ecosystem. If you're in Beijing and would be
+>> interested in giving a talk about a community project or even your own
+>> project using Rust, please do let me know! :)
+>>
+>> See the Eventbrite page for this event:
+>> https://www.eventbrite.com/e/rust-meet-up-in-beijing-tickets-14905925023.
+>> There will also be more details about the gathering posted on the
+>> community website. [0]
+>>
+>> I hope to see you there!
+>> Jakub
+>>
+>> [0] http://mozilla.com.cn/
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing listRust-dev at mozilla.orghttps://mail.mozilla.org/listinfo/rust-dev
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141212/24588a1c/attachment.html>
+
+From ckkashyap at gmail.com  Sat Dec 13 01:38:38 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Sat, 13 Dec 2014 15:08:38 +0530
+Subject: [rust-dev] Review request for my Rust kernel project
+Message-ID: <CAGdT1grLEDuBLMV_Q1vDygUWENagk6yt7QpM65n7NvzJ-ZkhtA@mail.gmail.com>
+
+Hi All,
+
+I am working on translating the xv6 code to Rust -
+https://github.com/ckkashyap/unix. I am having trouble ascertaining if my
+linker script is correct and that the compiler flags that I am using for
+Rust are proper.
+
+I have two unexplained observations as of now -
+
+1. If I just have assembly code and Rust code, there is an issue that goes
+away if I have an intermediate C program. I introduced cmain.c just for
+this.
+2. my code that iterates over &str does not work - in kernel/uart.rs
+
+I'd appreciate it very much if someone could take a stab at it and let me
+know where I am going wrong.
+
+Regards,
+Kashyap
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141213/4364dfcd/attachment.html>
+
+From tomi.pievilainen at iki.fi  Sun Dec 14 23:51:08 2014
+From: tomi.pievilainen at iki.fi (Tomi =?iso-8859-1?Q?Pievil=E4inen?=)
+Date: Mon, 15 Dec 2014 09:51:08 +0200
+Subject: [rust-dev] Problems cross-compiling to ARM9
+Message-ID: <20141215075108.GW17441@shirio>
+
+Hi,
+
+I'm trying to get cross compilation to Sitara AM1808 (Lego Mindstorms
+EV3) working, but haven't been able to get working binaries.
+
+First I simply tried compiling with `rustc
+--target=arm-unknown-linux-gnueabi`, but got errors with missing std.
+
+So next I compiled rust from source with `configure
+--target=arm-unknown-linux-gnueabi --host=i686-unknown-linux-gnu`.
+Then I could create a binary without errors with `env
+LD_LIBRARY_PATH=$HOME/local/rust-cross/lib
+PATH=$HOME/local/rust-cross/bin:$PATH local/rust-cross/bin/rustc -C
+linker=/usr/bin/arm-linux-gnueabi-gcc
+--target=arm-unknown-linux-gnueabi hello.rs`, but trying to run the
+binary on the device just gives me "Illegal instruction".
+
+For the record, checking the type of the helloworld with file gives
+
+    hello: ELF 32-bit LSB  shared object, ARM, EABI5 version 1 (SYSV),
+    dynamically linked (uses shared libs), for GNU/Linux 2.6.32,
+    BuildID[sha1]=f48dc778edb4e4818915f45e4e6e985cf4e7eb59, not stripped
+
+while working bash from the device is
+
+    bash: ELF 32-bit LSB  executable, ARM, EABI5 version 1 (SYSV),
+    dynamically linked (uses shared libs), for GNU/Linux 2.6.32,
+    BuildID[sha1]=8ab870f6f5cbbb621b85763f557b41832a3f3181, stripped
+
+I also tried setting target-cpu=arm9 and target-feature=+v5te, but
+that didn't affect anything.
+
+Next I tried using an external assembler by telling rustc -C
+no-integrated-as. That gave a bunch of errors::
+
+    error: linking with `/usr/bin/arm-linux-gnueabi-gcc` failed: exit code: 1
+    note: /usr/bin/arm-linux-gnueabi-gcc '-c' '-o' 'hello.o' 'hello.s'
+    note: hello.s: Assembler messages:
+    hello.s:576: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:692: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:785: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:855: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:1280: Rd and Rm should be different in mul
+    hello.s:2505: Rd and Rm should be different in mul
+    hello.s:2663: Error: selected processor does not support ARM mode `clz r0,r0'
+    hello.s:2730: Rd and Rm should be different in mul
+    hello.s:2958: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:3074: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:3167: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:3237: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:3662: Rd and Rm should be different in mul
+    hello.s:3979: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:4058: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:4146: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:4220: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:4306: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:4380: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:4450: Error: selected processor does not support ARM mode `blx r2'
+    hello.s:5135: Rd and Rm should be different in mul
+
+    error: aborting due to previous error
+
+As my last idea I tried emitting bc, ir and asm from rustc and using
+llc and arm-linux-gnueabi-as to make binaries, but llc from ir gave
+
+    llc: hello.ll:88:140: error: expected value token
+    call void
+    @_ZN2os4args20h5a44d7ab05eef5ebjtjE(%"struct.collections::vec::Vec<[collections::string::String]>[#6]"*
+    noalias nocapture sret dereferenceable(12) %1)
+
+, bc
+
+    llc: hello.bc: error: Invalid value
+
+and the assembler
+
+    hello.s: Assembler messages:
+    hello.s:1279: Rd and Rm should be different in mul
+    hello.s:2504: Rd and Rm should be different in mul
+    hello.s:2729: Rd and Rm should be different in mul
+    hello.s:3661: Rd and Rm should be different in mul
+    hello.s:5134: Rd and Rm should be different in mul
+
+similar to using the no-integrated-as earlier.
+
+I'm now fully out of ideas what could be going wrong and how to fix it.
+Any suggestions would be very much appreciated.
+
+-- 
+Tomi Pievil?inen, +358 400 487 504
+A: Because it disrupts the natural way of thinking.
+Q: Why is top posting frowned upon?
+
+From rsw at jfet.org  Tue Dec 16 21:30:17 2014
+From: rsw at jfet.org (Riad S. Wahby)
+Date: Wed, 17 Dec 2014 00:30:17 -0500
+Subject: [rust-dev] Problems cross-compiling to ARM9
+In-Reply-To: <20141215075108.GW17441@shirio>
+References: <20141215075108.GW17441@shirio>
+Message-ID: <20141217053017.GA24395@antiproton.jfet.org>
+
+Tomi Pievil?inen <tomi.pievilainen at iki.fi> wrote:
+> --target=arm-unknown-linux-gnueabi hello.rs`, but trying to run the
+> binary on the device just gives me "Illegal instruction".
+
+In the past when I've seen this error, it's because your C cross
+toolchain is built for a slightly wrong architecture. Can you verify
+that C programs cross compiled with your cross-gcc work correctly?
+
+-=rsw
+
+From kmcg3413 at gmail.com  Wed Dec 17 06:12:39 2014
+From: kmcg3413 at gmail.com (Kevin McGuire)
+Date: Wed, 17 Dec 2014 08:12:39 -0600
+Subject: [rust-dev] ARM illegal instruction
+Message-ID: <CACVSex=ajDnNeTwNnEVTQGBjc2k3HsL+8zMd==LvumM8Xomm+Q@mail.gmail.com>
+
+If you figure this out let me know, or the mailing list. I am curious what
+is wrong.
+
+The only help I can offer is that you try to find the problem. It may or
+may not be an illegal instruction. Some rust targets trap segmentation
+faults as illegal instruction.
+
+Now you can also try implementing your own _start as pub extern and not
+link with rust or system libs -- essentially free standing then insert an
+infinite loop and see if the program crashes. The OS should jump directly
+to _start so you see?
+
+I am not sure how on linux but if you could get it to dump the address of
+the instruction you could use that to figure out what is wrong.
+
+Also I assume you have tried a simple fn main() {} ?
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141217/20c73a18/attachment.html>
+
+From kmcg3413 at gmail.com  Wed Dec 17 08:02:45 2014
+From: kmcg3413 at gmail.com (Kevin McGuire)
+Date: Wed, 17 Dec 2014 10:02:45 -0600
+Subject: [rust-dev] Kernel Rust
+Message-ID: <CACVSexkzsWpPLL1hfrndg+N0bDFEZ2usWHor2wBEcPsM=EXahw@mail.gmail.com>
+
+I saw your post about your rust kernel. Did you ever figure out what was
+wrong?
+
+Also have you tried using QEMU?
+
+First I would verify that your serial code is actually running. You could
+triple fault the x86_64 to detect if it reaches a certain point.
+
+Also setup of serial port on QEMU for x86_64 is very easy. All you do is
+send the data and check the buffer. I have some great example Rust code.
+Now real hardware is different because it can be touchy if you dont
+properly intialize it.
+
+Your code looks good okay so im wondering if it can be verified as running
+- like I said QEMU can help you diagnose simple problems thsy will be
+present in real hardware. Also be aware of QEMU monitor mode which lets you
+dump the CPU registers during runtime so you can see exactly what the CPU
+is executing.
+
+Let me know because I can likely help you a bunch.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141217/07e25aa5/attachment.html>
+
+From kmcg3413 at gmail.com  Wed Dec 17 09:22:19 2014
+From: kmcg3413 at gmail.com (Kevin McGuire)
+Date: Wed, 17 Dec 2014 11:22:19 -0600
+Subject: [rust-dev] Kernel Rust
+In-Reply-To: <CACVSexkzsWpPLL1hfrndg+N0bDFEZ2usWHor2wBEcPsM=EXahw@mail.gmail.com>
+References: <CACVSexkzsWpPLL1hfrndg+N0bDFEZ2usWHor2wBEcPsM=EXahw@mail.gmail.com>
+Message-ID: <CACVSexkmDMFYwLifEj96MnM+-hT3kma7gya3J+yvmKYKzjC2Wg@mail.gmail.com>
+
+Well, actually I notice your code does not check that the UART buffer is
+full which I think it is supposed to check, however from your mail it seems
+like it is not outputting anything?
+
+On Wed, Dec 17, 2014 at 10:02 AM, Kevin McGuire <kmcg3413 at gmail.com> wrote:
+>
+> I saw your post about your rust kernel. Did you ever figure out what was
+> wrong?
+>
+> Also have you tried using QEMU?
+>
+> First I would verify that your serial code is actually running. You could
+> triple fault the x86_64 to detect if it reaches a certain point.
+>
+> Also setup of serial port on QEMU for x86_64 is very easy. All you do is
+> send the data and check the buffer. I have some great example Rust code.
+> Now real hardware is different because it can be touchy if you dont
+> properly intialize it.
+>
+> Your code looks good okay so im wondering if it can be verified as running
+> - like I said QEMU can help you diagnose simple problems thsy will be
+> present in real hardware. Also be aware of QEMU monitor mode which lets you
+> dump the CPU registers during runtime so you can see exactly what the CPU
+> is executing.
+>
+> Let me know because I can likely help you a bunch.
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141217/fee256cf/attachment.html>
+
+From ckkashyap at gmail.com  Wed Dec 17 09:54:36 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Wed, 17 Dec 2014 23:24:36 +0530
+Subject: [rust-dev] undefined reference to
+	`str::str.StrPrelude::bytes::deref::hf4838b8c6b01fc6aSGs
+Message-ID: <CAGdT1gp3wENGXyNjUT7eENaJH=0CMfHFNkYgUq9oF=Xwv1Qnqw@mail.gmail.com>
+
+Hi,
+
+Is this a regression -
+
+undefined reference to
+`str::str.StrPrelude::bytes::deref::hf4838b8c6b01fc6aSGs
+
+I get this error at linking with libcore.rlib in the latest nightly build.
+My code is here - https://github.com/ckkashyap/unix
+
+
+Or do I need to make change in my code? I'd really appreciate the inputs
+here.
+
+
+Regards,
+
+Kashyap
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141217/5c0f1b7b/attachment.html>
+
+From dev at codyps.com  Wed Dec 17 10:04:35 2014
+From: dev at codyps.com (Cody P Schafer)
+Date: Wed, 17 Dec 2014 13:04:35 -0500
+Subject: [rust-dev] undefined reference to
+	`str::str.StrPrelude::bytes::deref::hf4838b8c6b01fc6aSGs
+In-Reply-To: <CAGdT1gp3wENGXyNjUT7eENaJH=0CMfHFNkYgUq9oF=Xwv1Qnqw@mail.gmail.com>
+References: <CAGdT1gp3wENGXyNjUT7eENaJH=0CMfHFNkYgUq9oF=Xwv1Qnqw@mail.gmail.com>
+Message-ID: <CAPoQQ-1XFv_z7Zgy-+VJC3g6UvNRv66HeQV_OjvcOULtfwHayA@mail.gmail.com>
+
+I generally get type of errors at runtime when the rust libraries in
+my ld path don't match the version of the libraries the executable was
+created with.
+
+Perhaps you could try rebuilding or removing some of the installed
+rust versions?
+
+On Wed, Dec 17, 2014 at 12:54 PM, C K Kashyap <ckkashyap at gmail.com> wrote:
+> Hi,
+>
+> Is this a regression -
+>
+> undefined reference to
+> `str::str.StrPrelude::bytes::deref::hf4838b8c6b01fc6aSGs
+>
+> I get this error at linking with libcore.rlib in the latest nightly build.
+> My code is here - https://github.com/ckkashyap/unix
+>
+>
+> Or do I need to make change in my code? I'd really appreciate the inputs
+> here.
+>
+>
+> Regards,
+>
+> Kashyap
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+From ckkashyap at gmail.com  Wed Dec 17 19:19:19 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Thu, 18 Dec 2014 08:49:19 +0530
+Subject: [rust-dev] undefined reference to
+	`str::str.StrPrelude::bytes::deref::hf4838b8c6b01fc6aSGs
+In-Reply-To: <CAPoQQ-1XFv_z7Zgy-+VJC3g6UvNRv66HeQV_OjvcOULtfwHayA@mail.gmail.com>
+References: <CAGdT1gp3wENGXyNjUT7eENaJH=0CMfHFNkYgUq9oF=Xwv1Qnqw@mail.gmail.com>
+	<CAPoQQ-1XFv_z7Zgy-+VJC3g6UvNRv66HeQV_OjvcOULtfwHayA@mail.gmail.com>
+Message-ID: <CAGdT1gp6UuQQi5=C-r_Sbk9G87L84JPNoFzgZTNUQA+RE40dyg@mail.gmail.com>
+
+Thanks Cody,
+
+I retried by uninstalling and installing rustc using rustp script and then
+downloading the nightly source from
+https://static.rust-lang.org/dist/rust-nightly.tar.gz
+
+I still get the same error.
+
+Regards,
+Kashyap
+
+On Wed, Dec 17, 2014 at 11:34 PM, Cody P Schafer <dev at codyps.com> wrote:
+>
+> I generally get type of errors at runtime when the rust libraries in
+> my ld path don't match the version of the libraries the executable was
+> created with.
+>
+> Perhaps you could try rebuilding or removing some of the installed
+> rust versions?
+>
+> On Wed, Dec 17, 2014 at 12:54 PM, C K Kashyap <ckkashyap at gmail.com> wrote:
+> > Hi,
+> >
+> > Is this a regression -
+> >
+> > undefined reference to
+> > `str::str.StrPrelude::bytes::deref::hf4838b8c6b01fc6aSGs
+> >
+> > I get this error at linking with libcore.rlib in the latest nightly
+> build.
+> > My code is here - https://github.com/ckkashyap/unix
+> >
+> >
+> > Or do I need to make change in my code? I'd really appreciate the inputs
+> > here.
+> >
+> >
+> > Regards,
+> >
+> > Kashyap
+> >
+> >
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org
+> > https://mail.mozilla.org/listinfo/rust-dev
+> >
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141218/854eef53/attachment.html>
+
+From ckkashyap at gmail.com  Wed Dec 17 23:48:45 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Thu, 18 Dec 2014 13:18:45 +0530
+Subject: [rust-dev] Kernel Rust
+In-Reply-To: <CACVSexkmDMFYwLifEj96MnM+-hT3kma7gya3J+yvmKYKzjC2Wg@mail.gmail.com>
+References: <CACVSexkzsWpPLL1hfrndg+N0bDFEZ2usWHor2wBEcPsM=EXahw@mail.gmail.com>
+	<CACVSexkmDMFYwLifEj96MnM+-hT3kma7gya3J+yvmKYKzjC2Wg@mail.gmail.com>
+Message-ID: <CAGdT1gr7M--tH=VExLcaBbOsh1-xixwy4VZgt+_hTc8LA8qqHw@mail.gmail.com>
+
+Thanks Kevin,
+
+I need all the help - thanks for offering.
+Regarding the &str issue - it went away after I replaced the linker script
+with the one from osdev.org.
+
+I've run into a new issue (link issue - I've sent an email about it) with
+the latest nightly - something may have broken in the latest nightly
+
+Regards,
+Kashyap
+
+On Wed, Dec 17, 2014 at 10:52 PM, Kevin McGuire <kmcg3413 at gmail.com> wrote:
+>
+> Well, actually I notice your code does not check that the UART buffer is
+> full which I think it is supposed to check, however from your mail it seems
+> like it is not outputting anything?
+>
+> On Wed, Dec 17, 2014 at 10:02 AM, Kevin McGuire <kmcg3413 at gmail.com>
+> wrote:
+>>
+>> I saw your post about your rust kernel. Did you ever figure out what was
+>> wrong?
+>>
+>> Also have you tried using QEMU?
+>>
+>> First I would verify that your serial code is actually running. You could
+>> triple fault the x86_64 to detect if it reaches a certain point.
+>>
+>> Also setup of serial port on QEMU for x86_64 is very easy. All you do is
+>> send the data and check the buffer. I have some great example Rust code.
+>> Now real hardware is different because it can be touchy if you dont
+>> properly intialize it.
+>>
+>> Your code looks good okay so im wondering if it can be verified as
+>> running - like I said QEMU can help you diagnose simple problems thsy will
+>> be present in real hardware. Also be aware of QEMU monitor mode which lets
+>> you dump the CPU registers during runtime so you can see exactly what the
+>> CPU is executing.
+>>
+>> Let me know because I can likely help you a bunch.
+>>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141218/e8224700/attachment.html>
+
+From alfredo.dinapoli at gmail.com  Thu Dec 18 01:40:09 2014
+From: alfredo.dinapoli at gmail.com (Alfredo Di Napoli)
+Date: Thu, 18 Dec 2014 10:40:09 +0100
+Subject: [rust-dev] Newbie question about Rust stack management
+Message-ID: <CAFqA6+W03QNkp0nnih25xd3+1di=_RdJ3-50pCV4P8cgEngyUQ@mail.gmail.com>
+
+Good morning Rustaceans,
+
+I'm just moving my first steps into the Rust world, so please apologies in
+advance for my silly questions.
+As an exercise to learn the language I'm trying to create a streaming CLI
+app to decrypt data read from stdin
+directly into stdout.
+This gist is a very simple program to simply read raw bytes from stdin and
+pushing them out to stdout:
+
+https://gist.github.com/adinapoli/da8cc9cbaec3576a1bd4
+
+It works, but as soon as I try to modify the BUFSIZE to be, for example,
+5MB, the program crashes with:
+
+task '<main>' has overflowed its stack
+
+I have tried to Google for "rust increase stack size", but I wasn't able to
+find anything meaningful.
+I would like to ask you then if this is just because I failed to search the
+relevant bits of documentation, or it's "by design" because it's a bad idea
+to increase the stack size? This bit of documentation seems relevant,
+although it refers to "task" (but main seems to be indeed one), and returns
+a TaskBuilder:
+
+http://doc.rust-lang.org/std/task/struct.TaskBuilder.html#method.stack_size
+
+Thanks in advance,
+
+Alfredo
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141218/6a6a3642/attachment.html>
+
+From richo at psych0tik.net  Thu Dec 18 02:22:43 2014
+From: richo at psych0tik.net (Richo Healey)
+Date: Thu, 18 Dec 2014 02:22:43 -0800
+Subject: [rust-dev] Newbie question about Rust stack management
+In-Reply-To: <CAFqA6+W03QNkp0nnih25xd3+1di=_RdJ3-50pCV4P8cgEngyUQ@mail.gmail.com>
+References: <CAFqA6+W03QNkp0nnih25xd3+1di=_RdJ3-50pCV4P8cgEngyUQ@mail.gmail.com>
+Message-ID: <20141218102243.GA23799@xenia.local>
+
+On 18/12/14 10:40 +0100, Alfredo Di Napoli wrote:
+>Good morning Rustaceans,
+>
+>I'm just moving my first steps into the Rust world, so please apologies in
+>advance for my silly questions.
+>As an exercise to learn the language I'm trying to create a streaming CLI
+>app to decrypt data read from stdin
+>directly into stdout.
+>This gist is a very simple program to simply read raw bytes from stdin and
+>pushing them out to stdout:
+>
+>https://gist.github.com/adinapoli/da8cc9cbaec3576a1bd4
+>
+>It works, but as soon as I try to modify the BUFSIZE to be, for example,
+>5MB, the program crashes with:
+>
+>task '<main>' has overflowed its stack
+>
+>I have tried to Google for "rust increase stack size", but I wasn't able to
+>find anything meaningful.
+>I would like to ask you then if this is just because I failed to search the
+>relevant bits of documentation, or it's "by design" because it's a bad idea
+>to increase the stack size? This bit of documentation seems relevant,
+>although it refers to "task" (but main seems to be indeed one), and returns
+>a TaskBuilder:
+>
+>http://doc.rust-lang.org/std/task/struct.TaskBuilder.html#method.stack_size
+>
+>Thanks in advance,
+>
+>Alfredo
+
+The easiest thing to do here is simply to lob it onto the heap, by putting it
+into a box:
+
+https://gist.github.com/0a324ac17620bf0ac286
+
+In general, you probably don't want huge objects on the stack.
+
+richo
+
+From alfredo.dinapoli at gmail.com  Thu Dec 18 02:24:32 2014
+From: alfredo.dinapoli at gmail.com (Alfredo Di Napoli)
+Date: Thu, 18 Dec 2014 11:24:32 +0100
+Subject: [rust-dev] Newbie question about Rust stack management
+In-Reply-To: <20141218102243.GA23799@xenia.local>
+References: <CAFqA6+W03QNkp0nnih25xd3+1di=_RdJ3-50pCV4P8cgEngyUQ@mail.gmail.com>
+	<20141218102243.GA23799@xenia.local>
+Message-ID: <CAFqA6+VpugS7dGiKe5oOGvr5hTuGHsh-eGURTYDxH=FyJXZhXg@mail.gmail.com>
+
+Ah, thanks a lot Richo,
+
+I did miss the fact a Box was allocating on the heap. Bad me!
+Yes, I do agree that allocating huge things on the stack is bad, hence my
+head scratching.
+
+Thanks!
+Alfredo
+
+On Thursday, 18 December 2014, Richo Healey <richo at psych0tik.net> wrote:
+> On 18/12/14 10:40 +0100, Alfredo Di Napoli wrote:
+>>
+>> Good morning Rustaceans,
+>>
+>> I'm just moving my first steps into the Rust world, so please apologies
+in
+>> advance for my silly questions.
+>> As an exercise to learn the language I'm trying to create a streaming CLI
+>> app to decrypt data read from stdin
+>> directly into stdout.
+>> This gist is a very simple program to simply read raw bytes from stdin
+and
+>> pushing them out to stdout:
+>>
+>> https://gist.github.com/adinapoli/da8cc9cbaec3576a1bd4
+>>
+>> It works, but as soon as I try to modify the BUFSIZE to be, for example,
+>> 5MB, the program crashes with:
+>>
+>> task '<main>' has overflowed its stack
+>>
+>> I have tried to Google for "rust increase stack size", but I wasn't able
+to
+>> find anything meaningful.
+>> I would like to ask you then if this is just because I failed to search
+the
+>> relevant bits of documentation, or it's "by design" because it's a bad
+idea
+>> to increase the stack size? This bit of documentation seems relevant,
+>> although it refers to "task" (but main seems to be indeed one), and
+returns
+>> a TaskBuilder:
+>>
+>>
+http://doc.rust-lang.org/std/task/struct.TaskBuilder.html#method.stack_size
+>>
+>> Thanks in advance,
+>>
+>> Alfredo
+>
+> The easiest thing to do here is simply to lob it onto the heap, by
+putting it
+> into a box:
+>
+> https://gist.github.com/0a324ac17620bf0ac286
+>
+> In general, you probably don't want huge objects on the stack.
+>
+> richo
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141218/4ce9b015/attachment.html>
+
+From ckkashyap at gmail.com  Fri Dec 19 07:31:57 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Fri, 19 Dec 2014 21:01:57 +0530
+Subject: [rust-dev] A question about libcore
+Message-ID: <CAGdT1gqs_3sKqjN+9-WSsodWDPP_ikV2FJ7QApoLej3sOfOnvQ@mail.gmail.com>
+
+Hi,
+
+A recent change is generating a unresolved link error when I try to link to
+libcore from my kernel.
+
+I have filed an issue about it - #20016 about it.
+
+I'd appreciate it very much if someone could confirm if libcore is going to
+continue be a leaf wrt dependency or has something changed?
+
+Regards,
+Kashyap
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141219/4774a250/attachment.html>
+
+From gus at inodes.org  Sat Dec 20 23:29:07 2014
+From: gus at inodes.org (Angus Lees)
+Date: Sun, 21 Dec 2014 07:29:07 +0000
+Subject: [rust-dev] stage0 in a post-rust-1.0 world
+Message-ID: <CAPA_H3cTLOMXRWAtAWxm31ppsqPuagGNai7F3Km=ToCM=_qPxA@mail.gmail.com>
+
+I wanted to remember how to be a Debian Developer, and rust-1.0 is coming
+up, so I thought it was time to look into how one might package up rust for
+a distribution (yes, I'm aware a few other DDs have looked at this earlier;
+I've read some of their wiki pages/code but no, I haven't contacted them
+yet).
+
+Once rust is bootstrapped on a new distro/architecture, it would be nice to
+be able to build a rust release using the regular rust compiler rather than
+downloading a pre-built opaque stage0 blob.  How would this work in
+practice?
+
+Specifically, once we reach 1.0:
+- Will the rust stage1 source be limited to using "stable" rust language
+features?
+- What sort of version skew between stage0 and stage1 will be supported?
+
+Additionally, I currently see numerous "breaking" changes transitioned via
+#[cfg(stage0)].  The assumption is that stage0 is older than the breaking
+change, and stage1+ is newer than the change.  Amongst other things, this
+means that you can't currently have the full compile-experience (using
+--enable-local-rust) using a compiler that you've just built :(
+I see there's already been discussion towards other mechanisms for tagging
+version-specific code(*).  I'm new to the rust mailing list and community,
+so mostly I'm just looking to get caught up on the conversations around
+this and register a vote for "we need to have a story around this for 1.0,
+and not later".
+
+(*)
+http://discuss.rust-lang.org/t/pre-rfc-rust-version-attribute-specifying-rust-language-version-within-source-code
+
+ - Gus
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141221/7bb481ff/attachment.html>
+
+From mozilla at mcpherrin.ca  Sat Dec 20 23:35:15 2014
+From: mozilla at mcpherrin.ca (Matthew McPherrin)
+Date: Sat, 20 Dec 2014 23:35:15 -0800
+Subject: [rust-dev] stage0 in a post-rust-1.0 world
+In-Reply-To: <CAPA_H3cTLOMXRWAtAWxm31ppsqPuagGNai7F3Km=ToCM=_qPxA@mail.gmail.com>
+References: <CAPA_H3cTLOMXRWAtAWxm31ppsqPuagGNai7F3Km=ToCM=_qPxA@mail.gmail.com>
+Message-ID: <CAMYrfjKZZ5_DmDzhdmtKL6PprdG085nzKBcSrvnDNVmoqYHsVA@mail.gmail.com>
+
+I absolutely believe rust needs to give up its snapshots to be sanely
+and widely packaged, but when I mentioned this before, there didn't
+seem to be a lot of traction for the idea.
+
+In particular, the Rust team still plans to move much quicker than,
+say, Debian releases new packages.  In that way, distribution
+packaging is a negative:  Rust is far from "done", and having people
+using even three month old compilers is likely to be a bad idea.
+
+
+On Sat, Dec 20, 2014 at 11:29 PM, Angus Lees <gus at inodes.org> wrote:
+> I wanted to remember how to be a Debian Developer, and rust-1.0 is coming
+> up, so I thought it was time to look into how one might package up rust for
+> a distribution (yes, I'm aware a few other DDs have looked at this earlier;
+> I've read some of their wiki pages/code but no, I haven't contacted them
+> yet).
+>
+> Once rust is bootstrapped on a new distro/architecture, it would be nice to
+> be able to build a rust release using the regular rust compiler rather than
+> downloading a pre-built opaque stage0 blob.  How would this work in
+> practice?
+>
+> Specifically, once we reach 1.0:
+> - Will the rust stage1 source be limited to using "stable" rust language
+> features?
+> - What sort of version skew between stage0 and stage1 will be supported?
+>
+> Additionally, I currently see numerous "breaking" changes transitioned via
+> #[cfg(stage0)].  The assumption is that stage0 is older than the breaking
+> change, and stage1+ is newer than the change.  Amongst other things, this
+> means that you can't currently have the full compile-experience (using
+> --enable-local-rust) using a compiler that you've just built :(
+> I see there's already been discussion towards other mechanisms for tagging
+> version-specific code(*).  I'm new to the rust mailing list and community,
+> so mostly I'm just looking to get caught up on the conversations around this
+> and register a vote for "we need to have a story around this for 1.0, and
+> not later".
+>
+> (*)
+> http://discuss.rust-lang.org/t/pre-rfc-rust-version-attribute-specifying-rust-language-version-within-source-code
+>
+>  - Gus
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+From gus at inodes.org  Sat Dec 20 23:59:27 2014
+From: gus at inodes.org (Angus Lees)
+Date: Sun, 21 Dec 2014 07:59:27 +0000
+Subject: [rust-dev] stage0 in a post-rust-1.0 world
+References: <CAPA_H3cTLOMXRWAtAWxm31ppsqPuagGNai7F3Km=ToCM=_qPxA@mail.gmail.com>
+	<CAMYrfjKZZ5_DmDzhdmtKL6PprdG085nzKBcSrvnDNVmoqYHsVA@mail.gmail.com>
+Message-ID: <CAPA_H3edZwtwuFrBWmqkDwF245V2f6jYMfc=+quDtH6F2Pj_CQ@mail.gmail.com>
+
+Yeah, I can appreciate that concern and I wouldn't want to do anything to
+slow us down.  There are several additional aspects here however:
+
+- I would expect developers anywhere to be happy to use Debian "testing",
+which is a rolling release that should be able to keep a rust package that
+only lags rust official releases by about 2 weeks.  It might be different
+for rust core developers, but I suspect automatically pushing out rust
+binary releases via apt-get update will actually lead to more rapid uptake
+of new releases rather than waiting for everyone to fetch and build from
+source.
+
+- For building-rust-using-local-rust, the only necessary condition is that
+the rust compiler *in unstable* is suitable to use as a stage0.  This means
+effectively zero delay after rust releases - although there is some work
+for me (or whomever) for each release and iterating the stage0 requirements
+several times a week would be tiresome.
+
+- Eventually there will be a program written in rust that is packaged up by
+someone and makes it into a Debian "stable" release (mozilla?). For
+supporting security fixes, etc, it is vital that that (possibly 2 years
+old) rust source code can be patched and rebuilt.  The easiest way to make
+this possible is to snapshot the rust compiler version current at the time
+the program was written.  This is exactly what happens when a "stable"
+release is cut that includes a rust compiler.
+I can also forcibly *prevent* rust from appearing in any stable release
+easily enough.  The downside of course is that no software written in rust
+can go into a stable release either, so that seems like overkill.
+
+In short: I don't see any technical conflicts between making a rust
+compiler available in the Debian archive and rapid-iteration goals.  I'd be
+happy to plaster "you want to ensure you have a recent version for new
+development" warnings everywhere if that was the only remaining concern.
+
+ - Gus
+
+On Sun Dec 21 2014 at 6:36:06 PM Matthew McPherrin <mozilla at mcpherrin.ca>
+wrote:
+
+> I absolutely believe rust needs to give up its snapshots to be sanely
+> and widely packaged, but when I mentioned this before, there didn't
+> seem to be a lot of traction for the idea.
+>
+> In particular, the Rust team still plans to move much quicker than,
+> say, Debian releases new packages.  In that way, distribution
+> packaging is a negative:  Rust is far from "done", and having people
+> using even three month old compilers is likely to be a bad idea.
+>
+>
+> On Sat, Dec 20, 2014 at 11:29 PM, Angus Lees <gus at inodes.org> wrote:
+> > I wanted to remember how to be a Debian Developer, and rust-1.0 is coming
+> > up, so I thought it was time to look into how one might package up rust
+> for
+> > a distribution (yes, I'm aware a few other DDs have looked at this
+> earlier;
+> > I've read some of their wiki pages/code but no, I haven't contacted them
+> > yet).
+> >
+> > Once rust is bootstrapped on a new distro/architecture, it would be nice
+> to
+> > be able to build a rust release using the regular rust compiler rather
+> than
+> > downloading a pre-built opaque stage0 blob.  How would this work in
+> > practice?
+> >
+> > Specifically, once we reach 1.0:
+> > - Will the rust stage1 source be limited to using "stable" rust language
+> > features?
+> > - What sort of version skew between stage0 and stage1 will be supported?
+> >
+> > Additionally, I currently see numerous "breaking" changes transitioned
+> via
+> > #[cfg(stage0)].  The assumption is that stage0 is older than the breaking
+> > change, and stage1+ is newer than the change.  Amongst other things, this
+> > means that you can't currently have the full compile-experience (using
+> > --enable-local-rust) using a compiler that you've just built :(
+> > I see there's already been discussion towards other mechanisms for
+> tagging
+> > version-specific code(*).  I'm new to the rust mailing list and
+> community,
+> > so mostly I'm just looking to get caught up on the conversations around
+> this
+> > and register a vote for "we need to have a story around this for 1.0, and
+> > not later".
+> >
+> > (*)
+> > http://discuss.rust-lang.org/t/pre-rfc-rust-version-attribut
+> e-specifying-rust-language-version-within-source-code
+> >
+> >  - Gus
+> >
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org
+> > https://mail.mozilla.org/listinfo/rust-dev
+> >
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141221/75fc8f4b/attachment.html>
+
+From nodakai at gmail.com  Sun Dec 21 02:34:43 2014
+From: nodakai at gmail.com (Kai Noda)
+Date: Sun, 21 Dec 2014 18:34:43 +0800
+Subject: [rust-dev] undefined reference to
+	`str::str.StrPrelude::bytes::deref::hf4838b8c6b01fc6aSGs
+In-Reply-To: <CAGdT1gp6UuQQi5=C-r_Sbk9G87L84JPNoFzgZTNUQA+RE40dyg@mail.gmail.com>
+References: <CAGdT1gp3wENGXyNjUT7eENaJH=0CMfHFNkYgUq9oF=Xwv1Qnqw@mail.gmail.com>
+	<CAPoQQ-1XFv_z7Zgy-+VJC3g6UvNRv66HeQV_OjvcOULtfwHayA@mail.gmail.com>
+	<CAGdT1gp6UuQQi5=C-r_Sbk9G87L84JPNoFzgZTNUQA+RE40dyg@mail.gmail.com>
+Message-ID: <CAHx8Srm4+OXwxKBboJ0w8+ba3dNsRUv+xg6Yxiy=KNU4ruaovA@mail.gmail.com>
+
+Hi Kashyap,
+
+I have no idea on what troubles you, but "rustc -Z print-link-args" might
+print something useful for you.
+
+Regards,
+Kai
+
+??  ? <nodakai at gmail.com>
+
+2014-12-18 11:19 GMT+08:00 C K Kashyap <ckkashyap at gmail.com>:
+>
+> Thanks Cody,
+>
+> I retried by uninstalling and installing rustc using rustp script and then
+> downloading the nightly source from
+> https://static.rust-lang.org/dist/rust-nightly.tar.gz
+>
+> I still get the same error.
+>
+> Regards,
+> Kashyap
+>
+> On Wed, Dec 17, 2014 at 11:34 PM, Cody P Schafer <dev at codyps.com> wrote:
+>>
+>> I generally get type of errors at runtime when the rust libraries in
+>> my ld path don't match the version of the libraries the executable was
+>> created with.
+>>
+>> Perhaps you could try rebuilding or removing some of the installed
+>> rust versions?
+>>
+>> On Wed, Dec 17, 2014 at 12:54 PM, C K Kashyap <ckkashyap at gmail.com>
+>> wrote:
+>> > Hi,
+>> >
+>> > Is this a regression -
+>> >
+>> > undefined reference to
+>> > `str::str.StrPrelude::bytes::deref::hf4838b8c6b01fc6aSGs
+>> >
+>> > I get this error at linking with libcore.rlib in the latest nightly
+>> build.
+>> > My code is here - https://github.com/ckkashyap/unix
+>> >
+>> >
+>> > Or do I need to make change in my code? I'd really appreciate the inputs
+>> > here.
+>> >
+>> >
+>> > Regards,
+>> >
+>> > Kashyap
+>> >
+>> >
+>> > _______________________________________________
+>> > Rust-dev mailing list
+>> > Rust-dev at mozilla.org
+>> > https://mail.mozilla.org/listinfo/rust-dev
+>> >
+>>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141221/a271563e/attachment.html>
+
+From ckkashyap at gmail.com  Sun Dec 21 23:26:45 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Mon, 22 Dec 2014 12:56:45 +0530
+Subject: [rust-dev] undefined reference to
+	`str::str.StrPrelude::bytes::deref::hf4838b8c6b01fc6aSGs
+In-Reply-To: <CAHx8Srm4+OXwxKBboJ0w8+ba3dNsRUv+xg6Yxiy=KNU4ruaovA@mail.gmail.com>
+References: <CAGdT1gp3wENGXyNjUT7eENaJH=0CMfHFNkYgUq9oF=Xwv1Qnqw@mail.gmail.com>
+	<CAPoQQ-1XFv_z7Zgy-+VJC3g6UvNRv66HeQV_OjvcOULtfwHayA@mail.gmail.com>
+	<CAGdT1gp6UuQQi5=C-r_Sbk9G87L84JPNoFzgZTNUQA+RE40dyg@mail.gmail.com>
+	<CAHx8Srm4+OXwxKBboJ0w8+ba3dNsRUv+xg6Yxiy=KNU4ruaovA@mail.gmail.com>
+Message-ID: <CAGdT1gq+8ORt36+nopmqDB-DD6pJ9-TBwgDHQh5c5hFTMfZzmw@mail.gmail.com>
+
+Thanks Kai .... I'll try and post back ... on the move right now
+Regards,
+Kashyap
+
+On Sun, Dec 21, 2014 at 4:04 PM, Kai Noda <nodakai at gmail.com> wrote:
+
+> Hi Kashyap,
+>
+> I have no idea on what troubles you, but "rustc -Z print-link-args" might
+> print something useful for you.
+>
+> Regards,
+> Kai
+>
+> ??  ? <nodakai at gmail.com>
+>
+> 2014-12-18 11:19 GMT+08:00 C K Kashyap <ckkashyap at gmail.com>:
+>>
+>> Thanks Cody,
+>>
+>> I retried by uninstalling and installing rustc using rustp script and
+>> then downloading the nightly source from
+>> https://static.rust-lang.org/dist/rust-nightly.tar.gz
+>>
+>> I still get the same error.
+>>
+>> Regards,
+>> Kashyap
+>>
+>> On Wed, Dec 17, 2014 at 11:34 PM, Cody P Schafer <dev at codyps.com> wrote:
+>>>
+>>> I generally get type of errors at runtime when the rust libraries in
+>>> my ld path don't match the version of the libraries the executable was
+>>> created with.
+>>>
+>>> Perhaps you could try rebuilding or removing some of the installed
+>>> rust versions?
+>>>
+>>> On Wed, Dec 17, 2014 at 12:54 PM, C K Kashyap <ckkashyap at gmail.com>
+>>> wrote:
+>>> > Hi,
+>>> >
+>>> > Is this a regression -
+>>> >
+>>> > undefined reference to
+>>> > `str::str.StrPrelude::bytes::deref::hf4838b8c6b01fc6aSGs
+>>> >
+>>> > I get this error at linking with libcore.rlib in the latest nightly
+>>> build.
+>>> > My code is here - https://github.com/ckkashyap/unix
+>>> >
+>>> >
+>>> > Or do I need to make change in my code? I'd really appreciate the
+>>> inputs
+>>> > here.
+>>> >
+>>> >
+>>> > Regards,
+>>> >
+>>> > Kashyap
+>>> >
+>>> >
+>>> > _______________________________________________
+>>> > Rust-dev mailing list
+>>> > Rust-dev at mozilla.org
+>>> > https://mail.mozilla.org/listinfo/rust-dev
+>>> >
+>>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141222/0e4eae1c/attachment.html>
+
+From ckkashyap at gmail.com  Tue Dec 23 19:34:11 2014
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Wed, 24 Dec 2014 09:04:11 +0530
+Subject: [rust-dev] undefined reference to
+	`str::str.StrPrelude::bytes::deref::hf4838b8c6b01fc6aSGs
+In-Reply-To: <CAGdT1gq+8ORt36+nopmqDB-DD6pJ9-TBwgDHQh5c5hFTMfZzmw@mail.gmail.com>
+References: <CAGdT1gp3wENGXyNjUT7eENaJH=0CMfHFNkYgUq9oF=Xwv1Qnqw@mail.gmail.com>
+	<CAPoQQ-1XFv_z7Zgy-+VJC3g6UvNRv66HeQV_OjvcOULtfwHayA@mail.gmail.com>
+	<CAGdT1gp6UuQQi5=C-r_Sbk9G87L84JPNoFzgZTNUQA+RE40dyg@mail.gmail.com>
+	<CAHx8Srm4+OXwxKBboJ0w8+ba3dNsRUv+xg6Yxiy=KNU4ruaovA@mail.gmail.com>
+	<CAGdT1gq+8ORt36+nopmqDB-DD6pJ9-TBwgDHQh5c5hFTMfZzmw@mail.gmail.com>
+Message-ID: <CAGdT1goYGZA2dSBvKV_pm6DQaNrwfqdtW9NX9Es-th26ocKC_g@mail.gmail.com>
+
+The problem is solved ... thanks to Alex's support -
+https://github.com/rust-lang/rust/issues/20016
+
+Regards,
+Kashyap
+
+On Mon, Dec 22, 2014 at 12:56 PM, C K Kashyap <ckkashyap at gmail.com> wrote:
+
+> Thanks Kai .... I'll try and post back ... on the move right now
+> Regards,
+> Kashyap
+>
+> On Sun, Dec 21, 2014 at 4:04 PM, Kai Noda <nodakai at gmail.com> wrote:
+>
+>> Hi Kashyap,
+>>
+>> I have no idea on what troubles you, but "rustc -Z print-link-args" might
+>> print something useful for you.
+>>
+>> Regards,
+>> Kai
+>>
+>> ??  ? <nodakai at gmail.com>
+>>
+>> 2014-12-18 11:19 GMT+08:00 C K Kashyap <ckkashyap at gmail.com>:
+>>>
+>>> Thanks Cody,
+>>>
+>>> I retried by uninstalling and installing rustc using rustp script and
+>>> then downloading the nightly source from
+>>> https://static.rust-lang.org/dist/rust-nightly.tar.gz
+>>>
+>>> I still get the same error.
+>>>
+>>> Regards,
+>>> Kashyap
+>>>
+>>> On Wed, Dec 17, 2014 at 11:34 PM, Cody P Schafer <dev at codyps.com> wrote:
+>>>>
+>>>> I generally get type of errors at runtime when the rust libraries in
+>>>> my ld path don't match the version of the libraries the executable was
+>>>> created with.
+>>>>
+>>>> Perhaps you could try rebuilding or removing some of the installed
+>>>> rust versions?
+>>>>
+>>>> On Wed, Dec 17, 2014 at 12:54 PM, C K Kashyap <ckkashyap at gmail.com>
+>>>> wrote:
+>>>> > Hi,
+>>>> >
+>>>> > Is this a regression -
+>>>> >
+>>>> > undefined reference to
+>>>> > `str::str.StrPrelude::bytes::deref::hf4838b8c6b01fc6aSGs
+>>>> >
+>>>> > I get this error at linking with libcore.rlib in the latest nightly
+>>>> build.
+>>>> > My code is here - https://github.com/ckkashyap/unix
+>>>> >
+>>>> >
+>>>> > Or do I need to make change in my code? I'd really appreciate the
+>>>> inputs
+>>>> > here.
+>>>> >
+>>>> >
+>>>> > Regards,
+>>>> >
+>>>> > Kashyap
+>>>> >
+>>>> >
+>>>> > _______________________________________________
+>>>> > Rust-dev mailing list
+>>>> > Rust-dev at mozilla.org
+>>>> > https://mail.mozilla.org/listinfo/rust-dev
+>>>> >
+>>>>
+>>>
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141224/e3f50f87/attachment.html>
+
+From ziwu.wx at alibaba-inc.com  Thu Dec 25 00:31:03 2014
+From: ziwu.wx at alibaba-inc.com (=?GBK?B?zfXQwijX1s7eKQ==?=)
+Date: Thu, 25 Dec 2014 16:31:03 +0800
+Subject: [rust-dev] core dumped when run rustc on centOS 6.4
+Message-ID: <000701d0201d$1f22f730$5d68e590$@alibaba-inc.com>
+
+I download Linux binaries (.tar.gz). after I compiled hello world program.
+When I run it. It?s core dumped.
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141225/b6953960/attachment.html>
+
+From tom.browder at gmail.com  Fri Dec 26 07:57:39 2014
+From: tom.browder at gmail.com (Tom Browder)
+Date: Fri, 26 Dec 2014 09:57:39 -0600
+Subject: [rust-dev] Published Rust Book?
+Message-ID: <CAFMGiz8Pnop9WGffDnGzA_yHhhqRvN7Y8y=TO3CAdUjxQxd6YA@mail.gmail.com>
+
+I am very excited by Rust and its wonderful, integrated tool set, etc.  I
+wonder if a published book is in the planning?  I found no reference to
+such in the Gmane archives of this list, nor did I see anything planned at
+Manning pubs.
+
+Best regards,
+
+-Tom
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141226/4594e7a5/attachment.html>
+
+From yati.sagade at gmail.com  Fri Dec 26 08:04:27 2014
+From: yati.sagade at gmail.com (yati sagade)
+Date: Fri, 26 Dec 2014 21:34:27 +0530
+Subject: [rust-dev] Published Rust Book?
+In-Reply-To: <CAFMGiz8Pnop9WGffDnGzA_yHhhqRvN7Y8y=TO3CAdUjxQxd6YA@mail.gmail.com>
+References: <CAFMGiz8Pnop9WGffDnGzA_yHhhqRvN7Y8y=TO3CAdUjxQxd6YA@mail.gmail.com>
+Message-ID: <CANpY+H=FZL=g51=cdQ_MY=iyd6jg3-2Yesmy_J4nRePcU2tCGQ@mail.gmail.com>
+
+Hi
+
+I think this is because the language was evolving  very rapidly until
+recently. I guess books can be expected around the time Rust 1.0 is
+released.
+On Dec 26, 2014 9:27 PM, "Tom Browder" <tom.browder at gmail.com> wrote:
+
+> I am very excited by Rust and its wonderful, integrated tool set, etc.  I
+> wonder if a published book is in the planning?  I found no reference to
+> such in the Gmane archives of this list, nor did I see anything planned at
+> Manning pubs.
+>
+> Best regards,
+>
+> -Tom
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141226/634ba6d6/attachment.html>
+
+From tom.browder at gmail.com  Sat Dec 27 07:43:01 2014
+From: tom.browder at gmail.com (Tom Browder)
+Date: Sat, 27 Dec 2014 09:43:01 -0600
+Subject: [rust-dev] PDF Rust Docs
+In-Reply-To: <CAFMGiz_PSbOP0NHFMkeJCPAJpbdd1sAdCAjBi_ComTt1okjJVw@mail.gmail.com>
+References: <CAFMGiz_PSbOP0NHFMkeJCPAJpbdd1sAdCAjBi_ComTt1okjJVw@mail.gmail.com>
+Message-ID: <CAFMGiz_e33txgT_T7v54z3JO1tk1FEKL8hG6jkssQdN-wEqF0A@mail.gmail.com>
+
+I see that the Rust build system is set up to build at least some pdf docs,
+but I haven't yet found them on the site.
+
+Can they be turned on for generation on the rust-lang server so the pdf
+docs can be referenced on the site for download?
+
+Thanks.
+
+Best regards,
+
+-Tom
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141227/bb06b18d/attachment.html>
+
+From ranma42 at gmail.com  Sat Dec 27 08:39:04 2014
+From: ranma42 at gmail.com (Andrea Canciani)
+Date: Sat, 27 Dec 2014 17:39:04 +0100
+Subject: [rust-dev] Tail call compatibility
+Message-ID: <CAN_5=BB2c5Zg7i_htHdYOLG7YxDfai-htMR_+epVdFwo+--K0w@mail.gmail.com>
+
+I tried to collect as much information as possible from IRC and from the
+Web about TCO in Rust.
+
+The most recent (and authoritative) reference I can find is
+https://github.com/rust-lang/meeting-minutes/blob/e3c325c7e30331cb43e0c5b68f35070f211ee4cb/weekly-meetings/2014-05-20.md#tail-calls
+The decision seems to be that it is an interesting feature, but that it
+should be postponed for a future release.
+To me this looks like a good point, but I'm worried about potential
+backward-compatibility hazards.
+
+In particular, the "be" keyword has been removed from the language and the
+proposed alternative ("become") has never been introduced. Wouldn't it be
+easier to ensure backward compatibility if the "become" keyword was at
+reserved in rust 1.0?
+
+Another thing I'm worried about is callee vs. caller cleanup of the call
+stack. Changing the rust calling convention post-1.0 would break the ABI,
+so it would be very inconvenient.
+On IRC I was told that rustc was already using the LLVM "fastcall" calling
+convention, but
+https://github.com/rust-lang/rust/blob/master/src/librustc_trans/trans/base.rs#L310
+seems to indicate that the C calling convention is used instead.
+In several posts on the TCO, one of the points against supporting TCO was
+that it involves using a slower calling convention, but I was unable to
+find any benchmark to support that statement.
+Where can I find some discussions about the [dis]advantages of the
+different calling conventions and what design choices led to the current
+one?
+
+I would like to evaluate the performance (speed, code size) impact of
+changing the calling convention. What would be the best way to do this? Is
+there any "well-known" benchmark for changes that affect the overall
+behavior of the compiler?
+I would assume that rustc itself is probably one of the most interesting
+"real-world" applications written in rust right now. Otherwise, is the
+compiler shootout challenge sufficiently interesting for this purpose?
+
+Andrea
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141227/4ed5f5db/attachment.html>
+
+From cg.wowus.cg at gmail.com  Sat Dec 27 08:48:48 2014
+From: cg.wowus.cg at gmail.com (Clark Gaebel)
+Date: Sat, 27 Dec 2014 08:48:48 -0800 (PST)
+Subject: [rust-dev] Tail call compatibility
+In-Reply-To: <CAN_5=BB2c5Zg7i_htHdYOLG7YxDfai-htMR_+epVdFwo+--K0w@mail.gmail.com>
+References: <CAN_5=BB2c5Zg7i_htHdYOLG7YxDfai-htMR_+epVdFwo+--K0w@mail.gmail.com>
+Message-ID: <1419698928371.c7c4b744@Nodemailer>
+
+The abi is allowed to change post 1.0. If it wasn't, we'd be stuck with cdecl forever and that sucks.
+
+I've only seen fastcall used for intracrate leaf calls.
+
+Servo and rustc are the two biggest rust projects.
+
+The mailing list is mostly dead BTW. Consider bringing this up on discuss.rust-lang.org instead.
+
+If you plan on playing with calling convention, aatch and I (cgaebel) have been considering a rust-specific one. You should drop by on irc some time if it interests you!
+
+Happy to help,
+  - Clark
+
+On Sat, Dec 27, 2014 at 11:39 AM, Andrea Canciani <ranma42 at gmail.com>
+wrote:
+
+> I tried to collect as much information as possible from IRC and from the
+> Web about TCO in Rust.
+> The most recent (and authoritative) reference I can find is
+> https://github.com/rust-lang/meeting-minutes/blob/e3c325c7e30331cb43e0c5b68f35070f211ee4cb/weekly-meetings/2014-05-20.md#tail-calls
+> The decision seems to be that it is an interesting feature, but that it
+> should be postponed for a future release.
+> To me this looks like a good point, but I'm worried about potential
+> backward-compatibility hazards.
+> In particular, the "be" keyword has been removed from the language and the
+> proposed alternative ("become") has never been introduced. Wouldn't it be
+> easier to ensure backward compatibility if the "become" keyword was at
+> reserved in rust 1.0?
+> Another thing I'm worried about is callee vs. caller cleanup of the call
+> stack. Changing the rust calling convention post-1.0 would break the ABI,
+> so it would be very inconvenient.
+> On IRC I was told that rustc was already using the LLVM "fastcall" calling
+> convention, but
+> https://github.com/rust-lang/rust/blob/master/src/librustc_trans/trans/base.rs#L310
+> seems to indicate that the C calling convention is used instead.
+> In several posts on the TCO, one of the points against supporting TCO was
+> that it involves using a slower calling convention, but I was unable to
+> find any benchmark to support that statement.
+> Where can I find some discussions about the [dis]advantages of the
+> different calling conventions and what design choices led to the current
+> one?
+> I would like to evaluate the performance (speed, code size) impact of
+> changing the calling convention. What would be the best way to do this? Is
+> there any "well-known" benchmark for changes that affect the overall
+> behavior of the compiler?
+> I would assume that rustc itself is probably one of the most interesting
+> "real-world" applications written in rust right now. Otherwise, is the
+> compiler shootout challenge sufficiently interesting for this purpose?
+> Andrea
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141227/a48658bd/attachment.html>
+
+From tomi.pievilainen at iki.fi  Sat Dec 27 08:53:00 2014
+From: tomi.pievilainen at iki.fi (Tomi =?iso-8859-1?Q?Pievil=E4inen?=)
+Date: Sat, 27 Dec 2014 18:53:00 +0200
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call compatibility]
+In-Reply-To: <1419698928371.c7c4b744@Nodemailer>
+References: <CAN_5=BB2c5Zg7i_htHdYOLG7YxDfai-htMR_+epVdFwo+--K0w@mail.gmail.com>
+	<1419698928371.c7c4b744@Nodemailer>
+Message-ID: <20141227165300.GH17441@shirio>
+
+> The mailing list is mostly dead BTW. Consider bringing this up on
+> discuss.rust-lang.org instead.
+
+This is the first time I've heard of that. I checked that it isn't
+even linked on the homepage, but the mailing list and IRC are.
+
+Have I missed something, or should the discourse then be linked
+instead of or at least in addition of the mailing list?
+
+-- 
+Tomi Pievil?inen, +358 400 487 504
+A: Because it disrupts the natural way of thinking.
+Q: Why is top posting frowned upon?
+
+From cg.wowus.cg at gmail.com  Sat Dec 27 09:02:06 2014
+From: cg.wowus.cg at gmail.com (Clark Gaebel)
+Date: Sat, 27 Dec 2014 09:02:06 -0800 (PST)
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+ compatibility]
+In-Reply-To: <20141227165300.GH17441@shirio>
+References: <20141227165300.GH17441@shirio>
+Message-ID: <1419699725864.773764b5@Nodemailer>
+
+There was a thread about it on... Discourse!
+
+http://discuss.rust-lang.org/t/is-it-time-to-kill-the-mailing-list/611/36
+
+On Sat, Dec 27, 2014 at 11:53 AM, Tomi Pievil?inen
+<tomi.pievilainen at iki.fi> wrote:
+
+>> The mailing list is mostly dead BTW. Consider bringing this up on
+>> discuss.rust-lang.org instead.
+> This is the first time I've heard of that. I checked that it isn't
+> even linked on the homepage, but the mailing list and IRC are.
+> Have I missed something, or should the discourse then be linked
+> instead of or at least in addition of the mailing list?
+> -- 
+> Tomi Pievil?inen, +358 400 487 504
+> A: Because it disrupts the natural way of thinking.
+> Q: Why is top posting frowned upon?
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141227/0a148e25/attachment.html>
+
+From amindfv at gmail.com  Sat Dec 27 09:54:26 2014
+From: amindfv at gmail.com (amindfv at gmail.com)
+Date: Sat, 27 Dec 2014 12:54:26 -0500
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <1419699725864.773764b5@Nodemailer>
+References: <20141227165300.GH17441@shirio> <1419699725864.773764b5@Nodemailer>
+Message-ID: <DD087C93-92EE-4147-A772-3ECE5587F1FE@gmail.com>
+
+That... breaks my workflow. Wouldn't it make much more sense to talk to people on the mailing list about killing the mailing list? It's like people went to the vim community to decide whether to cancel emacs development (or vice-versa)
+
+Tom
+
+
+El Dec 27, 2014, a las 12:02, "Clark Gaebel" <cg.wowus.cg at gmail.com> escribi?:
+
+> There was a thread about it on... Discourse!
+> 
+> http://discuss.rust-lang.org/t/is-it-time-to-kill-the-mailing-list/611/36
+> 
+> 
+> 
+> On Sat, Dec 27, 2014 at 11:53 AM, Tomi Pievil?inen <tomi.pievilainen at iki.fi> wrote:
+> 
+>> > The mailing list is mostly dead BTW. Consider bringing this up on 
+>> > discuss.rust-lang.org instead. 
+>> 
+>> This is the first time I've heard of that. I checked that it isn't 
+>> even linked on the homepage, but the mailing list and IRC are. 
+>> 
+>> Have I missed something, or should the discourse then be linked 
+>> instead of or at least in addition of the mailing list? 
+>> 
+>> -- 
+>> Tomi Pievil?inen, +358 400 487 504 
+>> A: Because it disrupts the natural way of thinking. 
+>> Q: Why is top posting frowned upon? 
+>> _______________________________________________ 
+>> Rust-dev mailing list 
+>> Rust-dev at mozilla.org 
+>> https://mail.mozilla.org/listinfo/rust-dev
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141227/cf6f4d2f/attachment.html>
+
+From eg1290 at gmail.com  Sat Dec 27 10:13:18 2014
+From: eg1290 at gmail.com (Evan G)
+Date: Sat, 27 Dec 2014 18:13:18 +0000
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+References: <20141227165300.GH17441@shirio> <1419699725864.773764b5@Nodemailer>
+	<DD087C93-92EE-4147-A772-3ECE5587F1FE@gmail.com>
+Message-ID: <CAJY4u8EPWst+X6hRk79JMqchj_4_bXngvaycZPZphVbSHY8gXQ@mail.gmail.com>
+
+A little hyperbolic, considering we're all the same rust community.
+
+And as far as I know you can set discourse up to work like a mailing list
+(i.e. email me for every post, email me even if you've seen me recently,
+don't batch emails, stuff like that)
+On Sat Dec 27 2014 at 11:54:41 AM <amindfv at gmail.com> wrote:
+
+> That... breaks my workflow. Wouldn't it make much more sense to talk to
+> people on the mailing list about killing the mailing list? It's like people
+> went to the vim community to decide whether to cancel emacs development (or
+> vice-versa)
+>
+> Tom
+>
+>
+> El Dec 27, 2014, a las 12:02, "Clark Gaebel" <cg.wowus.cg at gmail.com>
+> escribi?:
+>
+> There was a thread about it on... Discourse!
+>
+> http://discuss.rust-lang.org/t/is-it-time-to-kill-the-mailing-list/611/36
+>
+>
+>
+> On Sat, Dec 27, 2014 at 11:53 AM, Tomi Pievil?inen <
+> tomi.pievilainen at iki.fi> wrote:
+>
+>> > The mailing list is mostly dead BTW. Consider bringing this up on
+>> > discuss.rust-lang.org instead.
+>>
+>> This is the first time I've heard of that. I checked that it isn't
+>> even linked on the homepage, but the mailing list and IRC are.
+>>
+>> Have I missed something, or should the discourse then be linked
+>> instead of or at least in addition of the mailing list?
+>>
+>> --
+>> Tomi Pievil?inen, +358 400 487 504
+>> A: Because it disrupts the natural way of thinking.
+>> Q: Why is top posting frowned upon?
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141227/1ff5abf6/attachment.html>
+
+From spam at scientician.net  Sat Dec 27 10:42:01 2014
+From: spam at scientician.net (Bardur Arantsson)
+Date: Sat, 27 Dec 2014 19:42:01 +0100
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <CAJY4u8EPWst+X6hRk79JMqchj_4_bXngvaycZPZphVbSHY8gXQ@mail.gmail.com>
+References: <20141227165300.GH17441@shirio>
+	<1419699725864.773764b5@Nodemailer>	<DD087C93-92EE-4147-A772-3ECE5587F1FE@gmail.com>
+	<CAJY4u8EPWst+X6hRk79JMqchj_4_bXngvaycZPZphVbSHY8gXQ@mail.gmail.com>
+Message-ID: <m7muhp$2l7$1@ger.gmane.org>
+
+On 2014-12-27 19:13, Evan G wrote:
+> A little hyperbolic, considering we're all the same rust community.
+> 
+> And as far as I know you can set discourse up to work like a mailing list
+> (i.e. email me for every post, email me even if you've seen me recently,
+> don't batch emails, stuff like that)
+
+... unless you're using GMANE which is one of the few remaining *sane*
+ways of handling dozens of mailing lists AFAICT. In contrast to mailing
+lists it doesn't seem feasible to keep up with dozens of online forums
+since they a) mostly run different software, i.e. usually
+non-mail-friendly, and b) I cannot get a unified interface to all the
+forums I would need to if all the mailing lists I'm currently following
+were to be converted to forums.
+
+I fully recognize that this isn't likely to convince anyone who isn't
+used to the awesome that is GMANE/NNTP, but I just want to point out
+what a shame it is that we're going ever-closer to siloization of the
+"debate/discussion" format (and content!) when we actually have a
+reasonably good technology to avoid it (NNTP) -- just out of apathy
+and/or laziness on the part of forum software users *and*
+vendors/implementers. :(
+
+
+
+From danielmicay at gmail.com  Sat Dec 27 12:44:27 2014
+From: danielmicay at gmail.com (Daniel Micay)
+Date: Sat, 27 Dec 2014 15:44:27 -0500
+Subject: [rust-dev] Tail call compatibility
+In-Reply-To: <1419698928371.c7c4b744@Nodemailer>
+References: <CAN_5=BB2c5Zg7i_htHdYOLG7YxDfai-htMR_+epVdFwo+--K0w@mail.gmail.com>
+	<1419698928371.c7c4b744@Nodemailer>
+Message-ID: <549F1A2B.6000507@gmail.com>
+
+On 27/12/14 11:48 AM, Clark Gaebel wrote:
+> The abi is allowed to change post 1.0. If it wasn't, we'd be stuck with
+> cdecl forever and that sucks.
+> 
+> I've only seen fastcall used for intracrate leaf calls.
+> 
+> Servo and rustc are the two biggest rust projects.
+> 
+> The mailing list is mostly dead BTW. Consider bringing this up on
+> discuss.rust-lang.org instead.
+> 
+> If you plan on playing with calling convention, aatch and I (cgaebel)
+> have been considering a rust-specific one. You should drop by on irc
+> some time if it interests you!
+> 
+> Happy to help,
+> - Clark
+
+The calling convention isn't actually relevant to guaranteed TCO.
+
+It requires a simple language feature mapping to musttail.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141227/2835a9ab/attachment.sig>
+
+From amindfv at gmail.com  Sat Dec 27 13:12:06 2014
+From: amindfv at gmail.com (amindfv at gmail.com)
+Date: Sat, 27 Dec 2014 16:12:06 -0500
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <CAJY4u8EPWst+X6hRk79JMqchj_4_bXngvaycZPZphVbSHY8gXQ@mail.gmail.com>
+References: <20141227165300.GH17441@shirio> <1419699725864.773764b5@Nodemailer>
+	<DD087C93-92EE-4147-A772-3ECE5587F1FE@gmail.com>
+	<CAJY4u8EPWst+X6hRk79JMqchj_4_bXngvaycZPZphVbSHY8gXQ@mail.gmail.com>
+Message-ID: <C6C35A05-1721-4C3D-A3E5-75066ED4E114@gmail.com>
+
+El Dec 27, 2014, a las 13:13, Evan G <eg1290 at gmail.com> escribi?:
+
+> A little hyperbolic, considering we're all the same rust community.
+> 
+
+I don't think so -- talking about killing the mailing list in a place mailing-list-only community members won't see it sounds a little like something from Hitchhiker's Guide to the Galaxy. That said, i'm open to hearing the arguments for it
+
+Tom
+
+
+
+> And as far as I know you can set discourse up to work like a mailing list (i.e. email me for every post, email me even if you've seen me recently, don't batch emails, stuff like that)
+> On Sat Dec 27 2014 at 11:54:41 AM <amindfv at gmail.com> wrote:
+>> That... breaks my workflow. Wouldn't it make much more sense to talk to people on the mailing list about killing the mailing list? It's like people went to the vim community to decide whether to cancel emacs development (or vice-versa)
+>> 
+>> Tom
+>> 
+>> 
+>> El Dec 27, 2014, a las 12:02, "Clark Gaebel" <cg.wowus.cg at gmail.com> escribi?:
+>> 
+>>> There was a thread about it on... Discourse!
+>>> 
+>>> http://discuss.rust-lang.org/t/is-it-time-to-kill-the-mailing-list/611/36
+>>> 
+>>> 
+>>> 
+>>> On Sat, Dec 27, 2014 at 11:53 AM, Tomi Pievil?inen <tomi.pievilainen at iki.fi> wrote:
+>>> 
+>>>> > The mailing list is mostly dead BTW. Consider bringing this up on 
+>>>> > discuss.rust-lang.org instead. 
+>>>> 
+>>>> This is the first time I've heard of that. I checked that it isn't 
+>>>> even linked on the homepage, but the mailing list and IRC are. 
+>>>> 
+>>>> Have I missed something, or should the discourse then be linked 
+>>>> instead of or at least in addition of the mailing list? 
+>>>> 
+>>>> -- 
+>>>> Tomi Pievil?inen, +358 400 487 504 
+>>>> A: Because it disrupts the natural way of thinking. 
+>>>> Q: Why is top posting frowned upon? 
+>>>> _______________________________________________ 
+>>>> Rust-dev mailing list 
+>>>> Rust-dev at mozilla.org 
+>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>> 
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141227/ac61fd2b/attachment.html>
+
+From spam at scientician.net  Sat Dec 27 13:44:36 2014
+From: spam at scientician.net (Bardur Arantsson)
+Date: Sat, 27 Dec 2014 22:44:36 +0100
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <C6C35A05-1721-4C3D-A3E5-75066ED4E114@gmail.com>
+References: <20141227165300.GH17441@shirio>
+	<1419699725864.773764b5@Nodemailer>	<DD087C93-92EE-4147-A772-3ECE5587F1FE@gmail.com>	<CAJY4u8EPWst+X6hRk79JMqchj_4_bXngvaycZPZphVbSHY8gXQ@mail.gmail.com>
+	<C6C35A05-1721-4C3D-A3E5-75066ED4E114@gmail.com>
+Message-ID: <m7n984$3gi$2@ger.gmane.org>
+
+On 2014-12-27 22:12, amindfv at gmail.com wrote:
+> El Dec 27, 2014, a las 13:13, Evan G <eg1290 at gmail.com> escribi?:
+> 
+>> A little hyperbolic, considering we're all the same rust community.
+>>
+> 
+> I don't think so -- talking about killing the mailing list in a place mailing-list-only community members won't see it sounds a little like something from Hitchhiker's Guide to the Galaxy. That said, i'm open to hearing the arguments for it
+> 
+
+I think Kafka beat our beloved Doglas by a few years, but yeah. Pretty
+weird to not mention it to the people who you'd imagine cared the most.
+
+Anyway,
+
+
+From ivo.balbaert at telenet.be  Sun Dec 28 02:23:39 2014
+From: ivo.balbaert at telenet.be (Ivo Balbaert)
+Date: Sun, 28 Dec 2014 11:23:39 +0100
+Subject: [rust-dev] Published Rust Book?
+Message-ID: <000001d02288$593de6b0$0bb9b410$@telenet.be>
+
+Hi,
+
+I heard Packt Publishing is working on a Rust book to appear around Apr
+2015.
+
+Best regards,
+
+Ivo
+-----Original Message-----
+From: Rust-dev [mailto:rust-dev-bounces at mozilla.org] On Behalf Of
+rust-dev-request at mozilla.org
+Sent: vrijdag 26 december 2014 21:00
+To: rust-dev at mozilla.org
+Subject: Rust-dev Digest, Vol 54, Issue 21
+
+Send Rust-dev mailing list submissions to
+	rust-dev at mozilla.org
+
+To subscribe or unsubscribe via the World Wide Web, visit
+	https://mail.mozilla.org/listinfo/rust-dev
+or, via email, send a message with subject or body 'help' to
+	rust-dev-request at mozilla.org
+
+You can reach the person managing the list at
+	rust-dev-owner at mozilla.org
+
+When replying, please edit your Subject line so it is more specific than
+"Re: Contents of Rust-dev digest..."
+
+
+Today's Topics:
+
+   1.  Published Rust Book? (Tom Browder)
+   2. Re:  Published Rust Book? (yati sagade)
+
+
+----------------------------------------------------------------------
+
+Message: 1
+Date: Fri, 26 Dec 2014 09:57:39 -0600
+From: Tom Browder <tom.browder at gmail.com>
+To: rust-dev at mozilla.org
+Subject: [rust-dev] Published Rust Book?
+Message-ID:
+	<CAFMGiz8Pnop9WGffDnGzA_yHhhqRvN7Y8y=TO3CAdUjxQxd6YA at mail.gmail.com>
+Content-Type: text/plain; charset="utf-8"
+
+I am very excited by Rust and its wonderful, integrated tool set, etc.  I
+wonder if a published book is in the planning?  I found no reference to such
+in the Gmane archives of this list, nor did I see anything planned at
+Manning pubs.
+
+Best regards,
+
+-Tom
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL:
+<http://mail.mozilla.org/pipermail/rust-dev/attachments/20141226/4594e7a5/at
+tachment-0001.html>
+
+------------------------------
+
+Message: 2
+Date: Fri, 26 Dec 2014 21:34:27 +0530
+From: yati sagade <yati.sagade at gmail.com>
+To: Tom Browder <tom.browder at gmail.com>
+Cc: rust-dev at mozilla.org
+Subject: Re: [rust-dev] Published Rust Book?
+Message-ID:
+	<CANpY+H=FZL=g51=cdQ_MY=iyd6jg3-2Yesmy_J4nRePcU2tCGQ at mail.gmail.com>
+Content-Type: text/plain; charset="utf-8"
+
+Hi
+
+I think this is because the language was evolving  very rapidly until
+recently. I guess books can be expected around the time Rust 1.0 is
+released.
+On Dec 26, 2014 9:27 PM, "Tom Browder" <tom.browder at gmail.com> wrote:
+
+> I am very excited by Rust and its wonderful, integrated tool set, etc.  
+> I wonder if a published book is in the planning?  I found no reference 
+> to such in the Gmane archives of this list, nor did I see anything 
+> planned at Manning pubs.
+>
+> Best regards,
+>
+> -Tom
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL:
+<http://mail.mozilla.org/pipermail/rust-dev/attachments/20141226/634ba6d6/at
+tachment-0001.html>
+
+------------------------------
+
+Subject: Digest Footer
+
+_______________________________________________
+Rust-dev mailing list
+Rust-dev at mozilla.org
+https://mail.mozilla.org/listinfo/rust-dev
+
+
+------------------------------
+
+End of Rust-dev Digest, Vol 54, Issue 21
+****************************************
+
+
+---
+Dit e-mailbericht is gecontroleerd op virussen met Avast antivirussoftware.
+http://www.avast.com
+
+
+From 3d72ddf7ab732eb00b880502edaf123e at alfie.wtf  Sun Dec 28 04:26:26 2014
+From: 3d72ddf7ab732eb00b880502edaf123e at alfie.wtf (Alfie John)
+Date: Sun, 28 Dec 2014 12:26:26 +0000
+Subject: [rust-dev] Published Rust Book?
+Message-ID: <20141228122626.GD12905@d1stkfactory>
+
+On Sun, Dec 28, 2014 at 11:23:39AM +0100, Ivo Balbaert wrote:
+>
+> I heard Packt Publishing is working on a Rust book to appear around Apr
+> 2015.
+
+If the author(s) are looking for technical reviewers, contact me off list as
+I'd be happy to help out if needed.
+
+Alfie
+
+--
+Alfie John
+https://www.alfie.wtf
+
+
+From hartmut.prochaska at gmail.com  Sun Dec 28 06:30:02 2014
+From: hartmut.prochaska at gmail.com (Hartmut Prochaska)
+Date: Sun, 28 Dec 2014 15:30:02 +0100
+Subject: [rust-dev] Published Rust Book?
+In-Reply-To: <20141228122626.GD12905@d1stkfactory>
+References: <20141228122626.GD12905@d1stkfactory>
+Message-ID: <54A013EA.4050706@gmail.com>
+
+Hi,
+
+>> I heard Packt Publishing is working on a Rust book to appear around Apr
+>> 2015.
+> 
+> If the author(s) are looking for technical reviewers, contact me off list as
+> I'd be happy to help out if needed.
+
+as I am a beginner in Rust I would be happy to help too.
+
+best regards
+Hartmut
+
+
+-- 
+Ideas are the only things that can change the world.
+The rest is details. -- Scott Adams
+
+new Key ID since 26.07.13: 0xD8C361E6
+Fingerprint: E5B3 302B 1BE1 D0B4 F190 E739 A365 60A9 D8C3 61E6
+
+From tom.browder at gmail.com  Sun Dec 28 08:29:47 2014
+From: tom.browder at gmail.com (Tom Browder)
+Date: Sun, 28 Dec 2014 10:29:47 -0600
+Subject: [rust-dev] Rust build farm
+Message-ID: <CAFMGiz_iv27YfoMW_S8q4rVZZZWh+wJghJ-LFMY9jv99_q8GRQ@mail.gmail.com>
+
+I notice bugs referring to pdf and build platforms without pdf capability,
+which I am very interested in. Is there a system for contributing a build
+host to possibly help the situation?
+
+Best regards,
+
+-Tom
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141228/18b065d9/attachment.html>
+
+From tuncer.ayaz at gmail.com  Sun Dec 28 09:31:22 2014
+From: tuncer.ayaz at gmail.com (Tuncer Ayaz)
+Date: Sun, 28 Dec 2014 18:31:22 +0100
+Subject: [rust-dev] Published Rust Book?
+In-Reply-To: <54A013EA.4050706@gmail.com>
+References: <20141228122626.GD12905@d1stkfactory> <54A013EA.4050706@gmail.com>
+Message-ID: <CAOvwQ4je6jk1ZgTmzcKBjqh_FpttmnwbDm0xQS743FudYPOXcQ@mail.gmail.com>
+
+On Sun, Dec 28, 2014 at 3:30 PM, Hartmut Prochaska wrote:
+> Hi,
+>
+> > > I heard Packt Publishing is working on a Rust book to appear
+> > > around Apr 2015.
+> >
+> > If the author(s) are looking for technical reviewers, contact me
+> > off list as I'd be happy to help out if needed.
+>
+> as I am a beginner in Rust I would be happy to help too.
+
+Do we know who's writing and how to get in contact?
+
+From alfredo.dinapoli at gmail.com  Sun Dec 28 11:11:49 2014
+From: alfredo.dinapoli at gmail.com (Alfredo Di Napoli)
+Date: Sun, 28 Dec 2014 20:11:49 +0100
+Subject: [rust-dev] (FFI) Compile a dylib to x86 from a x86_64 machine and
+	rust toolchain
+Message-ID: <CAFqA6+VPFK8jXxtfk9UF=vn7cde_9_X8G0Kr3N4nU80vmvGoZA@mail.gmail.com>
+
+Hello Rustacean,
+
+I?ll go straight to the point: I?m building a small FFI library which needs
+to be called
+from a C++ x86 project. I cannot change the arch of the latter (it?s Doom3,
+and relies on x86 arch entirely).
+Thus linker reject my Rust library as ?file was built for x86_64 which is
+not the architecture being linked (i386)?.
+
+Thus my question: It?s possible (without rebuilding the toolchain) to
+instruct cargo to generate a x86 dylib?
+Something like (fantasy syntax):
+
+cargo build ?arch-type=x86
+
+Thanks in advance!
+Alfredo
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141228/e75476fd/attachment.html>
+
+From corey at octayn.net  Sun Dec 28 11:21:05 2014
+From: corey at octayn.net (Corey Richardson)
+Date: Sun, 28 Dec 2014 14:21:05 -0500
+Subject: [rust-dev] (FFI) Compile a dylib to x86 from a x86_64 machine
+ and rust toolchain
+In-Reply-To: <CAFqA6+VPFK8jXxtfk9UF=vn7cde_9_X8G0Kr3N4nU80vmvGoZA@mail.gmail.com>
+References: <CAFqA6+VPFK8jXxtfk9UF=vn7cde_9_X8G0Kr3N4nU80vmvGoZA@mail.gmail.com>
+Message-ID: <CA++BO6RrjHOWAqRZ3bjCRsEos0KrLV+YXO=5n8_M7S98P_011Q@mail.gmail.com>
+
+You need at least a 32-bit stdlib, but you can build with `cargo build
+--target i686-unknown-linux-gnu` and it will "Just Work" assuming you have
+the proper libs in $PREFIX/lib/rustlib/i686-unknown-linux-gnu.
+http://doc.rust-lang.org/src/rustc_back/target/mod.rs.html#330 has a list
+of the built-in targets, and
+http://doc.rust-lang.org/rustc_back/target/index.html has docs on how to
+create your own.
+
+On Sun, Dec 28, 2014 at 2:11 PM, Alfredo Di Napoli <
+alfredo.dinapoli at gmail.com> wrote:
+
+> Hello Rustacean,
+>
+> I?ll go straight to the point: I?m building a small FFI library which
+> needs to be called
+> from a C++ x86 project. I cannot change the arch of the latter (it?s
+> Doom3, and relies on x86 arch entirely).
+> Thus linker reject my Rust library as ?file was built for x86_64 which is
+> not the architecture being linked (i386)?.
+>
+> Thus my question: It?s possible (without rebuilding the toolchain) to
+> instruct cargo to generate a x86 dylib?
+> Something like (fantasy syntax):
+>
+> cargo build ?arch-type=x86
+>
+> Thanks in advance!
+> Alfredo
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+
+
+-- 
+http://octayn.net/
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141228/e3b42254/attachment.html>
+
+From alfredo.dinapoli at gmail.com  Sun Dec 28 11:40:01 2014
+From: alfredo.dinapoli at gmail.com (Alfredo Di Napoli)
+Date: Sun, 28 Dec 2014 20:40:01 +0100
+Subject: [rust-dev] (FFI) Compile a dylib to x86 from a x86_64 machine
+	and rust toolchain
+In-Reply-To: <CA++BO6RrjHOWAqRZ3bjCRsEos0KrLV+YXO=5n8_M7S98P_011Q@mail.gmail.com>
+References: <CAFqA6+VPFK8jXxtfk9UF=vn7cde_9_X8G0Kr3N4nU80vmvGoZA@mail.gmail.com>
+	<CA++BO6RrjHOWAqRZ3bjCRsEos0KrLV+YXO=5n8_M7S98P_011Q@mail.gmail.com>
+Message-ID: <CAFqA6+X+k1-Kxbv4e=JhfFLBeAVm1Xmkdu_OEPjfB+fLzotK_Q@mail.gmail.com>
+
+Thanks Corey,
+
+I will have a look into this ;)
+
+Alfredo
+
+On Sunday, 28 December 2014, Corey Richardson <corey at octayn.net> wrote:
+> You need at least a 32-bit stdlib, but you can build with `cargo build
+--target i686-unknown-linux-gnu` and it will "Just Work" assuming you have
+the proper libs in $PREFIX/lib/rustlib/i686-unknown-linux-gnu.
+http://doc.rust-lang.org/src/rustc_back/target/mod.rs.html#330 has a list
+of the built-in targets, and
+http://doc.rust-lang.org/rustc_back/target/index.html has docs on how to
+create your own.
+>
+> On Sun, Dec 28, 2014 at 2:11 PM, Alfredo Di Napoli <
+alfredo.dinapoli at gmail.com> wrote:
+>>
+>> Hello Rustacean,
+>>
+>> I?ll go straight to the point: I?m building a small FFI library which
+needs to be called
+>> from a C++ x86 project. I cannot change the arch of the latter (it?s
+Doom3, and relies on x86 arch entirely).
+>> Thus linker reject my Rust library as ?file was built for x86_64 which
+is not the architecture being linked (i386)?.
+>>
+>> Thus my question: It?s possible (without rebuilding the toolchain) to
+instruct cargo to generate a x86 dylib?
+>> Something like (fantasy syntax):
+>>
+>> cargo build ?arch-type=x86
+>>
+>> Thanks in advance!
+>> Alfredo
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+>
+>
+> --
+> http://octayn.net/
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141228/47fd6b3a/attachment.html>
+
+From tom.browder at gmail.com  Mon Dec 29 08:42:08 2014
+From: tom.browder at gmail.com (Tom Browder)
+Date: Mon, 29 Dec 2014 10:42:08 -0600
+Subject: [rust-dev] Building in Local Git Repo?
+Message-ID: <CAFMGiz9mrbUHHyVt7RbbQtyJp5ozY=4aaw=FUVnTJZTBYWM5TA@mail.gmail.com>
+
+I have a locally cloned fork of Rust.  Is it okay to build in the
+top-level directory?  Or is it better to build in a sub-directory or
+an out-of-repo directory?
+
+Thanks.
+
+Best regards,
+
+-Tom
+
+From steve at steveklabnik.com  Mon Dec 29 09:38:02 2014
+From: steve at steveklabnik.com (Steve Klabnik)
+Date: Mon, 29 Dec 2014 12:38:02 -0500
+Subject: [rust-dev] Building in Local Git Repo?
+In-Reply-To: <CAFMGiz9mrbUHHyVt7RbbQtyJp5ozY=4aaw=FUVnTJZTBYWM5TA@mail.gmail.com>
+References: <CAFMGiz9mrbUHHyVt7RbbQtyJp5ozY=4aaw=FUVnTJZTBYWM5TA@mail.gmail.com>
+Message-ID: <CABL+ZB5yxTLaVZGoUyr2VqvJu4RhNr-z3jHkphenp0K7nJmv+A@mail.gmail.com>
+
+I always build in-tree, and it's fine.
+
+From tom.browder at gmail.com  Mon Dec 29 10:13:13 2014
+From: tom.browder at gmail.com (Tom Browder)
+Date: Mon, 29 Dec 2014 12:13:13 -0600
+Subject: [rust-dev] Building in Local Git Repo?
+In-Reply-To: <CABL+ZB5yxTLaVZGoUyr2VqvJu4RhNr-z3jHkphenp0K7nJmv+A@mail.gmail.com>
+References: <CAFMGiz9mrbUHHyVt7RbbQtyJp5ozY=4aaw=FUVnTJZTBYWM5TA@mail.gmail.com>
+	<CABL+ZB5yxTLaVZGoUyr2VqvJu4RhNr-z3jHkphenp0K7nJmv+A@mail.gmail.com>
+Message-ID: <CAFMGiz-Y85JEZdDgS_5WBnLOc8h0RDTjGP+7U9gaZDuZDjMtyg@mail.gmail.com>
+
+On Dec 29, 2014 11:38 AM, "Steve Klabnik" <steve at steveklabnik.com> wrote:
+>
+> I always build in-tree, and it's fine.
+
+Thanks.  Maybe a note to that effect in the docs would be
+helpful--especially for someone coming  from some popular repos that use
+CMake.
+
+Best regards,
+
+-Tom
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141229/1fce152e/attachment.html>
+
+From pnathan at alumni.uidaho.edu  Sun Dec 28 02:06:46 2014
+From: pnathan at alumni.uidaho.edu (Paul Nathan)
+Date: Sun, 28 Dec 2014 02:06:46 -0800
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <1419699725864.773764b5@Nodemailer>
+References: <20141227165300.GH17441@shirio> <1419699725864.773764b5@Nodemailer>
+Message-ID: <CALXzQZjzBkN+AB4LGKY+xn+djwdBKO4ngq=rQU4==+HasuFtxw@mail.gmail.com>
+
+I have no desire to use Discourse, and nearly certainly won't sign up for
+it (I don't even understand why it came to be). I have never used Rust
+discourse besides happening once upon it and reading the linked thread.
+
+ My membership in mailing lists is neatly sorted and segregated, easily
+readable on my mobile devices without extra signing up or poking at badly
+designed websites. Discourse gives me zero advantage for yet *another*
+website signup, and probably with less usability, given my experience of
+web site development & design.  It's worth noting that every single libre
+software project I have any interest in (from the arcane to the popular)
+maintains the mailing list as the primary official channel of communiques.
+
+If the Rust admins kill the mailing list, I will probably drop out of
+participation (what a loss. ;) ) and limit participation to lurking
+reddit's /r/rust (I don't contribute thoughtful stuff to reddit in part due
+to the fact that "mobile website = awful, readers = ehhh" and occasional
+IRC questions.
+
+I am sure I sound like a crabby crank, but, meh.
+
+
+On Sat, Dec 27, 2014 at 9:02 AM, Clark Gaebel <cg.wowus.cg at gmail.com> wrote:
+
+> There was a thread about it on... Discourse!
+>
+> http://discuss.rust-lang.org/t/is-it-time-to-kill-the-mailing-list/611/36
+>
+>
+>
+> On Sat, Dec 27, 2014 at 11:53 AM, Tomi Pievil?inen <
+> tomi.pievilainen at iki.fi> wrote:
+>
+>> > The mailing list is mostly dead BTW. Consider bringing this up on
+>> > discuss.rust-lang.org instead.
+>>
+>> This is the first time I've heard of that. I checked that it isn't
+>> even linked on the homepage, but the mailing list and IRC are.
+>>
+>> Have I missed something, or should the discourse then be linked
+>> instead of or at least in addition of the mailing list?
+>>
+>> --
+>> Tomi Pievil?inen, +358 400 487 504
+>> A: Because it disrupts the natural way of thinking.
+>> Q: Why is top posting frowned upon?
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141228/6f933e01/attachment.html>
+
+From tom.browder at gmail.com  Mon Dec 29 10:25:01 2014
+From: tom.browder at gmail.com (Tom Browder)
+Date: Mon, 29 Dec 2014 12:25:01 -0600
+Subject: [rust-dev] PDF Rust Docs
+In-Reply-To: <CABtDyP1XFrL+RLqHazb1weLr3ugnq+SDKnrX6jwKkipBVFCLUg@mail.gmail.com>
+References: <CAFMGiz_PSbOP0NHFMkeJCPAJpbdd1sAdCAjBi_ComTt1okjJVw@mail.gmail.com>
+	<CAFMGiz_e33txgT_T7v54z3JO1tk1FEKL8hG6jkssQdN-wEqF0A@mail.gmail.com>
+	<CABtDyP1XFrL+RLqHazb1weLr3ugnq+SDKnrX6jwKkipBVFCLUg@mail.gmail.com>
+Message-ID: <CAFMGiz_AF4NcfbkGhD=-tr_7dp2r3S_H_if8n8qNSq6HYky-uA@mail.gmail.com>
+
+On Dec 29, 2014 12:16 PM, "Brian Anderson" <banderson at mozilla.com> wrote:
+>
+> They used to be uploaded. I'm not sure why they stopped. Please file an
+> issue.
+
+Will do.
+
+Thanks, Brian.
+
+-Tom
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141229/13bcc67b/attachment.html>
+
+From romanovda at gmail.com  Mon Dec 29 10:57:18 2014
+From: romanovda at gmail.com (Dmitry Romanov)
+Date: Mon, 29 Dec 2014 21:57:18 +0300
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <CALXzQZjzBkN+AB4LGKY+xn+djwdBKO4ngq=rQU4==+HasuFtxw@mail.gmail.com>
+References: <20141227165300.GH17441@shirio> <1419699725864.773764b5@Nodemailer>
+	<CALXzQZjzBkN+AB4LGKY+xn+djwdBKO4ngq=rQU4==+HasuFtxw@mail.gmail.com>
+Message-ID: <CACHGWmuyf-LCU8f4YJGnkArH33TNJ8137xW-opEoUMFXVdXapw@mail.gmail.com>
+
+I agree on almost every word. I have well sorted and with love configured
+mail, where I track several Libre projects. Now it is interesting to track
+rust questions. But dropping maillist most probably means I will not
+participate any more.
+
+I could add, as example, I have very limited Internet connection on
+cristmass trip now so the mail on my mobile is the only reliable way to
+track what is happening. Think about this reason too.
+On Dec 29, 2014 7:22 PM, "Paul Nathan" <pnathan at alumni.uidaho.edu> wrote:
+
+> I have no desire to use Discourse, and nearly certainly won't sign up for
+> it (I don't even understand why it came to be). I have never used Rust
+> discourse besides happening once upon it and reading the linked thread.
+>
+>  My membership in mailing lists is neatly sorted and segregated, easily
+> readable on my mobile devices without extra signing up or poking at badly
+> designed websites. Discourse gives me zero advantage for yet *another*
+> website signup, and probably with less usability, given my experience of
+> web site development & design.  It's worth noting that every single libre
+> software project I have any interest in (from the arcane to the popular)
+> maintains the mailing list as the primary official channel of communiques.
+>
+> If the Rust admins kill the mailing list, I will probably drop out of
+> participation (what a loss. ;) ) and limit participation to lurking
+> reddit's /r/rust (I don't contribute thoughtful stuff to reddit in part due
+> to the fact that "mobile website = awful, readers = ehhh" and occasional
+> IRC questions.
+>
+> I am sure I sound like a crabby crank, but, meh.
+>
+>
+> On Sat, Dec 27, 2014 at 9:02 AM, Clark Gaebel <cg.wowus.cg at gmail.com>
+> wrote:
+>
+>> There was a thread about it on... Discourse!
+>>
+>> http://discuss.rust-lang.org/t/is-it-time-to-kill-the-mailing-list/611/36
+>>
+>>
+>>
+>> On Sat, Dec 27, 2014 at 11:53 AM, Tomi Pievil?inen <
+>> tomi.pievilainen at iki.fi> wrote:
+>>
+>>> > The mailing list is mostly dead BTW. Consider bringing this up on
+>>> > discuss.rust-lang.org instead.
+>>>
+>>> This is the first time I've heard of that. I checked that it isn't
+>>> even linked on the homepage, but the mailing list and IRC are.
+>>>
+>>> Have I missed something, or should the discourse then be linked
+>>> instead of or at least in addition of the mailing list?
+>>>
+>>> --
+>>> Tomi Pievil?inen, +358 400 487 504
+>>> A: Because it disrupts the natural way of thinking.
+>>> Q: Why is top posting frowned upon?
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141229/d5ce801d/attachment.html>
+
+From tomi.pievilainen at iki.fi  Mon Dec 29 12:01:21 2014
+From: tomi.pievilainen at iki.fi (Tomi =?iso-8859-1?Q?Pievil=E4inen?=)
+Date: Mon, 29 Dec 2014 22:01:21 +0200
+Subject: [rust-dev] Problems cross-compiling to ARM9
+In-Reply-To: <20141217053017.GA24395@antiproton.jfet.org>
+References: <20141215075108.GW17441@shirio>
+	<20141217053017.GA24395@antiproton.jfet.org>
+Message-ID: <20141229200121.GI17441@shirio>
+
+> In the past when I've seen this error, it's because your C cross
+> toolchain is built for a slightly wrong architecture. Can you verify
+> that C programs cross compiled with your cross-gcc work correctly?
+
+Christmas is over, back to work. C works fine just by calling
+arm-linux-gnueabi-gcc. I hadn't tried an empty rust program, but that
+also stops with the same "illegal instructions". The other hints are a
+bit over my head right now, as I haven't done much anything this close
+to metal. I'll continue studying this and report on whatever I find.
+
+I'm still wondering if rustc is somehow creating "bad" IR, since LLVM
+doesn't like that.
+
+-- 
+Tomi Pievil?inen, +358 400 487 504
+A: Because it disrupts the natural way of thinking.
+Q: Why is top posting frowned upon?
+
+From me at kevincantu.org  Mon Dec 29 13:02:07 2014
+From: me at kevincantu.org (Kevin Cantu)
+Date: Mon, 29 Dec 2014 13:02:07 -0800
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <CACHGWmuyf-LCU8f4YJGnkArH33TNJ8137xW-opEoUMFXVdXapw@mail.gmail.com>
+References: <20141227165300.GH17441@shirio> <1419699725864.773764b5@Nodemailer>
+	<CALXzQZjzBkN+AB4LGKY+xn+djwdBKO4ngq=rQU4==+HasuFtxw@mail.gmail.com>
+	<CACHGWmuyf-LCU8f4YJGnkArH33TNJ8137xW-opEoUMFXVdXapw@mail.gmail.com>
+Message-ID: <CABq6+ad7K2Xp4Ki+86pL8iYAmUrNxXvaPEWa-3--0iYEn=xjFQ@mail.gmail.com>
+
+It's easy to set up discuss to email you all the time, too: give it a try.
+
+It had gotten pretty clear that having a catch-all mailing list wasn't
+going to scale.
+
+Kevin
+On Dec 29, 2014 10:57 AM, "Dmitry Romanov" <romanovda at gmail.com> wrote:
+
+> I agree on almost every word. I have well sorted and with love configured
+> mail, where I track several Libre projects. Now it is interesting to track
+> rust questions. But dropping maillist most probably means I will not
+> participate any more.
+>
+> I could add, as example, I have very limited Internet connection on
+> cristmass trip now so the mail on my mobile is the only reliable way to
+> track what is happening. Think about this reason too.
+> On Dec 29, 2014 7:22 PM, "Paul Nathan" <pnathan at alumni.uidaho.edu> wrote:
+>
+>> I have no desire to use Discourse, and nearly certainly won't sign up for
+>> it (I don't even understand why it came to be). I have never used Rust
+>> discourse besides happening once upon it and reading the linked thread.
+>>
+>>  My membership in mailing lists is neatly sorted and segregated, easily
+>> readable on my mobile devices without extra signing up or poking at badly
+>> designed websites. Discourse gives me zero advantage for yet *another*
+>> website signup, and probably with less usability, given my experience of
+>> web site development & design.  It's worth noting that every single libre
+>> software project I have any interest in (from the arcane to the popular)
+>> maintains the mailing list as the primary official channel of communiques.
+>>
+>> If the Rust admins kill the mailing list, I will probably drop out of
+>> participation (what a loss. ;) ) and limit participation to lurking
+>> reddit's /r/rust (I don't contribute thoughtful stuff to reddit in part due
+>> to the fact that "mobile website = awful, readers = ehhh" and occasional
+>> IRC questions.
+>>
+>> I am sure I sound like a crabby crank, but, meh.
+>>
+>>
+>> On Sat, Dec 27, 2014 at 9:02 AM, Clark Gaebel <cg.wowus.cg at gmail.com>
+>> wrote:
+>>
+>>> There was a thread about it on... Discourse!
+>>>
+>>> http://discuss.rust-lang.org/t/is-it-time-to-kill-the-mailing-list/611/36
+>>>
+>>>
+>>>
+>>> On Sat, Dec 27, 2014 at 11:53 AM, Tomi Pievil?inen <
+>>> tomi.pievilainen at iki.fi> wrote:
+>>>
+>>>> > The mailing list is mostly dead BTW. Consider bringing this up on
+>>>> > discuss.rust-lang.org instead.
+>>>>
+>>>> This is the first time I've heard of that. I checked that it isn't
+>>>> even linked on the homepage, but the mailing list and IRC are.
+>>>>
+>>>> Have I missed something, or should the discourse then be linked
+>>>> instead of or at least in addition of the mailing list?
+>>>>
+>>>> --
+>>>> Tomi Pievil?inen, +358 400 487 504
+>>>> A: Because it disrupts the natural way of thinking.
+>>>> Q: Why is top posting frowned upon?
+>>>> _______________________________________________
+>>>> Rust-dev mailing list
+>>>> Rust-dev at mozilla.org
+>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>>
+>>>
+>>>
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141229/0d601cf1/attachment.html>
+
+From ben at 0x539.de  Mon Dec 29 13:56:18 2014
+From: ben at 0x539.de (Benjamin Herr)
+Date: Mon, 29 Dec 2014 22:56:18 +0100
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+ compatibility]
+In-Reply-To: <CABq6+ad7K2Xp4Ki+86pL8iYAmUrNxXvaPEWa-3--0iYEn=xjFQ@mail.gmail.com>
+References: <20141227165300.GH17441@shirio> <1419699725864.773764b5@Nodemailer>
+	<CALXzQZjzBkN+AB4LGKY+xn+djwdBKO4ngq=rQU4==+HasuFtxw@mail.gmail.com>
+	<CACHGWmuyf-LCU8f4YJGnkArH33TNJ8137xW-opEoUMFXVdXapw@mail.gmail.com>
+	<CABq6+ad7K2Xp4Ki+86pL8iYAmUrNxXvaPEWa-3--0iYEn=xjFQ@mail.gmail.com>
+Message-ID: <1419890178.8070.3.camel@0x539.de>
+
+On Mon, 2014-12-29 at 13:02 -0800, Kevin Cantu wrote:
+> It's easy to set up discuss to email you all the time, too: give it a
+> try.
+
+That still loses you the thread structure of email discussion. I also
+can't start threads via the mail interface, and the mail interface
+regularly eats whole replies by people who are optimistic enough to to
+use it like nmatsakis. People can also edit their posts to append more
+information and I don't believe the mail interface would inform me of
+that.
+
+Also the settings page in Discourse invariably says " We'll only email
+you if we haven't seen you in the last 10 minutes and you haven't read
+the thing we're emailing you about. " which doesn't give me much
+confidence that I'm not somehow missing messages after following links
+on irc or wherever.
+> 
+> It had gotten pretty clear that having a catch-all mailing list wasn't
+> going to scale.
+
+It also doesn't scale for people to come to terms with a separate web
+based discussion forum for each project they keep up with or contribute
+to.
+
+Many projects use multiple mailing lists, it's not clear to me why that
+doesn't address the rust team's requirements.
+
+-ben
+> 
+> Kevin
+> 
+> On Dec 29, 2014 10:57 AM, "Dmitry Romanov" <romanovda at gmail.com>
+> wrote:
+>         I agree on almost every word. I have well sorted and with love
+>         configured mail, where I track several Libre projects. Now it
+>         is interesting to track rust questions. But dropping maillist
+>         most probably means I will not participate any more.
+>         
+>         I could add, as example, I have very limited Internet
+>         connection on cristmass trip now so the mail on my mobile is
+>         the only reliable way to track what is happening. Think about
+>         this reason too.
+>         
+>         On Dec 29, 2014 7:22 PM, "Paul Nathan"
+>         <pnathan at alumni.uidaho.edu> wrote:
+>                 I have no desire to use Discourse, and nearly
+>                 certainly won't sign up for it (I don't even
+>                 understand why it came to be). I have never used Rust
+>                 discourse besides happening once upon it and reading
+>                 the linked thread.
+>                 
+>                  My membership in mailing lists is neatly sorted and
+>                 segregated, easily readable on my mobile devices
+>                 without extra signing up or poking at badly designed
+>                 websites. Discourse gives me zero advantage for yet
+>                 *another* website signup, and probably with less
+>                 usability, given my experience of web site development
+>                 & design.  It's worth noting that every single libre
+>                 software project I have any interest in (from the
+>                 arcane to the popular) maintains the mailing list as
+>                 the primary official channel of communiques.
+>                 
+>                 
+>                 If the Rust admins kill the mailing list, I will
+>                 probably drop out of participation (what a loss. ;) )
+>                 and limit participation to lurking reddit's /r/rust (I
+>                 don't contribute thoughtful stuff to reddit in part
+>                 due to the fact that "mobile website = awful, readers
+>                 = ehhh" and occasional IRC questions. 
+>                 
+>                 
+>                 I am sure I sound like a crabby crank, but, meh. 
+>                 
+>                 
+>                 
+>                 
+>                 On Sat, Dec 27, 2014 at 9:02 AM, Clark Gaebel
+>                 <cg.wowus.cg at gmail.com> wrote:
+>                         There was a thread about it on... Discourse!
+>                         
+>                         http://discuss.rust-lang.org/t/is-it-time-to-kill-the-mailing-list/611/36
+>                         
+>                         
+>                         
+>                         
+>                         On Sat, Dec 27, 2014 at 11:53 AM, Tomi
+>                         Pievil?inen <tomi.pievilainen at iki.fi> wrote:
+>                         
+>                         
+>                                 > The mailing list is mostly dead BTW.
+>                                 Consider bringing this up on 
+>                                 > discuss.rust-lang.org instead. 
+>                                 
+>                                 This is the first time I've heard of
+>                                 that. I checked that it isn't 
+>                                 even linked on the homepage, but the
+>                                 mailing list and IRC are. 
+>                                 
+>                                 Have I missed something, or should the
+>                                 discourse then be linked 
+>                                 instead of or at least in addition of
+>                                 the mailing list? 
+>                                 
+>                                 -- 
+>                                 Tomi Pievil?inen, +358 400 487 504 
+>                                 A: Because it disrupts the natural way
+>                                 of thinking. 
+>                                 Q: Why is top posting frowned upon? 
+>                                 _______________________________________________ 
+>                                 Rust-dev mailing list 
+>                                 Rust-dev at mozilla.org 
+>                                 https://mail.mozilla.org/listinfo/rust-dev 
+>                                 
+>                                 
+>                         
+>                         
+>                         
+>                         _______________________________________________
+>                         Rust-dev mailing list
+>                         Rust-dev at mozilla.org
+>                         https://mail.mozilla.org/listinfo/rust-dev
+>                         
+>                 
+>                 
+>                 
+>                 _______________________________________________
+>                 Rust-dev mailing list
+>                 Rust-dev at mozilla.org
+>                 https://mail.mozilla.org/listinfo/rust-dev
+>                 
+>         
+>         _______________________________________________
+>         Rust-dev mailing list
+>         Rust-dev at mozilla.org
+>         https://mail.mozilla.org/listinfo/rust-dev
+>         
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+
+From bascule at gmail.com  Mon Dec 29 15:09:48 2014
+From: bascule at gmail.com (Tony Arcieri)
+Date: Mon, 29 Dec 2014 15:09:48 -0800
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <CABq6+ad7K2Xp4Ki+86pL8iYAmUrNxXvaPEWa-3--0iYEn=xjFQ@mail.gmail.com>
+References: <20141227165300.GH17441@shirio> <1419699725864.773764b5@Nodemailer>
+	<CALXzQZjzBkN+AB4LGKY+xn+djwdBKO4ngq=rQU4==+HasuFtxw@mail.gmail.com>
+	<CACHGWmuyf-LCU8f4YJGnkArH33TNJ8137xW-opEoUMFXVdXapw@mail.gmail.com>
+	<CABq6+ad7K2Xp4Ki+86pL8iYAmUrNxXvaPEWa-3--0iYEn=xjFQ@mail.gmail.com>
+Message-ID: <CAHOTMVLnrgZn7hSiPq4YVvXa5Er9Goz1uGoEdv6BOH4XCkXRMA@mail.gmail.com>
+
+On Mon, Dec 29, 2014 at 1:02 PM, Kevin Cantu <me at kevincantu.org> wrote:
+
+> It's easy to set up discuss to email you all the time, too: give it a try.
+>
+I've set up Discourse this way. As a Gmail user, this is mostly fine as a
+mailing list replacement, but I can see (as a former mutt user) how mutt
+users who are used to being able to see the structure of threaded
+conversations would get annoyed, as Discourse publishes a flat message
+list.
+
+-- 
+Tony Arcieri
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141229/5721794c/attachment.html>
+
+From tomi.pievilainen at iki.fi  Tue Dec 30 03:09:21 2014
+From: tomi.pievilainen at iki.fi (Tomi =?iso-8859-1?Q?Pievil=E4inen?=)
+Date: Tue, 30 Dec 2014 13:09:21 +0200
+Subject: [rust-dev] Problems cross-compiling to ARM9
+In-Reply-To: <20141229200121.GI17441@shirio>
+References: <20141215075108.GW17441@shirio>
+	<20141217053017.GA24395@antiproton.jfet.org>
+	<20141229200121.GI17441@shirio>
+Message-ID: <20141230110921.GJ17441@shirio>
+
+So far my best guess is that the problem is the Assmebly line
+
+mrc     15, 0, r4, cr13, cr0, {3}
+
+in main, which means that it's trying to read from coprocessor 15,
+register 13, part 3. According to
+http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.ddi0360e/CACEAIHG.html
+that's a thread ID that's read only for user processes. But that's for
+ARM11, and the corresponding doc for ARM9 (926EJ-S, specifically)
+http://infocenter.arm.com/help/topic/com.arm.doc.ddi0198e/I1002240.html
+doesn't list thread registers at all. So I'm guessing it doesn't
+exist, and trying to read from it naturally fails.
+
+A friend noticed that
+https://github.com/rust-lang/rust/blob/master/src/librustc_back/target/arm_unknown_linux_gnueabi.rs
+specifies ARMv6 as the target, but either retargetting from command
+line or recompiling with that file patched for v5te didn't help; the
+resulting ASM is the same in that part.
+
+I think the problem might be
+https://github.com/rust-lang/rust/blob/master/src/rt/arch/arm/record_sp.S
+which assumes a more modern architecture. So perhaps this means that
+rust has stricter requirements than C gnueabi?
+
+Anyone have any idea if that's a larger problem, or simply something
+nobody has written the small handcoded ASMs needed for ARMv5 or v4? If
+latter, I might be able to wrap my head around this.
+
+-- 
+Tomi Pievil?inen, +358 400 487 504
+A: Because it disrupts the natural way of thinking.
+Q: Why is top posting frowned upon?
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 836 bytes
+Desc: Digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141230/3bba3eeb/attachment.sig>
+
+From valerii.hiora at gmail.com  Tue Dec 30 03:23:28 2014
+From: valerii.hiora at gmail.com (Valerii Hiora)
+Date: Tue, 30 Dec 2014 13:23:28 +0200
+Subject: [rust-dev] Problems cross-compiling to ARM9
+In-Reply-To: <20141230110921.GJ17441@shirio>
+References: <20141215075108.GW17441@shirio>	<20141217053017.GA24395@antiproton.jfet.org>	<20141229200121.GI17441@shirio>
+	<20141230110921.GJ17441@shirio>
+Message-ID: <54A28B30.9080602@gmail.com>
+
+Hi Tomi,
+
+> Anyone have any idea if that's a larger problem, or simply something 
+> nobody has written the small handcoded ASMs needed for ARMv5 or v4?
+> If latter, I might be able to wrap my head around this.
+
+  The problem you've got is related to segmented stack support. It need
+fix on 2 levels:
+
+- Rust - can be relatively easy fixed by providing (or patching) a
+target and marking it as a target which doesn't support segmented
+stacks, see example [1]
+
+   Once it works you can play a bit to provide a correct implementation
+in record_sp.S and morestack.S
+
+- LLVM - as I remember some time ago LLVM generated a function prologue
+which uses the same instruction for any ARM device, may be that was
+patched in upstream, may be not. You can also ask Vladimir Pouzanov and
+zinc.rs [2] team, AFAIK they had the similar problem too and definitely
+have a workaround.
+
+[1]
+https://github.com/rust-lang/rust/blob/master/src/librustc_back/target/arm_apple_ios.rs#L33
+[2]  https://zinc.rs/
+
+-- 
+
+  Valerii
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 801 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141230/b2394106/attachment.sig>
+
+From tuncer.ayaz at gmail.com  Tue Dec 30 06:12:17 2014
+From: tuncer.ayaz at gmail.com (Tuncer Ayaz)
+Date: Tue, 30 Dec 2014 15:12:17 +0100
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <CAHOTMVLnrgZn7hSiPq4YVvXa5Er9Goz1uGoEdv6BOH4XCkXRMA@mail.gmail.com>
+References: <20141227165300.GH17441@shirio> <1419699725864.773764b5@Nodemailer>
+	<CALXzQZjzBkN+AB4LGKY+xn+djwdBKO4ngq=rQU4==+HasuFtxw@mail.gmail.com>
+	<CACHGWmuyf-LCU8f4YJGnkArH33TNJ8137xW-opEoUMFXVdXapw@mail.gmail.com>
+	<CABq6+ad7K2Xp4Ki+86pL8iYAmUrNxXvaPEWa-3--0iYEn=xjFQ@mail.gmail.com>
+	<CAHOTMVLnrgZn7hSiPq4YVvXa5Er9Goz1uGoEdv6BOH4XCkXRMA@mail.gmail.com>
+Message-ID: <CAOvwQ4jb5G7DsAdn3teF5sNAbrRmkdfrZSZvEsJvXziSUgUE=A@mail.gmail.com>
+
+On Tue, Dec 30, 2014 at 12:09 AM, Tony Arcieri <bascule at gmail.com> wrote:
+> On Mon, Dec 29, 2014 at 1:02 PM, Kevin Cantu <me at kevincantu.org> wrote:
+> >
+> > It's easy to set up discuss to email you all the time, too: give
+> > it a try.
+>
+> I've set up Discourse this way. As a Gmail user, this is mostly fine
+> as a mailing list replacement, but I can see (as a former mutt user)
+> how mutt users who are used to being able to see the structure of
+> threaded conversations would get annoyed, as Discourse publishes a
+> flat message list.
+
+Is this a user setting?
+
+From tuncer.ayaz at gmail.com  Tue Dec 30 06:15:54 2014
+From: tuncer.ayaz at gmail.com (Tuncer Ayaz)
+Date: Tue, 30 Dec 2014 15:15:54 +0100
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <m7muhp$2l7$1@ger.gmane.org>
+References: <20141227165300.GH17441@shirio> <1419699725864.773764b5@Nodemailer>
+	<DD087C93-92EE-4147-A772-3ECE5587F1FE@gmail.com>
+	<CAJY4u8EPWst+X6hRk79JMqchj_4_bXngvaycZPZphVbSHY8gXQ@mail.gmail.com>
+	<m7muhp$2l7$1@ger.gmane.org>
+Message-ID: <CAOvwQ4i++LswSjzHuZrrpVQ86Jj2Kc_6RCJVqbgGC3w__weq0A@mail.gmail.com>
+
+On Sat, Dec 27, 2014 at 7:42 PM, Bardur Arantsson wrote:
+> On 2014-12-27 19:13, Evan G wrote:
+> > A little hyperbolic, considering we're all the same rust
+> > community.
+> >
+> > And as far as I know you can set discourse up to work like a
+> > mailing list (i.e. email me for every post, email me even if
+> > you've seen me recently, don't batch emails, stuff like that)
+>
+> ... unless you're using GMANE which is one of the few remaining
+> *sane* ways of handling dozens of mailing lists AFAICT. In contrast
+> to mailing lists it doesn't seem feasible to keep up with dozens of
+> online forums since they a) mostly run different software, i.e.
+> usually non-mail-friendly, and b) I cannot get a unified interface
+> to all the forums I would need to if all the mailing lists I'm
+> currently following were to be converted to forums.
+>
+> I fully recognize that this isn't likely to convince anyone who
+> isn't used to the awesome that is GMANE/NNTP, but I just want to
+> point out what a shame it is that we're going ever-closer to
+> siloization of the "debate/discussion" format (and content!) when we
+> actually have a reasonably good technology to avoid it (NNTP) --
+> just out of apathy and/or laziness on the part of forum software
+> users *and* vendors/implementers. :(
+
+I'm curious, why doesn't rust use Mozilla's NNTP infrastructure?
+
+From hartmut.prochaska at gmail.com  Tue Dec 30 08:24:32 2014
+From: hartmut.prochaska at gmail.com (Hartmut Prochaska)
+Date: Tue, 30 Dec 2014 17:24:32 +0100
+Subject: [rust-dev] Published Rust Book?
+In-Reply-To: <54A013EA.4050706@gmail.com>
+References: <54A013EA.4050706@gmail.com>
+Message-ID: <54A2D1C0.1020107@gmail.com>
+
+Hi,
+
+>> I heard Packt Publishing is working on a Rust book to appear around Apr
+>> 2015.
+> 
+> If the author(s) are looking for technical reviewers, contact me off list as
+> I'd be happy to help out if needed.
+
+as I am a beginner in Rust I would be happy to help too.
+
+best regards
+Hartmut
+
+
+-- 
+Ideas are the only things that can change the world.
+The rest is details. -- Scott Adams
+
+new Key ID since 26.07.13: 0xD8C361E6
+Fingerprint: E5B3 302B 1BE1 D0B4 F190 E739 A365 60A9 D8C3 61E6
+
+
+
+From techabc at gmail.com  Tue Dec 30 18:26:14 2014
+From: techabc at gmail.com (techabc)
+Date: Wed, 31 Dec 2014 10:26:14 +0800
+Subject: [rust-dev] Qt5 Rust bindings and general C++ to Rust bindings
+	feedback
+In-Reply-To: <CAO8o=D6Om_HJCLXdP=+Ky2UHdTGa1uOpArJdDYKZ-zRfD9n-rw@mail.gmail.com>
+References: <1be6b7e90decf085737738bc47269ce5@endl.ch>
+	<CAO8o=D5aAs6NGrvbinZz7OBWfqcw-0qp-JDBGCy==z66P9T7KA@mail.gmail.com>
+	<CABq6+aebP4=SmQA=XcpSsEmWJex_5BooSHSW=ig1oe6L_kWuew@mail.gmail.com>
+	<CAKE6RfgoXSSkozqreZNW1MCemYP0KRc_3xqoOYL4eswFm9_tbQ@mail.gmail.com>
+	<CABq6+acUBVOpwtFftCGwq-VXOOc7LEZPKcXAkhxvfyypZQax7Q@mail.gmail.com>
+	<CAO8o=D6Om_HJCLXdP=+Ky2UHdTGa1uOpArJdDYKZ-zRfD9n-rw@mail.gmail.com>
+Message-ID: <CAPPwZt6Qz=kVLZJ5BHzUmBLtLdzfitFKJXvLAACKY-k7tBeH_g@mail.gmail.com>
+
+https://github.com/cyndis/qmlrs
+qmlrs - QtQuick bindings for Rust
+but , still hope qt5 binding for rust.
+
+2014-06-12 14:25 GMT+08:00 Noam Yorav-Raphael <noamraph at gmail.com>:
+
+> Cool. I was afraid that it will be harder for the compiler to optimize
+> away the enum, but it seems to be doing fine.
+> (If it does turn out that it's harder for the compiler, I don't see a real
+> problem with the approach I suggested, as a runtime failure can only be
+> caused by a bug in the code generator, not by user code)
+>
+>
+> On Thu, Jun 12, 2014 at 2:13 AM, Kevin Cantu <me at kevincantu.org> wrote:
+>
+>> Matthew Monrocq suggests this improvement, which looks even cleaner to
+>> use, although slightly more complicated to implement generation of:
+>>
+>>
+>> On Wed, Jun 11, 2014 at 11:38 AM, Matthieu Monrocq <
+>> matthieu.monrocq at gmail.com> wrote:
+>>
+>>> [snip]
+>>>
+>>> I do like the idea of the trait, however I would rather do away with all
+>>> the `get_aa`: why not directly wrap the parameters ?
+>>>
+>>>     enum AaBbEnum {
+>>>         Aa(int, f64),
+>>>         Bb(f64),
+>>>     }
+>>>     trait AaBb {
+>>>         fn get(&self) -> AaBbEnum;
+>>>
+>>>     }
+>>>
+>>>     impl AaBb for (int, f64) {
+>>>         fn get(&self) -> AaBbEnum { match *self { (i, f) => Aa(i, f), } }
+>>>     }
+>>>
+>>>     impl AaBb for (f64) {
+>>>         fn get(&self) -> AaBbEnum { Bb(*self) }
+>>>
+>>>     }
+>>>
+>>>     fn overloaded<T: AaBb>(x: T) {
+>>>         match x.get() {
+>>>             Aa(i, f) => println!("got Aa: {}", (i, f)),
+>>>             Bb(f) => println!("got Bb: {}", f),
+>>>
+>>>         }
+>>>     }
+>>>
+>>>     #[main]
+>>>     fn main() {
+>>>         overloaded((5i, 7.3243)); // prints: got Aa: (5, 7.3243)
+>>>         overloaded((3.5)); // prints: got Bb: 3.5
+>>>     }
+>>>
+>>> Now, there is no runtime failure => you cannot accidentally match on
+>>> `Bb` and requests `get_aa`!
+>>>
+>>
+>>
+>>
+>> Kevin
+>>
+>>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141231/1bffed0b/attachment.html>
+
+From tomi.pievilainen at iki.fi  Wed Dec 31 03:46:34 2014
+From: tomi.pievilainen at iki.fi (Tomi =?iso-8859-1?Q?Pievil=E4inen?=)
+Date: Wed, 31 Dec 2014 13:46:34 +0200
+Subject: [rust-dev] Problems cross-compiling to ARM9
+In-Reply-To: <54A28B30.9080602@gmail.com>
+References: <20141215075108.GW17441@shirio>
+	<20141217053017.GA24395@antiproton.jfet.org>
+	<20141229200121.GI17441@shirio> <20141230110921.GJ17441@shirio>
+	<54A28B30.9080602@gmail.com>
+Message-ID: <20141231114634.GK17441@shirio>
+
+> - Rust - can be relatively easy fixed by providing (or patching) a
+> target and marking it as a target which doesn't support segmented
+> stacks, see example [1]
+
+> - LLVM - as I remember some time ago LLVM generated a function
+> prologue which uses the same instruction for any ARM device
+
+The prologue problem was fixed by adding "morestack: false," to the
+linux ARM target specification, similar to how it is in the iOS
+target.
+
+>    Once it works you can play a bit to provide a correct
+>    implementation in record_sp.S and morestack.S
+
+My device does not really benefit from the segmented stack, since it
+has only 64MB RAM, so I simply modified libstd/sys/common/stack.rs to
+define stubs for all ARMs, not just iOS. Not that I would have the
+skills to do it anyway.
+
+With these two modifications I got helloworld working! Thank you for
+the segmented stack on iOS hint. I'll now start programming what I
+originally wanted, and will report if I find any other problems.
+
+-- 
+Tomi Pievil?inen, +358 400 487 504
+A: Because it disrupts the natural way of thinking.
+Q: Why is top posting frowned upon?
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 836 bytes
+Desc: Digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20141231/c14a3476/attachment.sig>
+

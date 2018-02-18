@@ -1,0 +1,4357 @@
+From pwalton at mozilla.com  Tue Sep  4 17:22:35 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Tue, 04 Sep 2012 17:22:35 -0700
+Subject: [rust-dev] RFC: Metadata versioning
+Message-ID: <50469B4B.5050705@mozilla.com>
+
+Hi everyone,
+
+Currently, a lot of users hit ICEs and the like due to old metadata 
+versions sticking around. As I understand it, the eventual goal is to 
+move to a metadata format with a schema (Apache Avro). However, in the 
+meantime, I wonder if we can mitigate these problems for 0.4.
+
+One possibility is simply to prepend the metadata with two words: a 
+metadata magic number and a version number. Each time the metadata 
+format is changed, the version number will be bumped. The Rust compiler 
+will bail out with an early error when confronted with a metadata 
+version it doesn't understand. When we migrate to Avro, the version 
+number will be bumped one final time.
+
+Thoughts?
+
+Patrick
+
+From niko at alum.mit.edu  Tue Sep  4 18:31:58 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Tue, 04 Sep 2012 18:31:58 -0700
+Subject: [rust-dev] RFC: Metadata versioning
+In-Reply-To: <50469B4B.5050705@mozilla.com>
+References: <50469B4B.5050705@mozilla.com>
+Message-ID: <5046AB8E.2070503@alum.mit.edu>
+
+On 9/4/12 5:22 PM, Patrick Walton wrote:
+> One possibility is simply to prepend the metadata with two words: a 
+> metadata magic number and a version number. Each time the metadata 
+> format is changed, the version number will be bumped. The Rust 
+> compiler will bail out with an early error when confronted with a 
+> metadata version it doesn't understand. When we migrate to Avro, the 
+> version number will be bumped one final time. 
+
+I think this would be fine, the question is: will we remember to bump 
+the magic number?  You'd have to do it each time you changed the AST, 
+tables, or other (auto- or otherwise) serialized data structures.
+
+Another option would be to expand auto_serialize to generate a "schema" 
+(probably just a hash of the type structures being serialized) and 
+encode that at the front.  This would be more work but also something 
+you could not forget to do.  I'm not 100% sure how to integrate the 
+"hand-serialized" stuff with the auto_serialized stuff here, though, 
+perhaps just throw in a sequential integer to represent the 
+hand-serialized stuff (which should be phased out anyhow).
+
+
+Niko
+
+From pwalton at mozilla.com  Tue Sep  4 18:34:52 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Tue, 04 Sep 2012 18:34:52 -0700
+Subject: [rust-dev] RFC: Metadata versioning
+In-Reply-To: <5046AB8E.2070503@alum.mit.edu>
+References: <50469B4B.5050705@mozilla.com> <5046AB8E.2070503@alum.mit.edu>
+Message-ID: <5046AC3C.2080905@mozilla.com>
+
+On 9/4/12 6:31 PM, Niko Matsakis wrote:
+> I think this would be fine, the question is: will we remember to bump
+> the magic number?  You'd have to do it each time you changed the AST,
+> tables, or other (auto- or otherwise) serialized data structures.
+
+Even if we forget, it's better than nothing. If we notice breakage due 
+to forgetting to modify the number, we can check in a quick change to 
+bump it. The worst-case scenario is exactly what we have today.
+
+Patrick
+
+
+From niko at alum.mit.edu  Tue Sep  4 18:42:57 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Tue, 04 Sep 2012 18:42:57 -0700
+Subject: [rust-dev] RFC: Metadata versioning
+In-Reply-To: <5046AC3C.2080905@mozilla.com>
+References: <50469B4B.5050705@mozilla.com> <5046AB8E.2070503@alum.mit.edu>
+	<5046AC3C.2080905@mozilla.com>
+Message-ID: <5046AE21.8030009@alum.mit.edu>
+
+On 9/4/12 6:34 PM, Patrick Walton wrote:
+> Even if we forget, it's better than nothing. If we notice breakage due 
+> to forgetting to modify the number, we can check in a quick change to 
+> bump it. The worst-case scenario is exactly what we have today. 
+
+Yes, true.
+
+
+
+From graydon at mozilla.com  Wed Sep  5 08:25:52 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 05 Sep 2012 08:25:52 -0700
+Subject: [rust-dev] RFC: Metadata versioning
+In-Reply-To: <50469B4B.5050705@mozilla.com>
+References: <50469B4B.5050705@mozilla.com>
+Message-ID: <50476F00.9030908@mozilla.com>
+
+On 04/09/2012 5:22 PM, Patrick Walton wrote:
+> Hi everyone,
+>
+> Currently, a lot of users hit ICEs and the like due to old metadata
+> versions sticking around. As I understand it, the eventual goal is to
+> move to a metadata format with a schema (Apache Avro). However, in the
+> meantime, I wonder if we can mitigate these problems for 0.4.
+
+Yes, we should do this. We should also get the shebang thing for marking 
+(symbolic) language versions in, for the same reason.
+
+I'll put this on the 0.4 blockers and assign to self. It shouldn't take 
+too long.
+
+-Graydon
+
+
+From garethdanielsmith at gmail.com  Wed Sep  5 13:10:07 2012
+From: garethdanielsmith at gmail.com (Gareth Smith)
+Date: Wed, 05 Sep 2012 21:10:07 +0100
+Subject: [rust-dev] On the weirdness of strings
+Message-ID: <5047B19F.8050609@gmail.com>
+
+Hi rust-dev,
+
+On Github, PCWalton said 
+(https://github.com/mozilla/rust/issues/3222#issuecomment-8306828):
+ > The reason why |@str| cannot be dereferenced is that |str| is 
+dynamically sized. If we allowed strings to be copied to the stack like 
+ints can, then we'd have to add dynamic allocas and that would break the 
+segmented stacks model. Other than that, |@int| and |@str| are intended 
+to be conceptually very similar.
+
+How about having str be represented internally - but not in the type 
+system - as a pointer to the actual string data. Copying a str would 
+copy the pointed-to string data in addition to the pointer, so str would 
+not be implicitly copyable.
+
+The advantage of such an arrangement is that str would be fixed size and 
+~str/@str/&str would be consistent with other types.
+
+Is this actually a reasonable system?
+
+Thanks
+Gareth
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120905/fa4bedf7/attachment.html>
+
+From pwalton at mozilla.com  Wed Sep  5 13:13:51 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 05 Sep 2012 13:13:51 -0700
+Subject: [rust-dev] On the weirdness of strings
+In-Reply-To: <5047B19F.8050609@gmail.com>
+References: <5047B19F.8050609@gmail.com>
+Message-ID: <5047B27F.2070202@mozilla.com>
+
+On 9/5/12 1:10 PM, Gareth Smith wrote:
+> How about having str be represented internally - but not in the type
+> system - as a pointer to the actual string data. Copying a str would
+> copy the pointed-to string data in addition to the pointer, so str would
+> not be implicitly copyable.
+
+Where would the contents be stored?
+
+Patrick
+
+
+From graydon at mozilla.com  Wed Sep  5 13:14:34 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 05 Sep 2012 13:14:34 -0700
+Subject: [rust-dev] On the weirdness of strings
+In-Reply-To: <5047B19F.8050609@gmail.com>
+References: <5047B19F.8050609@gmail.com>
+Message-ID: <5047B2AA.2040505@mozilla.com>
+
+On 12-09-05 1:10 PM, Gareth Smith wrote:
+
+> The advantage of such an arrangement is that str would be fixed size and
+> ~str/@str/&str would be consistent with other types.
+>
+> Is this actually a reasonable system?
+
+That's what they used to be. People passed them by-value too much and we 
+made too many copies, and balked at the double-indirection implied by 
+passing around an &str or such. That also doesn't handle the fixed-size, 
+constant-memory and substring-slice use-cases.
+
+The current scheme is a very delicate balance between a large number of 
+pressures; I think it's about the best we're going to get.
+
+-Graydon
+
+
+From garethdanielsmith at gmail.com  Thu Sep  6 12:08:04 2012
+From: garethdanielsmith at gmail.com (Gareth Smith)
+Date: Thu, 06 Sep 2012 20:08:04 +0100
+Subject: [rust-dev] On the weirdness of strings
+In-Reply-To: <5047B27F.2070202@mozilla.com>
+References: <5047B19F.8050609@gmail.com> <5047B27F.2070202@mozilla.com>
+Message-ID: <5048F494.70006@gmail.com>
+
+On 05/09/12 21:13, Patrick Walton wrote:
+> On 9/5/12 1:10 PM, Gareth Smith wrote:
+>> How about having str be represented internally - but not in the type
+>> system - as a pointer to the actual string data. Copying a str would
+>> copy the pointed-to string data in addition to the pointer, so str would
+>> not be implicitly copyable.
+>
+> Where would the contents be stored?
+>
+On the the non-task-local (AKA shared?) heap.
+
+
+Graydon wrote:
+ >> Is this actually a reasonable system?
+ > That's what they used to be. People passed them by-value too much and 
+we made too many copies, and balked at the double-indirection implied by 
+passing around an &str or such.
+
+I was one of those passing them by value too much. I did it because it 
+seemed like the idiomatic thing to do. Even rustc did it - that made it 
+seem legit. It no longer seems like the idiomatic thing to do because 
+the compiler emits a warning about it unless it is done explicitly, so I 
+try to avoid it. I think that documentation and compiler warnings will 
+determine typical use.
+
+ > That also doesn't handle the fixed-size, constant-memory and 
+substring-slice use-cases.
+
+Fair enough.
+
+ > The current scheme is a very delicate balance between a large number 
+of pressures; I think it's about the best we're going to get.
+
+The problem with rust's strings is that any rust program I write seems 
+to be more complicated because of features that strings have that 99% of 
+the time I will not use. I have to pay for safe concurrency even though 
+it looks like I will barely be using it. Ditto with fixed size and 
+constant memory strings.
+
+You created a nice language for programs that are mostly non-concurrent 
+(regardless of how nice it is for highly concurrent programs), so I and 
+others are going to try using it for that :) ... and sometimes wondering 
+why the strings are so hard to use.
+
+I don't know what the fix is, but I think this issue is going to keep 
+coming up, because I think *for some people* there is a better balance 
+to be had.
+
+Thanks
+Gareth
+
+From pwalton at mozilla.com  Thu Sep  6 12:10:22 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 06 Sep 2012 12:10:22 -0700
+Subject: [rust-dev] On the weirdness of strings
+In-Reply-To: <5048F494.70006@gmail.com>
+References: <5047B19F.8050609@gmail.com> <5047B27F.2070202@mozilla.com>
+	<5048F494.70006@gmail.com>
+Message-ID: <5048F51E.7090102@mozilla.com>
+
+On 9/6/12 12:08 PM, Gareth Smith wrote:
+> You created a nice language for programs that are mostly non-concurrent
+> (regardless of how nice it is for highly concurrent programs), so I and
+> others are going to try using it for that :) ... and sometimes wondering
+> why the strings are so hard to use.
+>
+> I don't know what the fix is, but I think this issue is going to keep
+> coming up, because I think *for some people* there is a better balance
+> to be had.
+
+What is wrong with just using ~str?
+
+Patrick
+
+
+From graydon at mozilla.com  Thu Sep  6 14:42:30 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 06 Sep 2012 14:42:30 -0700
+Subject: [rust-dev] On the weirdness of strings
+In-Reply-To: <5048F494.70006@gmail.com>
+References: <5047B19F.8050609@gmail.com> <5047B27F.2070202@mozilla.com>
+	<5048F494.70006@gmail.com>
+Message-ID: <504918C6.8030904@mozilla.com>
+
+On 12-09-06 12:08 PM, Gareth Smith wrote:
+> I was one of those passing them by value too much. I did it because it
+> seemed like the idiomatic thing to do. Even rustc did it - that made it
+> seem legit. It no longer seems like the idiomatic thing to do because
+> the compiler emits a warning about it unless it is done explicitly, so I
+> try to avoid it. I think that documentation and compiler warnings will
+> determine typical use.
+
+Right. So then, typical use API-use would be &str, access to the bytes 
+would be double-indirect, and we'd be unable to do any constant-string 
+or substring optimizations, correct?
+
+>  > The current scheme is a very delicate balance between a large number
+> of pressures; I think it's about the best we're going to get.
+>
+> The problem with rust's strings is that any rust program I write seems
+> to be more complicated because of features that strings have that 99% of
+> the time I will not use. I have to pay for safe concurrency even though
+> it looks like I will barely be using it. Ditto with fixed size and
+> constant memory strings.
+
+Every time you write "foo", it is a constant-memory string; and in the 
+near-ish future, all slicing (hence substring-extraction) operations in 
+core::str (from which a great many derived strings originate) will 
+happen via borrowing, not allocating.
+
+These are actually really important cases. Important enough that most 
+other languages dedicate built-in machinery to handle them non-uniformly 
+as well: substrings often pin the outer string alive in the GC heap (or 
+refcount it independently), constants often get their own pool and/or 
+separate representations, often all sorts of optimization apply too, 
+like in-place concat, doubling-growth, inline storage for small strings, 
+etc. etc.
+
+I'm not trying to be a jerk. In C, a string is just a char* that you can 
+move around at as-near-as-possible zero cost, like an integer. Better 
+than just that: since it points to constant memory, the compiler can see 
+through it and boil off bounds checking or indexing operations 
+(extracting the element-bytes as sub constants). It's very cheap, and 
+sets people's expectations for "how fast it can be done", but it's not 
+safe. We want to be safe, and as close-to-as-fast as we can be while 
+being safe. So here's what we tried:
+
+   - Implementation #1: all strings were shared, refcounted, there's a
+     magic refcount that means "constant". Every time you copy one you
+     have to check both the magic refcount and the non-magic one, and
+     adjust it. Costly. Also meant you could never send them over
+     channels, since that'd require atomic refcounting. We don't want
+     that.
+
+   - Implementation #2: all strings were unique. Now you can send them
+     over channels, but must double-indirect to share them, and "foo"
+     causes a memory allocation, where it _should_ just be a pointer
+     to constant memory. No constants or substrings.
+
+It's difficult to think of other practical versions that don't involve 
+either copying or refcounting all the time, even on constant strings, 
+which always puts is back into the same place you're suggesting: &str 
+for most APIs, and double-indirect, and losing all the constant-string 
+and substring optimization opportunities.
+
+> You created a nice language for programs that are mostly non-concurrent
+> (regardless of how nice it is for highly concurrent programs), so I and
+> others are going to try using it for that :) ... and sometimes wondering
+> why the strings are so hard to use.
+
+Yeah, I'm .. sympathetic, I do want them to be "easy", or as easy as 
+they can be; can you describe _exactly_ what the difficulties you're 
+having are? Not just that they're "hard" or "weird", but like, a 
+use-case that you keep doing, that you want to be able to stop-doing?
+
+Also note: many of our APIs (core::str for example) are still far more 
+~str-centric than they ought to be longer-term; we did a bulk-conversion 
+from str to ~str, and need to go through and fully convert over to &str 
+whenever possible.
+
+-Graydon
+
+
+From garethdanielsmith at gmail.com  Fri Sep  7 10:02:15 2012
+From: garethdanielsmith at gmail.com (Gareth Smith)
+Date: Fri, 7 Sep 2012 18:02:15 +0100
+Subject: [rust-dev] On the weirdness of strings
+In-Reply-To: <504918C6.8030904@mozilla.com>
+References: <5047B19F.8050609@gmail.com> <5047B27F.2070202@mozilla.com>
+	<5048F494.70006@gmail.com> <504918C6.8030904@mozilla.com>
+Message-ID: <CAPR5cR+ER8SMnoyeEVuD2kDQnTVQdBgCy71GLAKDo_DN46TVpw@mail.gmail.com>
+
+Graydon,
+
+Firstly I understand you know a lot more about this than I do, and I have
+read and appreciated everything that you wrote.
+
+On 6 September 2012 22:42, Graydon Hoare <graydon at mozilla.com> wrote:
+
+
+> Right. So then, typical use API-use would be &str, access to the bytes
+> would be double-indirect, and we'd be unable to do any constant-string or
+> substring optimizations, correct?
+>
+>
+OK then, that scheme would suck.
+
+So how about a slightly different scheme where a str is (internally) a
+tuple of (pointer-to-char-data-on-the-unique-heap, start-index, end-index)
+- i.e. 3 words - pretty cheap to shallow copy - right?.
+
+A str would be a non-implicitly copyable type.
+
+A ~str/@str/&str would be the same as any other ~/@/& pointers (this is
+what I am aiming for).
+
+A constant string would be a &static/str, and start-index and end-index
+would be the start and end of the character data (which is stored in
+constant memory).
+
+A substring (AKA slice) would point to the same character data as its
+parent string, but have different start/end indexes. I believe that the
+region system would keep a substring's character data alive for as long as
+its parent lives (right?).
+
+Idiomatic usage would be to pass most string parameters as &str.
+
+Apart from fixed-length strings, which could perhaps be treated specially,
+is this a reasonable way to accomplish the objective of making string
+pointers the same as other pointers (apart from vector pointers, which in
+are in another kettle of fish).
+
+Thanks
+Gareth
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120907/8709581c/attachment.html>
+
+From pwalton at mozilla.com  Fri Sep  7 10:21:52 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 07 Sep 2012 10:21:52 -0700
+Subject: [rust-dev] On the weirdness of strings
+In-Reply-To: <CAPR5cR+ER8SMnoyeEVuD2kDQnTVQdBgCy71GLAKDo_DN46TVpw@mail.gmail.com>
+References: <5047B19F.8050609@gmail.com> <5047B27F.2070202@mozilla.com>
+	<5048F494.70006@gmail.com> <504918C6.8030904@mozilla.com>
+	<CAPR5cR+ER8SMnoyeEVuD2kDQnTVQdBgCy71GLAKDo_DN46TVpw@mail.gmail.com>
+Message-ID: <504A2D30.5040607@mozilla.com>
+
+On 9/7/12 10:02 AM, Gareth Smith wrote:
+> Apart from fixed-length strings, which could perhaps be treated
+> specially, is this a reasonable way to accomplish the objective of
+> making string pointers the same as other pointers (apart from vector
+> pointers, which in are in another kettle of fish).
+
+I'm opposed to this. Having the string data for @str actually be on the 
+exchange heap is unintuitive. Requiring two allocations (one on the 
+exchange heap, one on the task heap) to reference count a string is 
+inefficient. The extra layer of indirection for &str also imposes a tax.
+
+Patrick
+
+
+From graydon at mozilla.com  Fri Sep  7 10:25:45 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 07 Sep 2012 10:25:45 -0700
+Subject: [rust-dev] On the weirdness of strings
+In-Reply-To: <CAPR5cR+ER8SMnoyeEVuD2kDQnTVQdBgCy71GLAKDo_DN46TVpw@mail.gmail.com>
+References: <5047B19F.8050609@gmail.com> <5047B27F.2070202@mozilla.com>
+	<5048F494.70006@gmail.com> <504918C6.8030904@mozilla.com>
+	<CAPR5cR+ER8SMnoyeEVuD2kDQnTVQdBgCy71GLAKDo_DN46TVpw@mail.gmail.com>
+Message-ID: <504A2E19.9040300@mozilla.com>
+
+On 07/09/2012 10:02 AM, Gareth Smith wrote:
+
+> Firstly I understand you know a lot more about this than I do, and I
+> have read and appreciated everything that you wrote.
+
+Thanks! I appreciate your patience in discussing it.
+
+> A substring (AKA slice) would point to the same character data as its
+> parent string, but have different start/end indexes. I believe that the
+> region system would keep a substring's character data alive for as long
+> as its parent lives (right?).
+
+Yes, though you might as well just advance the pointer and subtract the 
+length a bit, make it a 2-word representation. So long as the data is 
+pinned, you don't need to point to the head of the string buffer 
+(indeed, in a read-only data section, often multiple strings get merged 
+together).
+
+> Idiomatic usage would be to pass most string parameters as &str.
+
+Right, so this makes it double-indirect to get at the bytes most of the 
+time.
+
+> Apart from fixed-length strings, which could perhaps be treated
+> specially, is this a reasonable way to accomplish the objective of
+> making string pointers the same as other pointers (apart from vector
+> pointers, which in are in another kettle of fish).
+
+Well ... it lets you do substrings (as does a 2-word representation, 
+ptr+length), it's just double-indirect most of the time, because you're 
+usually passing around &str. The only way this differs from what we're 
+doing now is that we are currently single-indirect: &str is actually 
+that (ptr,len) pair itself, not a pointer-to-it, which is the closest we 
+can get to full-speed like C.
+
+That's really all we've done: merged the layer of indirection implied-by 
+/ described-by a sigil -- necessary for control of allocation, copying 
+and ownership behavior of the underlying buffer -- and the 
+layer-of-indirection necessary for working with variable-sized-thingies 
+in containers that need to be fixed-size (other structures, stack 
+frames, etc.) So we wind up with only one indirection, not two. We 
+didn't think uniformity of representation was sufficient to justify 
+imposing the systemic double-indirection cost, that's all.
+
+In case you're concerned that this makes str (and []) the sole warts on 
+a type system that is otherwise uniform in terms of treating non-sigil'd 
+type names as allocatable, interior-value things, keep in mind that it's 
+not. Traits-as-types (i.e. when used as fn(x:Trait), not as bounds on 
+type parameters) are currently in the same boat as strings used to be a 
+while back (implicitly @), but they're changing so that they can only be 
+represented through sigils; again so that we can gain-back control over 
+allocation (not always have to box, be able to send, handle constants, 
+perform move-on-self, etc). Likewise closures (fn() types) are not 
+really representable as interior values, since they close over an 
+environment (or no environment) in a variety of ways that the sigils 
+control.
+
+Sorry to sound so stubborn on this; again, can you perhaps point to 
+specific awkwardnesses in the current scheme? Maybe we can mitigate the 
+difficulty by changing evaluation / borrowing / constant / 
+pattern-matching rules a touch.
+
+-Gradon
+
+
+From pwoolcoc at gmail.com  Fri Sep  7 07:13:47 2012
+From: pwoolcoc at gmail.com (Paul Woolcock)
+Date: Fri, 7 Sep 2012 10:13:47 -0400
+Subject: [rust-dev] store patterns in variables/macros?
+Message-ID: <CACNEfZbD_g81GXBSaqkyG4UqaNXsbDE3VDJNOX=vZDqoymr8WQ@mail.gmail.com>
+
+I was curious if there were any plans to allow match patterns to be
+re-used.  My initial thoughts were to be able to either store patterns in a
+variable (via `let` or `const`), or allow macros to expand to either _just_
+the pattern part of a `match` expression, or an entire arm of a `match`
+expression.  If I am not making sense, here is code (not actual rust,
+obviously...)
+
+    let mypat = 'A' to 'Z' | 'a' to 'z' | '0' to '9' | '_' | '-';
+
+    // or
+
+    macro_rules! mypat (
+        () => ('A' to 'Z' | 'a' to 'z' | '0' to '9' | '_' | '-')
+    )
+
+    // or
+
+    macro_rules! my_match_arm (
+        ($blk:block) => (
+            'A' to 'Z' | 'a' to 'z' | '0' to '9' | '_' | '-' => $blk
+        )
+    )
+
+    #[test]
+    fn test_mypat() {
+        let mychar = 'c';
+        match mychar {
+            mypat => { assert true }
+
+           // or
+
+           mypat! => { assert true }  // might have to be `mypat!()` ? not
+really sure...
+
+           // or
+
+           my_match_arm!({assert true})
+
+            _ => { assert false }
+    }
+
+I know there are simple workarounds to this, for example this is what I
+currently do to re-use a whitespace-finding pattern:
+
+    pure fn is_whitespace(x: char) -> bool {
+        match x {
+           '\u0020' | '\u0009' | '\u000D' | '\u000A' => { true }
+            _ => { false }
+    }
+
+    #[test]
+    fn test_is_whitespace() {
+        match chr {
+            a if is_whitespace(a) => { assert true }
+            _ => { assert false }
+        }
+    }
+
+I think the first example is more elegant than this, though.
+
+I have only just started working with macros, so if there is already a way
+to do this that I just haven't realized yet, then sorry for wasting time :)
+
+--
+Paul Woolcock
+ADN @paulwoolcock
+Twitter @pwoolcoc
+Github @pwoolcoc
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120907/0b9b7978/attachment.html>
+
+From paul.stansifer at gmail.com  Fri Sep  7 13:43:15 2012
+From: paul.stansifer at gmail.com (Paul Stansifer)
+Date: Fri, 7 Sep 2012 16:43:15 -0400
+Subject: [rust-dev] store patterns in variables/macros?
+In-Reply-To: <CACNEfZbD_g81GXBSaqkyG4UqaNXsbDE3VDJNOX=vZDqoymr8WQ@mail.gmail.com>
+References: <CACNEfZbD_g81GXBSaqkyG4UqaNXsbDE3VDJNOX=vZDqoymr8WQ@mail.gmail.com>
+Message-ID: <CA+VxxZeAmVME0Evp9fc5CDaxc-YpRMsRC-Mwp2JuySYo_x31fw@mail.gmail.com>
+
+I believe that storing patterns as run-time values would pose some
+serious challenges and wouldn't fit well with the rest of Rust.
+
+But having macros expand into pattern arms is desirable.
+
+Another workaround you might consider is having a macro that expands
+into the whole match expression, supplying the one special arm, and
+accepting patterns and blocks as arguments to turn into the other
+arms.
+
+
+Paul
+
+From pwalton at mozilla.com  Fri Sep  7 14:53:38 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 07 Sep 2012 14:53:38 -0700
+Subject: [rust-dev] On the weirdness of strings
+In-Reply-To: <CAPR5cR+ER8SMnoyeEVuD2kDQnTVQdBgCy71GLAKDo_DN46TVpw@mail.gmail.com>
+References: <5047B19F.8050609@gmail.com> <5047B27F.2070202@mozilla.com>
+	<5048F494.70006@gmail.com> <504918C6.8030904@mozilla.com>
+	<CAPR5cR+ER8SMnoyeEVuD2kDQnTVQdBgCy71GLAKDo_DN46TVpw@mail.gmail.com>
+Message-ID: <504A6CE2.7000002@mozilla.com>
+
+If you prefer to think about &str, ~str, and @str as separate types, an 
+analogy to C++ might be helpful:
+
+&T is like T *.
+~T is like std::auto_ptr<T> in C++03 or std::unique_ptr<T> in C++0x.
+@T is like std::shared_ptr<T>.
+
+&str is like char *.
+~str is like std::string.
+@str is like CString in Microsoft's ATL (reference counted).
+
+&[T] is like a (T *, size_t length) pair.
+~[T] is like std::vector<T>.
+@[T] is like std::shared_ptr<std::vector<T>>, but without the extra 
+level of indirection.
+
+Essentially, it's like C++ with several of the most common smart pointer 
+types made type-safe and built into the language.
+
+Patrick
+
+
+From garethdanielsmith at gmail.com  Fri Sep  7 14:54:09 2012
+From: garethdanielsmith at gmail.com (Gareth Smith)
+Date: Fri, 07 Sep 2012 22:54:09 +0100
+Subject: [rust-dev] On the weirdness of strings
+In-Reply-To: <504A2E19.9040300@mozilla.com>
+References: <5047B19F.8050609@gmail.com> <5047B27F.2070202@mozilla.com>
+	<5048F494.70006@gmail.com> <504918C6.8030904@mozilla.com>
+	<CAPR5cR+ER8SMnoyeEVuD2kDQnTVQdBgCy71GLAKDo_DN46TVpw@mail.gmail.com>
+	<504A2E19.9040300@mozilla.com>
+Message-ID: <504A6D01.3030407@gmail.com>
+
+On 07/09/12 18:25, Graydon Hoare wrote:
+>
+> Sorry to sound so stubborn on this; again, can you perhaps point to 
+> specific awkwardnesses in the current scheme? Maybe we can mitigate 
+> the difficulty by changing evaluation / borrowing / constant / 
+> pattern-matching rules a touch. 
+
+Here are a couple of things that have confused me:
+
+1. AFAIK you can't actually create values of @str. It seems like only 
+~str and &str are the blessed string types. Sinful be you if your data 
+has lifetimes that do not follow a stack discipline. OK, so @~str seems 
+to be used instead of @str, but it is ugly to keep reading that and 
+surely it is not efficient.
+
+2. I start off passing a string to a particular function as a &str. But 
+then later I need to change the function so that it saves the string in 
+a structure that the function returns (the structure will then get 
+stored in the task-heap or the unique-heap).
+
+I have to ask myself if I should copy the string in order to save it, or 
+should I pass in an @str to avoid copies? I imagine that copying the 
+string is expensive (it may be large), so I change the function to take 
+@str instead of &str. I then have to change all the calling functions to 
+convert their &str to @str and pass it in (but I don't want to do this 
+because it seems just like as many copies will happen), or I change the 
+caller to also take @str instead of &str - and the callers caller, and 
+so on. Then some of my functions take &str and some take @str, depending 
+on their implementation. Maybe this isn't weird. Maybe its good thing. 
+Maybe I am doing it wrong. But to me it feels weird that the 
+implementation leaks.
+
+This is not really string specific though to be fair, and I don't see 
+how it can be fixed without ubiquitous global garbage collection.
+
+Thanks
+Gareth
+
+From pwalton at mozilla.com  Fri Sep  7 15:05:58 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 07 Sep 2012 15:05:58 -0700
+Subject: [rust-dev] On the weirdness of strings
+In-Reply-To: <504A6D01.3030407@gmail.com>
+References: <5047B19F.8050609@gmail.com> <5047B27F.2070202@mozilla.com>
+	<5048F494.70006@gmail.com> <504918C6.8030904@mozilla.com>
+	<CAPR5cR+ER8SMnoyeEVuD2kDQnTVQdBgCy71GLAKDo_DN46TVpw@mail.gmail.com>
+	<504A2E19.9040300@mozilla.com> <504A6D01.3030407@gmail.com>
+Message-ID: <504A6FC6.2000002@mozilla.com>
+
+On 9/7/12 2:54 PM, Gareth Smith wrote:
+> 1. AFAIK you can't actually create values of @str. It seems like only
+> ~str and &str are the blessed string types. Sinful be you if your data
+> has lifetimes that do not follow a stack discipline. OK, so @~str seems
+> to be used instead of @str, but it is ugly to keep reading that and
+> surely it is not efficient.
+
+You should be able to create values of @str -- @"Hello world!" works for 
+me. The remaining @~str types are due to legacy code that we haven't 
+ported over yet -- sorry about being slow on that...
+
+Actually, I'm beginning to think that we should overload string 
+literals, so you can write `let x: @str = "Hello world!"` and it should 
+just work.
+
+> 2. I start off passing a string to a particular function as a &str. But
+> then later I need to change the function so that it saves the string in
+> a structure that the function returns (the structure will then get
+> stored in the task-heap or the unique-heap).
+>
+> I have to ask myself if I should copy the string in order to save it, or
+> should I pass in an @str to avoid copies? I imagine that copying the
+> string is expensive (it may be large), so I change the function to take
+> @str instead of &str. I then have to change all the calling functions to
+> convert their &str to @str and pass it in (but I don't want to do this
+> because it seems just like as many copies will happen), or I change the
+> caller to also take @str instead of &str - and the callers caller, and
+> so on. Then some of my functions take &str and some take @str, depending
+> on their implementation. Maybe this isn't weird. Maybe its good thing.
+> Maybe I am doing it wrong. But to me it feels weird that the
+> implementation leaks.
+>
+> This is not really string specific though to be fair, and I don't see
+> how it can be fixed without ubiquitous global garbage collection.
+
+Yeah :( You're 100% right that this is a bummer. Essentially it's, as 
+you say, the price we pay for not having pervasive GC.
+
+C++ code feels the same pain with the STL types and the various strings 
+that libraries tend to implement; much of the reason we standardized on 
+these "smart pointers" is so that libraries don't write their own string 
+types and exacerbate the problem.
+
+If GC-induced latency isn't critical to you, feel free to write your 
+functions to take @str pervasively. There's no need to feel guilty doing 
+so :) The type is there so that code that isn't micromanaging memory can 
+be written conveniently. As standard library writers, we write 
+everything using &str and ~str because we have to cater to applications 
+that don't want to pay the GC tax, but we definitely don't want everyone 
+to write that way.
+
+The downside of @str is that support for it isn't great in the standard 
+library at the moment, but please feel free to file bugs -- it should be 
+a first-class, convenient, well-supported type.
+
+Patrick
+
+
+From graydon at mozilla.com  Fri Sep  7 15:11:09 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 07 Sep 2012 15:11:09 -0700
+Subject: [rust-dev] On the weirdness of strings
+In-Reply-To: <504A6D01.3030407@gmail.com>
+References: <5047B19F.8050609@gmail.com> <5047B27F.2070202@mozilla.com>
+	<5048F494.70006@gmail.com> <504918C6.8030904@mozilla.com>
+	<CAPR5cR+ER8SMnoyeEVuD2kDQnTVQdBgCy71GLAKDo_DN46TVpw@mail.gmail.com>
+	<504A2E19.9040300@mozilla.com> <504A6D01.3030407@gmail.com>
+Message-ID: <504A70FD.4030501@mozilla.com>
+
+On 12-09-07 2:54 PM, Gareth Smith wrote:
+> Here are a couple of things that have confused me:
+>
+> 1. AFAIK you can't actually create values of @str. It seems like only
+> ~str and &str are the blessed string types. Sinful be you if your data
+> has lifetimes that do not follow a stack discipline. OK, so @~str seems
+> to be used instead of @str, but it is ugly to keep reading that and
+> surely it is not efficient.
+
+Oh no, that's purely an artifact of how we did the bulk conversion from 
+str to ~str. Literally, it was a giant search/replace with all energy 
+devoted to keeping-the-compiler-working. @str is totally legit.
+
+> I have to ask myself if I should copy the string in order to save it, or
+> should I pass in an @str to avoid copies?
+
+It depends if ownership-sharing is part of the contract the function is 
+exposing, or an incident of its implementation. If the former -- if the 
+whole point is to give it something of shared ownership -- then @str 
+makes sense. Otherwise &str, as the function taking a local copy is 
+incidental.
+
+We do make programmers think about ownership, lifetime, sharing, and 
+copying, at least enough to express their intention. Specifically 
+because the programmer gets hit with ubiquitous penalties 
+(everything-unique, everything-copied, everything-GC'ed, or similar) if 
+we try to save them from thinking about it. And then they profile the 
+program, see it's slower than C++, and go back to using that. We're 
+aiming to stay close enough to the C++ performance envelope that this 
+isn't an urge (whatever else may be).
+
+> This is not really string specific though to be fair
+
+No, not string-specific at all. Same issue happens all through our 
+memory model.
+
+> how it can be fixed without ubiquitous global garbage collection.
+
+It's not part of our design criteria to fix "having to think about 
+lifetime, ownership, copies and sharing". That's intentional.
+
+-Graydon
+
+
+From eslaughter at mozilla.com  Fri Sep  7 16:17:24 2012
+From: eslaughter at mozilla.com (Elliott Slaughter)
+Date: Fri, 7 Sep 2012 16:17:24 -0700 (PDT)
+Subject: [rust-dev] GC-based cleanup in incoming
+Message-ID: <588929117.7325051.1347059844919.JavaMail.root@mozilla.com>
+
+Hi all,
+
+As of cb53623341, precise GC-based cleanup has landed in incoming. There are still many rough edges, but this should be enough to get your feet wet and try the GC out.
+
+I have written up a document describing the GC implementation details, current status, etc. You can find it here:
+
+https://github.com/elliottslaughter/rust-gc-notes
+
+Thanks everyone for a great summer. I have to say, Rust is by far my favorite language now. I had a lot of fun working on GC, and I hope this is the beginning of real GC support in LLVM.
+
+--
+Elliott Slaughter
+
+From banderson at mozilla.com  Fri Sep  7 16:25:39 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Fri, 07 Sep 2012 16:25:39 -0700
+Subject: [rust-dev] GC-based cleanup in incoming
+In-Reply-To: <588929117.7325051.1347059844919.JavaMail.root@mozilla.com>
+References: <588929117.7325051.1347059844919.JavaMail.root@mozilla.com>
+Message-ID: <504A8273.3000903@mozilla.com>
+
+On 09/07/2012 04:17 PM, Elliott Slaughter wrote:
+> Hi all,
+>
+> As of cb53623341, precise GC-based cleanup has landed in incoming. There are still many rough edges, but this should be enough to get your feet wet and try the GC out.
+>
+> I have written up a document describing the GC implementation details, current status, etc. You can find it here:
+>
+> https://github.com/elliottslaughter/rust-gc-notes
+>
+> Thanks everyone for a great summer. I have to say, Rust is by far my favorite language now. I had a lot of fun working on GC, and I hope this is the beginning of real GC support in LLVM.
+>
+
+This is very exciting. Thanks a lot, Elliott!
+
+-Brian
+
+
+From graydon at mozilla.com  Fri Sep  7 16:59:53 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 07 Sep 2012 16:59:53 -0700
+Subject: [rust-dev] GC-based cleanup in incoming
+In-Reply-To: <588929117.7325051.1347059844919.JavaMail.root@mozilla.com>
+References: <588929117.7325051.1347059844919.JavaMail.root@mozilla.com>
+Message-ID: <504A8A79.80408@mozilla.com>
+
+On 12-09-07 4:17 PM, Elliott Slaughter wrote:
+
+> As of cb53623341, precise GC-based cleanup has landed in incoming. There are still many rough edges, but this should be enough to get your feet wet and try the GC out.
+>
+> I have written up a document describing the GC implementation details, current status, etc. You can find it here:
+>
+> https://github.com/elliottslaughter/rust-gc-notes
+>
+> Thanks everyone for a great summer. I have to say, Rust is by far my favorite language now. I had a lot of fun working on GC, and I hope this is the beginning of real GC support in LLVM.
+
+Thanks for all the hard work! This is very exciting (not to mention 
+delightfully well-documented). Glad you got it landed.
+
+-Graydon
+
+
+From pwalton at mozilla.com  Fri Sep  7 22:00:37 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 07 Sep 2012 22:00:37 -0700
+Subject: [rust-dev] GC-based cleanup in incoming
+In-Reply-To: <588929117.7325051.1347059844919.JavaMail.root@mozilla.com>
+References: <588929117.7325051.1347059844919.JavaMail.root@mozilla.com>
+Message-ID: <504AD0F5.8050106@mozilla.com>
+
+On 09/07/2012 04:17 PM, Elliott Slaughter wrote:
+> Hi all,
+>
+> As of cb53623341, precise GC-based cleanup has landed in incoming.
+> There are still many rough edges, but this should be enough to get
+> your feet wet and try the GC out.
+
+Awesome work. This is great work--not only for Rust, but for the entire 
+LLVM ecosystem as well. Thanks again!
+
+Patrick
+
+From atri.jiit at gmail.com  Fri Sep  7 22:44:58 2012
+From: atri.jiit at gmail.com (Atri Sharma)
+Date: Sat, 8 Sep 2012 11:14:58 +0530
+Subject: [rust-dev] GC-based cleanup in incoming
+In-Reply-To: <588929117.7325051.1347059844919.JavaMail.root@mozilla.com>
+References: <588929117.7325051.1347059844919.JavaMail.root@mozilla.com>
+Message-ID: <CAOeZVidsC+s2bFb__29Ve4u6GT3512ihJNuLa-Q9qnJFQ6iSnQ@mail.gmail.com>
+
+On Sat, Sep 8, 2012 at 4:47 AM, Elliott Slaughter
+<eslaughter at mozilla.com> wrote:
+> Hi all,
+>
+> As of cb53623341, precise GC-based cleanup has landed in incoming. There are still many rough edges, but this should be enough to get your feet wet and try the GC out.
+>
+> I have written up a document describing the GC implementation details, current status, etc. You can find it here:
+>
+> https://github.com/elliottslaughter/rust-gc-notes
+>
+> Thanks everyone for a great summer. I have to say, Rust is by far my favorite language now. I had a lot of fun working on GC, and I hope this is the beginning of real GC support in LLVM.
+>
+> --
+> Elliott Slaughter
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+This seems truly awesome!!!
+
+
+-- 
+Regards,
+
+Atri
+l'apprenant
+
+From j.a.boyden at gmail.com  Mon Sep 10 12:21:19 2012
+From: j.a.boyden at gmail.com (James Boyden)
+Date: Tue, 11 Sep 2012 05:21:19 +1000
+Subject: [rust-dev] Proposal/request to precede variable binding with "let"
+ in destructuring pattern matching and closures
+Message-ID: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+
+Hi Rust-dev,
+
+To start with, here's the three-sentence summary of my post:
+
+I propose 2 minor syntax alterations that very-slightly extend the
+existing "let" keyword in a logical way, to improve the syntax of
+variable binding in destructuring pattern matching and closures.
+
+By "improve", I mean that the syntax will become:
+- more intuitive (i.e. the meaning and behaviour are self-evident at
+   the first encounter)
+- more consistent with the basic variable-declaration binding syntax
+- less exotic (or, more integrated with the rest of the Rust syntax)
+- less magical/implicit (where magical effects "just happen") and
+- less cryptic
+- less reliant on the use of special sigils such as '|'.
+
+I'm sending this post now, because I understand that the Rust syntax
+will be slushifying soon (at the 0.4 release) and I wanted to propose
+these alterations before the bar was raised even higher.
+
+
+== 0. Introduction ==
+
+Over the past 12 years, I've been employed as a programmer of C++
+(in particular), Python and C.  I've "learned" (but not programmed
+significant amounts of) Java, JavaScript, Common Lisp, Lua and Go.
+
+For years, I've been on the lookout for a "better C++" that simplified
+the core language but added better built-in support for concurrency,
+memory safety and memory management.  But I also wanted something that
+retained an approximately C++-like syntax -- and more importantly,
+a C++-like precision of expression (some level of static typing; some
+constness; some form of RAII; and some form of compile-time generics).
+
+I'm a huge fan of what you've designed and created with Rust.  I agree
+strongly with almost all the feature choices, and there's nothing
+that really rubs me the wrong way.  (Without turning this post into
+a love letter about all my favourite features, I'll just say that
+I was particularly impressed by the 3 memory realms as a solution
+to the concurrency/memory-management/locking/performance problem.)
+
+I've been watching Rust with interest since I first encountered 0.3
+on Hacker News in early July.  I'm looking forward to the language
+spec solidifying and the compiler implementation maturing to a point
+that it makes sense to start using Rust at home for my own projects.
+
+I understand that a syntax-slushifying 0.4 release is on its way:
+ http://news.ycombinator.com/item?id=4467402
+
+This is great news, but it also spurs me to write to you now about
+the two issues I have with Rust: the implicit binding of variables
+in destructuring pattern matching; and the exotic, cryptic closure
+syntax.
+
+
+== 1. Improving the destructuring variable binding syntax ==
+
+When I first read the Rust Tutorial in July, I took "beginner's notes"
+of the features and syntax that stood out for better or worse.  It was
+almost all positive -- in fact, the only negatives on my list were the
+implicit variable binding in destructuring pattern matching, and the
+exotic closure syntax (which I'll discuss more in section 2 below).
+
+The destructuring variable binding syntax wasn't nearly as intuitive
+(i.e. meaning and behaviour are self-evident at the first encounter)
+and unambiguous (not easily misinterpreted to mean something else)
+to me as the rest of the Rust syntax.  Several times as I read through
+the Tutorial, I had to scan back several pages to remind myself what
+was happening when I encountered the destructuring syntax.
+
+Plus, after a few years of Python most recently (and a few occurrences
+of the unintentional new-variable-definition mistake described here:
+ http://programmers.stackexchange.com/a/30098 ), I've become uneasy
+with implicit variable declaration.  For this reason, I agree strongly
+with Rust's use of the "let" keyword to avoid this problem.  I also
+appreciate the ability to scan the code for "let", to discover quickly
+and easily where a variable was declared.
+
+Finally, I think this implicit variable binding makes the Rust syntax
+less self-consistent:  Inside a function, it's no longer the case that
+a new variable is bound if and only if there's a "let" preceding it.
+Now, sometimes, new variables can be bound magically.
+
+Hence, I propose that the destructuring syntax be altered so that each
+variable binding in a pattern must be preceded by the "let" keyword.
+
+Thus, this example from the Tutorial:
+ http://dl.rust-lang.org/doc/tutorial.html#pattern-matching
+
+    fn angle(vector: (float, float)) -> float {
+        match vector {
+          (0f, y) if y < 0f => 1.5 * pi,
+          (0f, y) => 0.5 * pi,
+          (x, y) => float::atan(y / x)
+        }
+    }
+
+would become this:
+    fn angle(vector: (float, float)) -> float {
+        match vector {
+          (0f, let y) if y < 0f => 1.5 * pi,
+          (0f, let y) => 0.5 * pi,
+          (let x, let y) => float::atan(y / x)
+        }
+    }
+
+Similarly, this example of record destructuring:
+ http://dl.rust-lang.org/doc/tutorial.html#struct-patterns
+
+    struct Point { x: float, y: float }
+
+    match mypoint {
+        Point { x: 0.0, y: y } => { /* use y */ }
+        Point { x: x, y: y }   => { /* use x and y */ }
+    }
+
+would become:
+    struct Point { x: float, y: float }
+
+    match mypoint {
+        Point { x: 0.0, y: let y } => { /* use y */ }
+        Point { x: let x, y: let y }   => { /* use x and y */ }
+    }
+
+And finally, this example of enum destructuring:
+ http://dl.rust-lang.org/doc/tutorial.html#enum-patterns
+
+    fn area(sh: shape) -> float {
+        match sh {
+            circle(_, size) => float::consts::pi * size * size,
+            rectangle({x, y}, {x: x2, y: y2}) => (x2 - x) * (y2 - y)
+        }
+    }
+
+would become:
+    fn area(sh: shape) -> float {
+        match sh {
+            circle(_, let size) => float::consts::pi * size * size,
+            rectangle({let x, let y}, {x: let x2, y: let y2})
+                    => (x2 - x) * (y2 - y)
+        }
+    }
+
+This last example was particularly cryptic to me in its original form
+("Which 'x' is which?") but it becomes much clearer with the insertion
+of the "let" keyword in the appropriate locations.
+
+
+I've skimmed the recent Rust-dev archives, and I saw this thread that
+discussed the same part of the destructuring syntax from a different
+point-of-view:
+ https://mail.mozilla.org/pipermail/rust-dev/2012-August/002258.html
+
+(The original poster was concerned more about ambiguity of existing
+enums vs binding new variables, but we're both focussed on the same
+part of the syntax.)
+
+I think my proposal would address that poster's concerns too, without
+violating any "Hard requirements", "Misuse avoidances" or "Ergonomics"
+listed by Graydon Hoare in this reply:
+ https://mail.mozilla.org/pipermail/rust-dev/2012-August/002272.html
+
+This approach would also avoid adding any new sigils, instead re-using
+a short, existing keyword in a logical (and very minimal) extension of
+its current meaning.
+
+
+== 2. Improving the closure variable binding syntax ==
+
+As I mentioned above, my only other issue with the current state of
+the Rust language is the syntax of closures.  The exotic '|x|' syntax
+makes closures look cryptic and mysterious.  The use of the pipe sign
+offers no intuitive (to a C-family programmer) clues as to what '|x|'
+means or does.
+
+I think that closures should be a seamlessly-integrated, decidedly
+non-exotic part of Rust.  Closures shouldn't seem any more mysterious
+than heap allocation or pointers.  And finally, it would be nice if
+the closure variable binding was preceded by the "let" keyword. ;)
+
+(I glossed over this point in the previous section, to avoid becoming
+mired in details, and because closures could sort of be considered
+functions if you squint at them just right. ;)
+
+I'd been staring at my proposed destructuring variable binding syntax
+for a while, when it dawned on me that a closure is very similar to
+a destructuring pattern matching arm in an 'match' construct.  If you
+ignore the different defining characteristics (a closure is allocated
+somewhere in memory and referenced through a pointer, while a pattern
+matching arm is just code trapped in an enclosing 'match' construct),
+you observe that both constructs define unnamed, function-like blocks
+of code that accept some arity of named parameters and are able to
+access variables from the enclosing scope.
+
+Why not make their syntax more similar to emphasise this similarity?
+It would make closures seem less mysterious, and the Rust syntax would
+be more self-consistent overall.
+
+To remind you, this is the destructuring variable binding syntax that
+I'm proposing, in which the variable binding is preceded by "let":
+    match foo {
+      /* arms consisting of patterns and expressions or code blocks */
+      (let x, let y) => /* use x, y, and maybe z from enclosing scope */
+    }
+
+Hence, I propose that the closure syntax be altered from this:
+    |x, y| { /* use x, y, and maybe z from the enclosing scope */ }
+to this:
+    &(let x, let y) => /* use x, y, and maybe z from enclosing scope */
+
+This would have the following benefits:
+
+ 1. Now *all* (really "all", this time ;) non-function-parameter
+    variable bindings in a function are preceded by the "let" keyword
+    (which is a more self-explanatory syntax than '|x|', and also
+    makes it easier to scan to see where a variable was bound).
+
+ 2. The exotic, cryptic '|' sigil is not used.
+
+ 3. Parameter declarations for a function-like code block are enclosed
+    in the familiar parentheses construct.
+
+ 4. The similarity to the 'match' construct arm is emphasised.
+
+ 5. Closures are no more mysterious than heap allocation or pointers
+    (which is made explicit by the pointer sigil out the front).
+
+Here is what the examples from the Closures chapter would look like:
+ http://dl.rust-lang.org/doc/tutorial.html#closures
+
+    let bloop = &(let well, let oh: mygoodness) -> what_the => /* ... */;
+
+    let mut max = 0;
+    (~[1, 2, 3]).map(&(let x) => if x > max { max = x });
+
+    fn mk_appender(suffix: str) -> fn@(str) -> str {
+        ret @(let s: str) -> str => s + suffix;
+    }
+
+    fn call_twice(f: fn()) { f(); f(); }
+    call_twice(&() => ~"I am a stack closure");
+    call_twice(@() => ~"I am a boxed closure");
+    call_twice(~() => ~"I am a unique closure");
+
+The above example demonstrates the closest this proposed syntax comes
+to ambiguity:  On its own, @() could be interpreted as "allocate a box
+of nil on the task heap".  (But unless I'm mistaken, the "fat arrow"
+that immediately follows would be sufficient to disambiguate?)
+
+No other arities of closure even flirt with any potential ambiguity,
+due to the "let" keyword before the variable name, which distinguishes
+the closure parameters from a parenthesised variable/enum or a tuple.
+
+Finally, the "real use" examples of a closure in combination with the
+'each' function:
+
+    each(~[1, 2, 3], &(let n) => {
+        debug!("%i", n);
+        do_some_work(n);
+    });
+
+    do each(~[1, 2, 3]) &(let n) => {
+        debug!("%i", n);
+        do_some_work(n);
+    }
+
+I find that in these two "real use" examples in particular, changing
+'|n|' to '&(let n)' improves the self-descriptiveness of the closure
+syntax.
+
+
+== 3. Conclusion ==
+
+In closing, I think that either of these two proposed syntax changes
+(to the variable binding syntax of destructuring pattern matching and
+closures) would individually contribute to improving the readability,
+learnability, predictability and un-ambiguity of the language.
+
+Further, I think that the positive effects would be even greater if
+the syntax changes were applied together, due to the aforementioned
+emphasis of the similarities of the two constructs and the overall
+increase in language syntax self-consistency.
+
+Thanks for your time,
+jb
+
+From me at kevincantu.org  Mon Sep 10 12:50:28 2012
+From: me at kevincantu.org (Kevin Cantu)
+Date: Mon, 10 Sep 2012 12:50:28 -0700
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+Message-ID: <CABq6+adzvn2CGaayQO2Ru8K+HOo78rh=qXSPDE+EsfHLyosXsg@mail.gmail.com>
+
+While the destructuring / pattern matching lets might be annoying for
+one-line uses, maybe they'd help with larger blocks of code: maybe the
+present syntax just hasn't bothered me because I'm so used to Haskell's
+pattern matching.
+
+I like the idea of using `let |x, y| ...`, although I wouldn't want to
+overload the & for this purpose ( though we already have fn&)...  But my
+impression is that some much more important -- though less syntactical --
+changes may be under way with function closures right now.
+
+Cheers,
+Kevin
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120910/7826c189/attachment.html>
+
+From garethdanielsmith at gmail.com  Mon Sep 10 13:37:47 2012
+From: garethdanielsmith at gmail.com (Gareth Smith)
+Date: Mon, 10 Sep 2012 21:37:47 +0100
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+Message-ID: <504E4F9B.90902@gmail.com>
+
+Hi James,
+
+The pattern matching syntax is pretty consistent with Haskell, Ocaml, 
+SML and similar-ish statically typed functional languages. I like it 
+because it is concise and because a pattern is syntactically identical 
+or at least similar to the the value literals that produce the types 
+that it matches.
+
+Gareth
+
+From banderson at mozilla.com  Mon Sep 10 13:43:23 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Mon, 10 Sep 2012 13:43:23 -0700
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+Message-ID: <504E50EB.8070205@mozilla.com>
+
+On 09/10/2012 12:21 PM, James Boyden wrote:
+> Hi Rust-dev,
+
+Hi!
+
+>
+> To start with, here's the three-sentence summary of my post:
+>
+> I propose 2 minor syntax alterations that very-slightly extend the
+> existing "let" keyword in a logical way, to improve the syntax of
+> variable binding in destructuring pattern matching and closures.
+>
+> By "improve", I mean that the syntax will become:
+> - more intuitive (i.e. the meaning and behaviour are self-evident at
+>     the first encounter)
+> - more consistent with the basic variable-declaration binding syntax
+> - less exotic (or, more integrated with the rest of the Rust syntax)
+> - less magical/implicit (where magical effects "just happen") and
+> - less cryptic
+> - less reliant on the use of special sigils such as '|'.
+>
+> I'm sending this post now, because I understand that the Rust syntax
+> will be slushifying soon (at the 0.4 release) and I wanted to propose
+> these alterations before the bar was raised even higher.
+
+Thanks for such a well-thought post. My minor comments are going to seem 
+an insufficient response, but I hope others will reply as well.
+
+I'll mention that both the pattern matching and closure syntaxes are 
+very cramped, with a lot of competing requirements.
+
+>
+>
+> == 0. Introduction ==
+>
+> Over the past 12 years, I've been employed as a programmer of C++
+> (in particular), Python and C.  I've "learned" (but not programmed
+> significant amounts of) Java, JavaScript, Common Lisp, Lua and Go.
+>
+> For years, I've been on the lookout for a "better C++" that simplified
+> the core language but added better built-in support for concurrency,
+> memory safety and memory management.  But I also wanted something that
+> retained an approximately C++-like syntax -- and more importantly,
+> a C++-like precision of expression (some level of static typing; some
+> constness; some form of RAII; and some form of compile-time generics).
+>
+> I'm a huge fan of what you've designed and created with Rust.  I agree
+> strongly with almost all the feature choices, and there's nothing
+> that really rubs me the wrong way.  (Without turning this post into
+> a love letter about all my favourite features, I'll just say that
+> I was particularly impressed by the 3 memory realms as a solution
+> to the concurrency/memory-management/locking/performance problem.)
+
+I'm glad to hear all this.
+
+>
+> I've been watching Rust with interest since I first encountered 0.3
+> on Hacker News in early July.  I'm looking forward to the language
+> spec solidifying and the compiler implementation maturing to a point
+> that it makes sense to start using Rust at home for my own projects.
+>
+> I understand that a syntax-slushifying 0.4 release is on its way:
+>   http://news.ycombinator.com/item?id=4467402
+>
+> This is great news, but it also spurs me to write to you now about
+> the two issues I have with Rust: the implicit binding of variables
+> in destructuring pattern matching; and the exotic, cryptic closure
+> syntax.
+>
+>
+> == 1. Improving the destructuring variable binding syntax ==
+>
+> When I first read the Rust Tutorial in July, I took "beginner's notes"
+> of the features and syntax that stood out for better or worse.  It was
+> almost all positive -- in fact, the only negatives on my list were the
+> implicit variable binding in destructuring pattern matching, and the
+> exotic closure syntax (which I'll discuss more in section 2 below).
+>
+> The destructuring variable binding syntax wasn't nearly as intuitive
+> (i.e. meaning and behaviour are self-evident at the first encounter)
+> and unambiguous (not easily misinterpreted to mean something else)
+> to me as the rest of the Rust syntax.  Several times as I read through
+> the Tutorial, I had to scan back several pages to remind myself what
+> was happening when I encountered the destructuring syntax.
+
+I agree the binding syntax is not intuitive in places.
+
+>
+> Plus, after a few years of Python most recently (and a few occurrences
+> of the unintentional new-variable-definition mistake described here:
+>   http://programmers.stackexchange.com/a/30098 ), I've become uneasy
+> with implicit variable declaration.  For this reason, I agree strongly
+> with Rust's use of the "let" keyword to avoid this problem.  I also
+> appreciate the ability to scan the code for "let", to discover quickly
+> and easily where a variable was declared.
+>
+> Finally, I think this implicit variable binding makes the Rust syntax
+> less self-consistent:  Inside a function, it's no longer the case that
+> a new variable is bound if and only if there's a "let" preceding it.
+> Now, sometimes, new variables can be bound magically.
+>
+> Hence, I propose that the destructuring syntax be altered so that each
+> variable binding in a pattern must be preceded by the "let" keyword.
+>
+> Thus, this example from the Tutorial:
+>   http://dl.rust-lang.org/doc/tutorial.html#pattern-matching
+>
+>      fn angle(vector: (float, float)) -> float {
+>          match vector {
+>            (0f, y) if y < 0f => 1.5 * pi,
+>            (0f, y) => 0.5 * pi,
+>            (x, y) => float::atan(y / x)
+>          }
+>      }
+>
+> would become this:
+>      fn angle(vector: (float, float)) -> float {
+>          match vector {
+>            (0f, let y) if y < 0f => 1.5 * pi,
+>            (0f, let y) => 0.5 * pi,
+>            (let x, let y) => float::atan(y / x)
+>          }
+>      }
+
+I think that most people will see this as too verbose, but I am sort of 
+warming to this and the reason is `ref`. Currently, patterns implicitly 
+bind by reference, but in the future they will create a copy, and to 
+bind a reference you will need to write `ref`, as in `(0f, ref y) =>`. 
+This is the only place that `ref` exists in the language. Saying that a 
+binding is always introduced using either `let` or `ref` at least makes 
+`ref` not stand out as bad. Of course, to be consistent with the goal of 
+always using `let`, we would probably have to use `let ref` and then 
+we're sort of back in the same spot.
+
+>
+> Similarly, this example of record destructuring:
+>   http://dl.rust-lang.org/doc/tutorial.html#struct-patterns
+>
+>      struct Point { x: float, y: float }
+>
+>      match mypoint {
+>          Point { x: 0.0, y: y } => { /* use y */ }
+>          Point { x: x, y: y }   => { /* use x and y */ }
+>      }
+>
+> would become:
+>      struct Point { x: float, y: float }
+>
+>      match mypoint {
+>          Point { x: 0.0, y: let y } => { /* use y */ }
+>          Point { x: let x, y: let y }   => { /* use x and y */ }
+>      }
+>
+> And finally, this example of enum destructuring:
+>   http://dl.rust-lang.org/doc/tutorial.html#enum-patterns
+>
+>      fn area(sh: shape) -> float {
+>          match sh {
+>              circle(_, size) => float::consts::pi * size * size,
+>              rectangle({x, y}, {x: x2, y: y2}) => (x2 - x) * (y2 - y)
+>          }
+>      }
+>
+> would become:
+>      fn area(sh: shape) -> float {
+>          match sh {
+>              circle(_, let size) => float::consts::pi * size * size,
+>              rectangle({let x, let y}, {x: let x2, y: let y2})
+>                      => (x2 - x) * (y2 - y)
+>          }
+>      }
+>
+> This last example was particularly cryptic to me in its original form
+> ("Which 'x' is which?") but it becomes much clearer with the insertion
+> of the "let" keyword in the appropriate locations.
+
+Record destructuring is confusing for me too, and I agree 'let' makes it 
+much clearer.
+
+>
+>
+> I've skimmed the recent Rust-dev archives, and I saw this thread that
+> discussed the same part of the destructuring syntax from a different
+> point-of-view:
+>   https://mail.mozilla.org/pipermail/rust-dev/2012-August/002258.html
+>
+> (The original poster was concerned more about ambiguity of existing
+> enums vs binding new variables, but we're both focussed on the same
+> part of the syntax.)
+>
+> I think my proposal would address that poster's concerns too, without
+> violating any "Hard requirements", "Misuse avoidances" or "Ergonomics"
+> listed by Graydon Hoare in this reply:
+>   https://mail.mozilla.org/pipermail/rust-dev/2012-August/002272.html
+>
+> This approach would also avoid adding any new sigils, instead re-using
+> a short, existing keyword in a logical (and very minimal) extension of
+> its current meaning.
+>
+
+OK, so how do let bindings work under this scheme? Here's current syntax:
+
+   let (foo, bar) = baz();
+
+Any irrefutable pattern can go after 'let'. So does that become:
+
+   let (let foo, let bar) = baz();
+
+Just writing `(let foo, let bar)`, allowing patterns to begin 
+statements, is probably unparseable.
+
+>
+> == 2. Improving the closure variable binding syntax ==
+>
+> As I mentioned above, my only other issue with the current state of
+> the Rust language is the syntax of closures.  The exotic '|x|' syntax
+> makes closures look cryptic and mysterious.  The use of the pipe sign
+> offers no intuitive (to a C-family programmer) clues as to what '|x|'
+> means or does.
+
+It is an exotic closure syntax.
+
+>
+> I think that closures should be a seamlessly-integrated, decidedly
+> non-exotic part of Rust.  Closures shouldn't seem any more mysterious
+> than heap allocation or pointers.  And finally, it would be nice if
+> the closure variable binding was preceded by the "let" keyword. ;)
+>
+> (I glossed over this point in the previous section, to avoid becoming
+> mired in details, and because closures could sort of be considered
+> functions if you squint at them just right. ;)
+>
+> I'd been staring at my proposed destructuring variable binding syntax
+> for a while, when it dawned on me that a closure is very similar to
+> a destructuring pattern matching arm in an 'match' construct.  If you
+> ignore the different defining characteristics (a closure is allocated
+> somewhere in memory and referenced through a pointer, while a pattern
+> matching arm is just code trapped in an enclosing 'match' construct),
+> you observe that both constructs define unnamed, function-like blocks
+> of code that accept some arity of named parameters and are able to
+> access variables from the enclosing scope.
+>
+> Why not make their syntax more similar to emphasise this similarity?
+> It would make closures seem less mysterious, and the Rust syntax would
+> be more self-consistent overall.
+>
+> To remind you, this is the destructuring variable binding syntax that
+> I'm proposing, in which the variable binding is preceded by "let":
+>      match foo {
+>        /* arms consisting of patterns and expressions or code blocks */
+>        (let x, let y) => /* use x, y, and maybe z from enclosing scope */
+>      }
+>
+> Hence, I propose that the closure syntax be altered from this:
+>      |x, y| { /* use x, y, and maybe z from the enclosing scope */ }
+> to this:
+>      &(let x, let y) => /* use x, y, and maybe z from enclosing scope */
+>
+> This would have the following benefits:
+>
+>   1. Now *all* (really "all", this time ;) non-function-parameter
+>      variable bindings in a function are preceded by the "let" keyword
+>      (which is a more self-explanatory syntax than '|x|', and also
+>      makes it easier to scan to see where a variable was bound).
+
+Since closures are functions and closure arguments are function 
+arguments I don't really see this as being more consistent, but perhaps 
+'differently consistent'.
+
+>
+>   2. The exotic, cryptic '|' sigil is not used.
+
+That is nice.
+
+>
+>   3. Parameter declarations for a function-like code block are enclosed
+>      in the familiar parentheses construct.
+
+Also nice.
+
+>
+>   4. The similarity to the 'match' construct arm is emphasised.
+>
+>   5. Closures are no more mysterious than heap allocation or pointers
+>      (which is made explicit by the pointer sigil out the front).
+>
+> Here is what the examples from the Closures chapter would look like:
+>   http://dl.rust-lang.org/doc/tutorial.html#closures
+>
+>      let bloop = &(let well, let oh: mygoodness) -> what_the => /* ... */;
+>
+>      let mut max = 0;
+>      (~[1, 2, 3]).map(&(let x) => if x > max { max = x });
+>
+>      fn mk_appender(suffix: str) -> fn@(str) -> str {
+>          ret @(let s: str) -> str => s + suffix;
+>      }
+>
+>      fn call_twice(f: fn()) { f(); f(); }
+>      call_twice(&() => ~"I am a stack closure");
+>      call_twice(@() => ~"I am a boxed closure");
+>      call_twice(~() => ~"I am a unique closure");
+>
+> The above example demonstrates the closest this proposed syntax comes
+> to ambiguity:  On its own, @() could be interpreted as "allocate a box
+> of nil on the task heap".  (But unless I'm mistaken, the "fat arrow"
+> that immediately follows would be sufficient to disambiguate?)
+>
+> No other arities of closure even flirt with any potential ambiguity,
+> due to the "let" keyword before the variable name, which distinguishes
+> the closure parameters from a parenthesised variable/enum or a tuple.
+
+Interesting. We'd considered syntaxes like `(foo, bar) => baz` but they 
+couldn't be parsed without unbounded lookahead. Your proposal does seem 
+to fix that problem.
+
+>
+> Finally, the "real use" examples of a closure in combination with the
+> 'each' function:
+>
+>      each(~[1, 2, 3], &(let n) => {
+>          debug!("%i", n);
+>          do_some_work(n);
+>      });
+>
+>      do each(~[1, 2, 3]) &(let n) => {
+>          debug!("%i", n);
+>          do_some_work(n);
+>      }
+
+I would want to still have the option if inferring the storage for the 
+closure, like `do foo.each (let n) => {`.
+
+I do think the 'let's here make the syntax not that aesthetically 
+pleasing. Also the parens for closure syntax make this harder for 
+eyeballs to parse.
+
+   do foo.each(bar) (let baz) => {
+
+The argument lists look pretty similar.
+
+Also:
+
+   do foo.each() () => {
+   do foo.each () => {
+
+Weirdness.
+
+>
+> I find that in these two "real use" examples in particular, changing
+> '|n|' to '&(let n)' improves the self-descriptiveness of the closure
+> syntax.
+>
+>
+> == 3. Conclusion ==
+>
+> In closing, I think that either of these two proposed syntax changes
+> (to the variable binding syntax of destructuring pattern matching and
+> closures) would individually contribute to improving the readability,
+> learnability, predictability and un-ambiguity of the language.
+>
+> Further, I think that the positive effects would be even greater if
+> the syntax changes were applied together, due to the aforementioned
+> emphasis of the similarities of the two constructs and the overall
+> increase in language syntax self-consistency.
+>
+> Thanks for your time,
+
+Thank you. Great suggestions.
+
+-Brian
+
+
+From pwalton at mozilla.com  Mon Sep 10 14:27:33 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Mon, 10 Sep 2012 14:27:33 -0700
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+Message-ID: <504E5B45.7000605@mozilla.com>
+
+Hi,
+
+This leads to this issue:
+
+     let (let x, let y) = (1, 2);
+
+And it would be very difficult to parse something like this:
+
+     (let x, let y) = (1, 2);
+
+Because the parser would have to do unbounded lookahead here to 
+determine whether we're in a pattern or not.
+
+Patrick
+
+From jesse9jones at gmail.com  Mon Sep 10 18:33:20 2012
+From: jesse9jones at gmail.com (Jesse Jones)
+Date: Mon, 10 Sep 2012 18:33:20 -0700
+Subject: [rust-dev] update script
+Message-ID: <7CD0B51D-A15D-4D65-8C3E-59DE6D1637BE@gmail.com>
+
+Not sure how useful this will be but here is a Python script that will update rust source code to a newer flavor of rust. Unfortunately it's for a rust from Sep 1 and it seems like there have even more syntax changes in the interval. 
+
+The script renames keywords (e.g. alt to match), some types (comm::chan to comm:Chan), and macros (#fmt[?] to fmt!()).
+
+  -- Jesse
+
+#!/usr/bin/python
+import os, re, sys, traceback
+
+try:
+    import argparse
+except:
+    sys.stderr.write("This script requires Python 2.7 or later\n")
+    sys.exit(2)
+
+# key is a regex to be match. Note that this will not match within strings or comments.
+# value will replace the first group matched. It may be a string optionally containing back references (e.g. \2 for the second group matched)
+# or a function taking a match object and returning a string.
+code_replacements = {
+    re.compile(r"(?<=\W)alt(?=\W)"):                "match",
+    re.compile(r"(?<=\W)ret(?=\W)"):                "return",
+    re.compile(r"(?<=\W)class(?=\W)"):            "struct",
+    re.compile(r"(?<=\W)iface(?=\W)"):            "trait",
+    re.compile(r"(?<=\W)import(?=\W)"):            "use",
+    re.compile(r"(?<=\W)none(?=\W)"):            "None",
+    re.compile(r"(?<=\W)some(?=\W)"):            "Some",
+    re.compile(r"(?<=\W)comm::chan(?=\W)"):    "comm::Chan",
+    re.compile(r"(?<=\W)comm::port(?=\W)"):    "comm::Port",
+    re.compile(r"(?<=\W)mustache::str(?=\W)"):    "mustache::Str",
+    re.compile(r"(?<=\W)mustache::bool(?=\W)"):"mustache::Bool",
+    re.compile(r"(?<=\W)mustache::vec(?=\W)"):    "mustache::Vec",
+    re.compile(r"(?<=\W)mustache::map(?=\W)"):"mustache::Map",
+    re.compile(r"(?<=\W)mustache::fun(?=\W)"):    "mustache::Fun",
+    re.compile(r"(?<=\W)option::option(?=\W)"):    "option::Option",
+    re.compile(r"(?<=\W)result::ok(?=\W)"):        "result::Ok",    # can't be too aggressive with these because err in particular doesn't always mean result::Err
+    re.compile(r"(?<=\W)result::err(?=\W)"):        "result::Err",
+    re.compile(r"(?<=\W)result::result(?=\W)"):    "result::Result",
+    re.compile(r"(?<=\W)either::either(?=\W)"):    "either::Either",
+    re.compile(r"(?<=\W)left(?=\W)"):            "Left",
+    re.compile(r"(?<=\W)right(?=\W)"):            "Right",
+    
+    re.compile(r"(?<=\W)dvec<(?=\W)"):            "DVec<",
+    re.compile(r"(?<=\W)dvec\((?=\W)"):            "DVec(",
+    re.compile(r"(?<=\W)io::append(?=\W)"):    "io::Append",
+    re.compile(r"(?<=\W)io::create(?=\W)"):        "io::Create",
+    re.compile(r"(?<=\W)io::truncate(?=\W)"):    "io::Truncate",
+    re.compile(r"(?<=\W)io::no_flag(?=\W)"):    "io::NoFlag",
+    re.compile(r"(?<=\W)json::json(?=\W)"):        "json::Json",
+    re.compile(r"(?<=\W)json::num(?=\W)"):        "json::Num",
+    re.compile(r"(?<=\W)json::string(?=\W)"):    "json::String",
+    re.compile(r"(?<=\W)json::boolean(?=\W)"):    "json::Boolean",
+    re.compile(r"(?<=\W)json::list(?=\W)"):        "json::List",
+    re.compile(r"(?<=\W)json::dict(?=\W)"):        "json::Dict",
+    re.compile(r"(?<=\W)json::null(?=\W)"):        "json::Null",
+    re.compile(r"(?<=\W)option<(?=\W)"):        "Option<",
+    re.compile(r"(?<=\W)reader_util(?=\W)"):    "ReaderUtil",
+    re.compile(r"(?<=\W)writer_util(?=\W)"):        "WriterUtil",
+    re.compile(r"(?<=\W)timespec(?=\W)"):        "Timespec",
+    re.compile(r"(?<=\W)tm(?=\W)"):                "Tm",
+    
+    re.compile(r"(?<=\W)with(?=\W)"):    ", ..",
+    
+    # (impl) of? (some_trait) for (some_type)
+    re.compile(r"(impl \s+ (?: <[^>]+>)?) \s* (?: \w+ \s+)? (?: of \s+)? (\w+) \s+ for \s+ ([\w@~[\]<>,\\ ()\-&]+)", re.VERBOSE):    r"\1 \3 : \2 ",
+}
+
+code_warnings = {
+    re.compile(r"(?: enum \s+) ([a-z][\w:]*)", re.VERBOSE):    r"enum \1 is not CamelCase",
+    re.compile(r"(?: trait \s+) ([a-z][\w:]*)", re.VERBOSE):        r"trait \1 is not CamelCase",
+    re.compile(r"(?: impl \s+) ([a-z][\w:]*)", re.VERBOSE):        r"impl \1 is not CamelCase",
+    re.compile(r"(?: struct \s+) ([a-z][\w:]*)", re.VERBOSE):    r"struct \1 is not CamelCase",
+}
+
+# Like code_replacements except that the keys match the entire content.
+full_replacements = {
+    re.compile(r"\#(\w+)\[(.*?)\]"):    r"\1!(\2)",
+    re.compile(r"\#(\w+)\((.*?)\)"):    r"\1!(\2)",
+}
+
+args = None
+not_camel_cased = 0
+
+#                                    comment | comment                    | string                               | char (need to match this to avoid stuff like '"' from hosing us)
+not_code = re.compile(r'''(// .* $)   | (/\* (?: . | \r | \n)*? \*/) | (" ([^"\\] | \\. | \\\n | \\\r)* ") | (' ([^'\\] | \\.)* ')''', re.MULTILINE | re.VERBOSE)
+
+# TODO:
+# somehow add fat arrows to match arms
+# warn if `use std;` is first thing in a crate (needs to be after crate attributes)
+class Process(object):
+    def __init__(self, path):
+        self.__path = path
+    
+    def process(self):
+        if args.verbose >= 3:
+            print "processing %s" % self.__path
+        
+        try:
+            result = ""
+            contents = self.__read_file()
+            contents = self.__process_all(contents)
+            
+            for begin, end, is_code in self.__code_ranges(contents):
+                text = contents[begin:end]
+                if args.verbose >= 4:
+                    print "%s:%s %s" % (begin, end, text)
+                    
+                if is_code:
+                    result += self.__process_code(text)
+                else:
+                    result += text
+                    
+            if result != contents:
+                with open(self.__path, 'w') as f:
+                    f.write(result)
+            
+        except Exception, e:
+            print "Failed to process %s: %s" % (self.__path, e)
+            traceback.print_exc(file=sys.stdout)
+            
+    def __process_all(self, contents):
+        for key, value in full_replacements.items():
+            contents = key.sub(value, contents)
+        return contents
+        
+    def __process_code(self, code):
+        for key, value in code_replacements.items():
+            code = key.sub(value, code)
+        for key, value in code_warnings.items():
+            match = key.search(code)
+            if match:
+                warning = match.expand(value)
+                if 'CamelCase' in warning:
+                    global not_camel_cased
+                    not_camel_cased += 1
+                else:
+                    print warning
+        return code
+        
+    # Generator that returns (begin, end, is_code) indexes for the code regions in the file.
+    # Where code is defined as everything not a comment and not a string.
+    def __code_ranges(self, contents):
+        begin = 0
+        while begin < len(contents):
+            match = not_code.search(contents, begin)
+            if match:
+                end = match.start()
+                yield (begin, end, True)
+                
+                begin = end
+                end = match.end()
+                yield (begin, end, False)
+            else:
+                end = len(contents)
+                yield (begin, end, True)
+            begin = end
+        
+    def __read_file(self):
+        with open(self.__path, 'r') as f:
+            contents = f.read()
+        return contents
+        
+parser = argparse.ArgumentParser(description = "Update *.rs and *.rc files to match rust 0.4 syntax.")
+parser.add_argument("--verbose", "-v", action='count', help = 'print extra information')
+parser.add_argument("root", metavar = "ITEM", help = "path to a rust file file or a directory")
+args = parser.parse_args()
+
+if os.path.isfile(args.root):
+    if os.path.splitext(args.root)[1] == '.rs':
+        process = Process(args.root)
+        process.process()
+    else:
+        print '%s is not a rust file' % args.root
+        sys.exit(1)
+elif os.path.isdir(args.root):
+    for root, dirs, files in os.walk(args.root):
+        for name in files:
+            if os.path.splitext(name)[1] == '.rs':
+                path = os.path.join(root, name)
+                process = Process(path)
+                process.process()
+else:
+    print "%s does not point to a file or a directory" % args.root
+    sys.exit(1)
+
+if not_camel_cased > 0:
+    print "There were %s types not CamelCased: use `#[warn(non_camel_case_types)]` to find them." % not_camel_cased
+
+
+From niko at alum.mit.edu  Mon Sep 10 19:19:17 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Mon, 10 Sep 2012 19:19:17 -0700
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <504E5B45.7000605@mozilla.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E5B45.7000605@mozilla.com>
+Message-ID: <504E9FA5.4000303@alum.mit.edu>
+
+First off, I echo Brian's "thank you" for both the kind words and the 
+well thought out e-mail.  Here are some far less organized thoughts in 
+response.
+
+## Patterns
+
+I think the pattern syntax would have to be that `let` does not 
+(necessarily) immediately precede another binding, but rather another 
+pattern (and the same for `ref`, and perhaps `copy`).  The meaning of 
+such a binding is that all naked identifiers inside become binders.  
+That way, you can write `let (x, y) = pair`.  It also permits something 
+like:
+
+     match (x, (y, z)) {
+         (let a, let (b, c)) => { /*just for the purposes of example*/ }
+     }
+
+I agree with Brian that the use of keywords like `ref` or `copy` in 
+bindings is inconsistent (and in fact argued against them for quite a 
+while) but I'm finding that in practice it's... tolerably nice.
+
+In general, I have found it rather confusing in the past to deal with 
+identifiers and variant names that are not syntactically distinguished 
+(though the trailing dot that was here when I first got here didn't work 
+for me, easy to overlook and impossible to remember, not to mention kind 
+of... random).  I think the move to CamelCase, combined with lint modes 
+for unused pattern bindings, basically solves this issue for me, 
+however.  One thing that our current syntax *cannot *accommodate, 
+however, is references to constants like:
+
+     const magic_number: uint = 0xDEADBEEF;
+     match *x { (magic_number, let foo) => ... }
+
+That would be nice, though it has not come up in practice very often.  
+Still, most languages require something like
+
+     match *x { (mn, foo) if mn == magic_number => ... }
+
+and it's not the end of the world.
+
+So I don't know.  I think preceding with `let` has merit---it's verbose 
+but clear---but I am a bit reluctant to make such a far-reaching change 
+to our syntax.  Still, it's worth discussing a bit more.
+
+## Closure
+
+Regarding the closure syntax, I personally am content with what we 
+have.  It's been a long struggle finding something that we liked and I 
+am reluctant to change it, exotic or no.  The use of vertical bars is 
+exotic but not without precedent (smalltalk, ruby), and I find that
+
+     foo.map(|x| x.something())
+     for vec.each |x| { ... }
+     do with_file("filename") |file_object| { ... }
+
+all read really well, whereas various options
+
+     foo.map(&(let x) => x.something())
+     for vec.each &(let x) => { ... }
+     do with_file("filename") &(file_object) => { ... }
+
+just... don't (not to my eyes, at least).  Moreover, they seem only 
+slightly less exotic to me.  Also, it's worth pointing out that no two 
+languages seem to have the same closure syntax, so I guess some 
+variation is to be expected.
+
+
+Niko
+
+On 9/10/12 2:27 PM, Patrick Walton wrote:
+> Hi,
+>
+> This leads to this issue:
+>
+>     let (let x, let y) = (1, 2);
+>
+> And it would be very difficult to parse something like this:
+>
+>     (let x, let y) = (1, 2);
+>
+> Because the parser would have to do unbounded lookahead here to 
+> determine whether we're in a pattern or not.
+>
+> Patrick
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From j.a.boyden at gmail.com  Mon Sep 10 20:55:49 2012
+From: j.a.boyden at gmail.com (James Boyden)
+Date: Tue, 11 Sep 2012 13:55:49 +1000
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <CABq6+adzvn2CGaayQO2Ru8K+HOo78rh=qXSPDE+EsfHLyosXsg@mail.gmail.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<CABq6+adzvn2CGaayQO2Ru8K+HOo78rh=qXSPDE+EsfHLyosXsg@mail.gmail.com>
+Message-ID: <CACe9Y3rSpcUbMJJQhj+-Ramw_uzXT7RPTUFMe97WA6oq+Kjbkg@mail.gmail.com>
+
+On Tue, Sep 11, 2012 at 5:50 AM, Kevin Cantu <me at kevincantu.org> wrote:
+> While the destructuring / pattern matching lets might be annoying for
+> one-line uses, maybe they'd help with larger blocks of code: maybe the
+> present syntax just hasn't bothered me because I'm so used to Haskell's
+> pattern matching.
+>
+> I like the idea of using `let |x, y| ...`, although I wouldn't want to
+> overload the & for this purpose ( though we already have fn&)...  But my
+> impression is that some much more important -- though less syntactical --
+> changes may be under way with function closures right now.
+
+Hi Kevin,
+
+Thanks for your reply.
+
+Exactly -- I based the use of '&' upon its existing use in the 'fn&'
+syntax in the examples.
+
+I understand that '&' is used in this syntax in contrast to '@' and
+'~', to indicate that the closure is borrowing pointers to variables
+in the enclosing scope, since the closure will live on the stack.
+Contributing to that borrowed/shared/unique distinction seems like
+a non-terrible use of '&' to me.
+
+Aside from that, I used '&' mainly because it appeared in the syntax
+in the examples; it's not something I was specifically advocating.
+
+I'd be interested to read more about these deeper changes to closures
+that are happening.  Is this something discussed on the mailing list?
+
+Thanks,
+jb
+
+From j.a.boyden at gmail.com  Mon Sep 10 21:19:50 2012
+From: j.a.boyden at gmail.com (James Boyden)
+Date: Tue, 11 Sep 2012 14:19:50 +1000
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <504E4F9B.90902@gmail.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E4F9B.90902@gmail.com>
+Message-ID: <CACe9Y3qMt2OJ=LyAtTD9dEnNBQroHRZFEVn6jOizeOzrr3e5dQ@mail.gmail.com>
+
+On Tue, Sep 11, 2012 at 6:37 AM, Gareth Smith
+<garethdanielsmith at gmail.com> wrote:
+> Hi James,
+>
+> The pattern matching syntax is pretty consistent with Haskell, Ocaml, SML
+> and similar-ish statically typed functional languages. I like it because it
+> is concise and because a pattern is syntactically identical or at least
+> similar to the the value literals that produce the types that it matches.
+
+Hi Gareth,
+
+Thanks for your reply.
+
+I understand that a lot of Rust is strongly influenced by Haskell and
+OCaml (which, speaking as someone who has often felt guilty that he's
+never been able to give these languages the attention they deserve,
+I'm very happy about  :)  ).
+
+If these parts of the syntax were stumbling blocks to me (a C-family
+programmer with some, but not a lot, of non-C-family familiarity),
+it seems likely to me that they will be stumbling blocks to others in
+the same situation.
+
+It's also very interesting to me that you specifically like the syntax
+because it's very similar to the value literals.
+
+Part of my reasoning for inserting a keyword is precisely because I
+think the syntax is *too* similar.  Firstly, when I'm expecting
+(at least, naively) just to match literals, there's now this implicit,
+completely un-marked binding of variables -- unexpected behaviour.
+The "let" keyword both describes the behaviour and makes it stand out.
+
+Further, as the previous mailing list thread on this topic discussed,
+this has the potential to clash with enum identifiers which are being
+used in place of literals.
+
+Finally, in the struct destructuring examples in particular, the
+minimal and very unobtrusive syntax made it difficult for me to
+determine (without some significant attention and deduction) what was
+a new binding and what was a field name.
+
+So in fact, I'm proposing the syntax changes for reasons that directly
+counter your reasons for liking the current syntax.  Sorry...  :)
+
+jb
+
+From j.a.boyden at gmail.com  Mon Sep 10 22:58:30 2012
+From: j.a.boyden at gmail.com (James Boyden)
+Date: Tue, 11 Sep 2012 15:58:30 +1000
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <504E50EB.8070205@mozilla.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E50EB.8070205@mozilla.com>
+Message-ID: <CACe9Y3qy-2vsJhDLi_x4fPNx601ejwD_5oNn2KhO+_iABTaT7A@mail.gmail.com>
+
+Hi Brian,
+Thanks so much for your detailed reply.
+
+On Tue, Sep 11, 2012 at 6:43 AM, Brian Anderson <banderson at mozilla.com> wrote:
+> I'll mention that both the pattern matching and closure syntaxes are very
+> cramped, with a lot of competing requirements.
+
+Yes, I can imagine.  In particular, I imagine that being relatively
+terse is one them, given that pattern matching and closures will be
+frequently-used parts of the language.  I was mindful of the number
+of typed characters in what I was proposing.
+
+However, it's precisely due to the importance of these language
+features (which was apparent to me as I read the Tutorial) that I
+think these features should be non-scary (to newcomers) and non-
+error-prone (to less-experienced programmers).
+
+
+> I think that most people will see this as too verbose, but I am sort of
+> warming to this and the reason is `ref`. Currently, patterns implicitly bind
+> by reference, but in the future they will create a copy, and to bind a
+> reference you will need to write `ref`, as in `(0f, ref y) =>`. This is the
+> only place that `ref` exists in the language. Saying that a binding is
+> always introduced using either `let` or `ref` at least makes `ref` not stand
+> out as bad. Of course, to be consistent with the goal of always using `let`,
+> we would probably have to use `let ref` and then we're sort of back in the
+> same spot.
+
+Ah, this is very interesting, thanks for this.  I've been thinking
+about pointers and references in Rust quite a bit recently, to ensure
+I have a clear understanding of '&' in particular, especially as I've
+digested the points made in the recent "weirdness of strings" thread:
+ https://mail.mozilla.org/pipermail/rust-dev/2012-September/002315.html
+
+After a bit of thought about this 'ref' keyword, and the 'let ref'
+issue you point out, it would seem completely reasonable to me for
+Rust to have mutually-exclusive 'let' and 'ref' keywords, just as
+there is a separate 'const' keyword.  So it would be 'ref y', not
+'let ref y'.
+
+'ref' could potentially be defined generally (i.e., able to be used
+outside pattern matching) as "introduce a binding that simply acts as
+an alias to an existing storage unit on the stack", in contrast to
+'let' as "introduce a binding and allocate a new storage unit on the
+stack and copy the r-value".
+
+This 'ref' keyword would also seem to me to be a better fit than 'let'
+for the named parameters of closures.  (Initially, I thought 'let'
+would be more appropriate, since a non-stack closure might outlive
+the current stack.  But on further thought, I realised that any other
+local variables referenced inside the closure are not specifically
+"re-let", but are instead copied implicitly based upon the type of
+the closure.  So it would be reasonable to use 'ref' for the named
+parameters and copy them implicitly too if the type of the closure
+specifies it.)
+
+
+> OK, so how do let bindings work under this scheme? Here's current syntax:
+>
+>   let (foo, bar) = baz();
+>
+> Any irrefutable pattern can go after 'let'. So does that become:
+>
+>   let (let foo, let bar) = baz();
+>
+> Just writing `(let foo, let bar)`, allowing patterns to begin statements, is
+> probably unparseable.
+
+Since tuple destructuring occurs as a stand-alone statement outside of
+a pattern matching construct, it would seem quite reasonable to me
+for the lang spec to simply define that in this particular situation,
+the syntax is:
+    let (foo, bar) = baz;
+
+If the inevitable question-asking idealists such as myself ask why
+the syntax isn't the slightly more-consistent:
+    (let foo, let bar) = baz;
+, I think it would be quite reasonable to say "because it's a
+stand-alone statement, so that wouldn't parse, so instead we do it
+this way".  In such a situation, I'd accept that as an answer.
+
+The presence of a 'let' keyword to indicate new variable bindings
+would keep me happy; and of course no-one who's actually planning on
+typing this every day would insist upon additional 'let' keywords
+inside the tuple when there's already a 'let' keyword immediately
+in front.
+
+I think it's worth pre-emptively clarifying the distinction in my mind
+between this tuple destructuring situation vs the partially-literal
+destructuring pattern and the struct destructuring pattern.
+
+I would argue there's no need to target specific variables in the
+tuple destructuring (using immediately-preceding 'let'/'ref' keywords)
+because all the variables in the tuple are being bound and there are
+no other identifiers or tokens in there.
+
+To me, this contrasts with a partially-literal destructuring pattern
+(where only some of the tuple members are variables that are being
+bound, while other tuple members are literals or enums) and a struct
+destructuring pattern (in which the 'let'/'ref' keyword needs to be
+precisely located, to differentiate the newly-bound variable name
+from the struct field name).
+
+
+> I would want to still have the option if inferring the storage for the
+> closure, like `do foo.each (let n) => {`.
+
+I wouldn't have any objections to this.  As I mentioned in my reply
+to Kevin, I included the '&' because I was reproducing the examples
+as closely as possible.  I have no specific argument for or against
+the use of the '&'.
+
+> I do think the 'let's here make the syntax not that aesthetically pleasing.
+> Also the parens for closure syntax make this harder for eyeballs to parse.
+
+I actually find the parentheses easier to eyeball-parse as "inside vs
+outside the parameter list" than the directionless pipe sigils.
+
+>   do foo.each(bar) (let baz) => {
+>
+> The argument lists look pretty similar.
+>
+> Also:
+>
+>   do foo.each() () => {
+>   do foo.each () => {
+>
+> Weirdness.
+
+I haven't seen any examples in the Tutorial or Reference Manual where
+'each' is a method rather than a stand-alone function.  Would you have
+any pointers to docs that I could read about this?
+
+In particular, what are 'foo' and 'bar' in the above example?
+
+
+Thanks again for your very detailed reply.  Sorry for sending you
+even more to read from me now.  :)
+
+jb
+
+From j.a.boyden at gmail.com  Mon Sep 10 23:15:08 2012
+From: j.a.boyden at gmail.com (James Boyden)
+Date: Tue, 11 Sep 2012 16:15:08 +1000
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <504E5B45.7000605@mozilla.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E5B45.7000605@mozilla.com>
+Message-ID: <CACe9Y3pi9OGx=YgMefMHzeir1+no5eC+1K6FD6c_Nh=X4SMhAQ@mail.gmail.com>
+
+On Tue, Sep 11, 2012 at 7:27 AM, Patrick Walton <pwalton at mozilla.com> wrote:
+> Hi,
+>
+> This leads to this issue:
+>
+>     let (let x, let y) = (1, 2);
+>
+> And it would be very difficult to parse something like this:
+>
+>     (let x, let y) = (1, 2);
+>
+> Because the parser would have to do unbounded lookahead here to determine
+> whether we're in a pattern or not.
+
+Hi Patrick,
+
+Thanks for your reply.
+
+I'm sure you've already seen and read my more-detailed reply to Brian
+by now, but just for the sake of conversation thread completeness
+in the mailing-list archives, I wouldn't have any objections to the
+lang spec defining a stand-alone tuple destructuring 'let' statement
+as syntax that "just is".
+
+(Particularly given the difficulty of implementing the alternative.)
+
+Thanks,
+jb
+
+From j.a.boyden at gmail.com  Tue Sep 11 00:54:49 2012
+From: j.a.boyden at gmail.com (James Boyden)
+Date: Tue, 11 Sep 2012 17:54:49 +1000
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <504E9FA5.4000303@alum.mit.edu>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E5B45.7000605@mozilla.com> <504E9FA5.4000303@alum.mit.edu>
+Message-ID: <CACe9Y3r-_Mnp3Rwb0hmWa=9eMeAHkbtZFnP5iuGToozCw3d1dw@mail.gmail.com>
+
+On Tue, Sep 11, 2012 at 12:19 PM, Niko Matsakis <niko at alum.mit.edu> wrote:
+> First off, I echo Brian's "thank you" for both the kind words and the well
+> thought out e-mail.  Here are some far less organized thoughts in response.
+
+Hi Niko,
+
+Thanks for your detailed response.  (It's funny, both you and Brian
+apologized for the brevity of your responses, but I found that both
+had just the right amount of detail.)
+
+
+> ## Patterns
+>
+> I think the pattern syntax would have to be that `let` does not
+> (necessarily) immediately precede another binding, but rather another
+> pattern (and the same for `ref`, and perhaps `copy`).  The meaning of such a
+> binding is that all naked identifiers inside become binders.  That way, you
+> can write `let (x, y) = pair`.  It also permits something like:
+>
+>     match (x, (y, z)) {
+>         (let a, let (b, c)) => { /*just for the purposes of example*/ }
+>     }
+
+After conceding to a single-'let'-out-front tuple destructuring syntax
+before, on the grounds of pragmatism with no apparent ill effects,
+I can't really argue against the same thing here.  ;)
+
+But I should emphasise that if such a tuple were allowed to contain
+anything other than naked identifiers to be bound (i.e. things such as
+literals, enums, etc.), then from my perspective that would neutralize
+much of the benefit in introducing 'let' in the destructuring pattern.
+
+Particularly in the case of enums or other "variable-like identifiers"
+that look (to either a human or compiler) like variables to be bound,
+but aren't:  Even if an omniscient programmer knew that 'foo' was an
+enum defined elsewhere, there would no longer be a guarantee to the
+non-omniscient reader that everything inside the tuple is a variable
+to be bound.
+
+I would also argue that such a single-'let'-out-front concession
+should not be applied to struct patterns:  One of the key benefits
+of introducing 'let' in struct patterns is to disambiguate variable
+bindings from struct field names, which requires having the 'let'
+directly in front of the variable binding.
+
+
+> I agree with Brian that the use of keywords like `ref` or `copy` in bindings
+> is inconsistent (and in fact argued against them for quite a while) but I'm
+> finding that in practice it's... tolerably nice.
+>
+> In general, I have found it rather confusing in the past to deal with
+> identifiers and variant names that are not syntactically distinguished
+> (though the trailing dot that was here when I first got here didn't work for
+> me, easy to overlook and impossible to remember, not to mention kind of...
+> random).  I think the move to CamelCase, combined with lint modes for unused
+> pattern bindings, basically solves this issue for me, however.  One thing
+> that our current syntax *cannot *accommodate, however, is references to
+> constants like:
+>
+>     const magic_number: uint = 0xDEADBEEF;
+>     match *x { (magic_number, let foo) => ... }
+>
+> That would be nice, though it has not come up in practice very often.
+> Still, most languages require something like
+>
+>     match *x { (mn, foo) if mn == magic_number => ... }
+>
+> and it's not the end of the world.
+>
+> So I don't know.  I think preceding with `let` has merit---it's verbose but
+> clear---but I am a bit reluctant to make such a far-reaching change to our
+> syntax.  Still, it's worth discussing a bit more.
+
+I understand.
+Thanks for your patience and open-mindedness to discussing this
+at this stage.
+
+
+> ## Closure
+>
+> Regarding the closure syntax, I personally am content with what we have.
+> It's been a long struggle finding something that we liked and I am reluctant
+> to change it, exotic or no.  The use of vertical bars is exotic but not
+> without precedent (smalltalk, ruby),
+
+Ah, thanks for that.  I knew the syntax in Python and Lisp, and I
+looked up the syntax for Haskell and ML on Wikipedia, but I didn't
+think to check Ruby or Smalltalk.
+
+> and I find that
+>
+>     foo.map(|x| x.something())
+>     for vec.each |x| { ... }
+>     do with_file("filename") |file_object| { ... }
+>
+> all read really well, whereas various options
+>
+>     foo.map(&(let x) => x.something())
+>     for vec.each &(let x) => { ... }
+>     do with_file("filename") &(file_object) => { ... }
+>
+> just... don't (not to my eyes, at least).  Moreover, they seem only slightly
+> less exotic to me.
+
+It's possible that my preference for syntax like '(let x)' is evidence
+that I'm a little too fond of Lisp.  ;)
+
+Thanks again,
+jb
+
+From niko at alum.mit.edu  Tue Sep 11 07:14:58 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Tue, 11 Sep 2012 07:14:58 -0700
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <CACe9Y3r-_Mnp3Rwb0hmWa=9eMeAHkbtZFnP5iuGToozCw3d1dw@mail.gmail.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E5B45.7000605@mozilla.com> <504E9FA5.4000303@alum.mit.edu>
+	<CACe9Y3r-_Mnp3Rwb0hmWa=9eMeAHkbtZFnP5iuGToozCw3d1dw@mail.gmail.com>
+Message-ID: <504F4762.4060007@alum.mit.edu>
+
+On 9/11/12 12:54 AM, James Boyden wrote:
+> I would also argue that such a single-'let'-out-front concession
+> should not be applied to struct patterns:  One of the key benefits
+> of introducing 'let' in struct patterns is to disambiguate variable
+> bindings from struct field names, which requires having the 'let'
+> directly in front of the variable binding.
+
+So you would write:
+
+     let Foo { x: let x, y: let y } = ...;
+
+?
+
+
+Niko
+
+From j.a.boyden at gmail.com  Tue Sep 11 08:06:27 2012
+From: j.a.boyden at gmail.com (James Boyden)
+Date: Wed, 12 Sep 2012 01:06:27 +1000
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <504F4762.4060007@alum.mit.edu>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E5B45.7000605@mozilla.com> <504E9FA5.4000303@alum.mit.edu>
+	<CACe9Y3r-_Mnp3Rwb0hmWa=9eMeAHkbtZFnP5iuGToozCw3d1dw@mail.gmail.com>
+	<504F4762.4060007@alum.mit.edu>
+Message-ID: <CACe9Y3on4se9oXpMKp+EHi4v4caWEtPhXs67+wq5_cRfHoKOVQ@mail.gmail.com>
+
+On Wed, Sep 12, 2012 at 12:14 AM, Niko Matsakis <niko at alum.mit.edu> wrote:
+> On 9/11/12 12:54 AM, James Boyden wrote:
+>>
+>> I would also argue that such a single-'let'-out-front concession
+>> should not be applied to struct patterns:  One of the key benefits
+>> of introducing 'let' in struct patterns is to disambiguate variable
+>> bindings from struct field names, which requires having the 'let'
+>> directly in front of the variable binding.
+>
+> So you would write:
+>     let Foo { x: let x, y: let y } = ...;
+> ?
+
+I was referring to struct destructuring inside a match pattern,
+so there would never be a 'let' in front of 'Foo', nor an assignment
+after the closing brace; it would just be:
+
+    Foo { x: let x2, y: let y2 } => /* Do something with x2 and y2 */
+
+Are you saying that struct destructuring also occurs outside of
+match constructs, as a stand-alone assignment statement?
+
+It was my understanding that only tuples appear in (and require)
+a stand-alone destructuring assignment statement, since struct fields
+can be accessed using the dot operator.
+
+Thanks,
+jb
+
+From marijnh at gmail.com  Tue Sep 11 08:10:37 2012
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 11 Sep 2012 17:10:37 +0200
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <CACe9Y3on4se9oXpMKp+EHi4v4caWEtPhXs67+wq5_cRfHoKOVQ@mail.gmail.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E5B45.7000605@mozilla.com> <504E9FA5.4000303@alum.mit.edu>
+	<CACe9Y3r-_Mnp3Rwb0hmWa=9eMeAHkbtZFnP5iuGToozCw3d1dw@mail.gmail.com>
+	<504F4762.4060007@alum.mit.edu>
+	<CACe9Y3on4se9oXpMKp+EHi4v4caWEtPhXs67+wq5_cRfHoKOVQ@mail.gmail.com>
+Message-ID: <CAJnHWXtZFURJ1UH1jbWpeOPLO4BvXwnW2G__J-uy5O0=+QXEPw@mail.gmail.com>
+
+> Are you saying that struct destructuring also occurs outside of
+> match constructs, as a stand-alone assignment statement?
+
+Yes, he is, and that fact is one of the major constraints on what
+patterns may look like. The same pattern syntax is used in regular
+assignment and alt matching.
+
+Best,
+Marijn
+
+From j.a.boyden at gmail.com  Tue Sep 11 08:36:17 2012
+From: j.a.boyden at gmail.com (James Boyden)
+Date: Wed, 12 Sep 2012 01:36:17 +1000
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <CAJnHWXtZFURJ1UH1jbWpeOPLO4BvXwnW2G__J-uy5O0=+QXEPw@mail.gmail.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E5B45.7000605@mozilla.com> <504E9FA5.4000303@alum.mit.edu>
+	<CACe9Y3r-_Mnp3Rwb0hmWa=9eMeAHkbtZFnP5iuGToozCw3d1dw@mail.gmail.com>
+	<504F4762.4060007@alum.mit.edu>
+	<CACe9Y3on4se9oXpMKp+EHi4v4caWEtPhXs67+wq5_cRfHoKOVQ@mail.gmail.com>
+	<CAJnHWXtZFURJ1UH1jbWpeOPLO4BvXwnW2G__J-uy5O0=+QXEPw@mail.gmail.com>
+Message-ID: <CACe9Y3o_ekViv+ZVdB-J057KvC4H+im=zxDBoeuEp2A9SkCqSw@mail.gmail.com>
+
+On Wed, Sep 12, 2012 at 1:10 AM, Marijn Haverbeke <marijnh at gmail.com> wrote:
+>> Are you saying that struct destructuring also occurs outside of
+>> match constructs, as a stand-alone assignment statement?
+>
+> Yes, he is, and that fact is one of the major constraints on what
+> patterns may look like. The same pattern syntax is used in regular
+> assignment and alt matching.
+
+Ah, thank you for the clarification.  I was not aware that such an
+operation could occur.  (There are no examples of anything like it
+in the Tutorial or Reference Manual.)
+
+I wouldn't be particularly keen on a 'let'-laden syntax like:
+    let Foo { x: let x, y: let y } = ...;
+
+The obvious alternative is a version without an initial 'let':
+    Foo { x: let x, y: let y } = ...;
+
+But would this be parseable?
+
+And even if it _were_ parseable, it's still closer to the "subtle" end
+of the statement spectrum than I'd like -- you don't really know what
+you're looking at until you reach the 4th whitespace-delimited token.
+
+I'll have to think about this further.
+
+Thanks,
+jb
+
+From nejucomo at gmail.com  Tue Sep 11 11:11:43 2012
+From: nejucomo at gmail.com (Nathan)
+Date: Tue, 11 Sep 2012 11:11:43 -0700
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <CACe9Y3o_ekViv+ZVdB-J057KvC4H+im=zxDBoeuEp2A9SkCqSw@mail.gmail.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E5B45.7000605@mozilla.com> <504E9FA5.4000303@alum.mit.edu>
+	<CACe9Y3r-_Mnp3Rwb0hmWa=9eMeAHkbtZFnP5iuGToozCw3d1dw@mail.gmail.com>
+	<504F4762.4060007@alum.mit.edu>
+	<CACe9Y3on4se9oXpMKp+EHi4v4caWEtPhXs67+wq5_cRfHoKOVQ@mail.gmail.com>
+	<CAJnHWXtZFURJ1UH1jbWpeOPLO4BvXwnW2G__J-uy5O0=+QXEPw@mail.gmail.com>
+	<CACe9Y3o_ekViv+ZVdB-J057KvC4H+im=zxDBoeuEp2A9SkCqSw@mail.gmail.com>
+Message-ID: <CA+4_Dk6Xht94FECBLN5JrhNR3eJOPG5_oMGih3a52u7czRWa1Q@mail.gmail.com>
+
+Hello,
+
+I posted earlier about the confusion between enum discriminators and
+new bindings.  James Boyden described the desire for consistency,
+which is a more general version of my concern.
+
+Here's another perspective: IDE support.
+
+I propose that the target IDE for a language should be find and grep.  ;-)
+
+In python, if I want to find every definition of a function, I can
+grep for "def " (or "def |lambda " perhaps).  What if I want to find
+every reference introduction?  No such luck.
+
+Have you ever tried to write a grep that finds function prototypes in
+C?  Kind of impossible but kind of doable with hacky approaches that
+have false positives/negatives.
+
+How about C++ with templates?
+
+
+Wouldn't it be nice if one could answer all of these questions with
+find and grep?
+
+1. What are all of the named function definitions inside this source tree?
+2. Where is function foo defined?  (Notice, this could be a named
+function definition or a reference to a function.)
+3. Is "bar" ever shadowed in this .rs file?
+
+... etc...
+
+Rich IDEs or source analysis tools like ctags are incredibly useful
+for the language they target, but that's one more language-specific
+tool that I have to learn, whereas I already know grep.
+
+I don't want to propose any specific syntax changes here, I just want
+to suggest this perspective in syntax design.  If rust adopted James's
+suggestion, we could find|grep for "let" to see where all bindings are
+declared.  That'd be quite useful in some circumstances.
+
+
+As a slight tangent: I'd like to see all of the rust compiler packaged
+into a clean modular interface which is highly available (perhaps even
+in std::rust for example), so that IDE / analysis tool authors have a
+leg up on writing parsers, code prettifiers, etc...
+
+
+Regards,
+Nathan
+
+
+On Tue, Sep 11, 2012 at 8:36 AM, James Boyden <j.a.boyden at gmail.com> wrote:
+> On Wed, Sep 12, 2012 at 1:10 AM, Marijn Haverbeke <marijnh at gmail.com> wrote:
+>>> Are you saying that struct destructuring also occurs outside of
+>>> match constructs, as a stand-alone assignment statement?
+>>
+>> Yes, he is, and that fact is one of the major constraints on what
+>> patterns may look like. The same pattern syntax is used in regular
+>> assignment and alt matching.
+>
+> Ah, thank you for the clarification.  I was not aware that such an
+> operation could occur.  (There are no examples of anything like it
+> in the Tutorial or Reference Manual.)
+>
+> I wouldn't be particularly keen on a 'let'-laden syntax like:
+>     let Foo { x: let x, y: let y } = ...;
+>
+> The obvious alternative is a version without an initial 'let':
+>     Foo { x: let x, y: let y } = ...;
+>
+> But would this be parseable?
+>
+> And even if it _were_ parseable, it's still closer to the "subtle" end
+> of the statement spectrum than I'd like -- you don't really know what
+> you're looking at until you reach the 4th whitespace-delimited token.
+>
+> I'll have to think about this further.
+>
+> Thanks,
+> jb
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+From pwalton at mozilla.com  Tue Sep 11 11:13:14 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Tue, 11 Sep 2012 11:13:14 -0700
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <CA+4_Dk6Xht94FECBLN5JrhNR3eJOPG5_oMGih3a52u7czRWa1Q@mail.gmail.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E5B45.7000605@mozilla.com> <504E9FA5.4000303@alum.mit.edu>
+	<CACe9Y3r-_Mnp3Rwb0hmWa=9eMeAHkbtZFnP5iuGToozCw3d1dw@mail.gmail.com>
+	<504F4762.4060007@alum.mit.edu>
+	<CACe9Y3on4se9oXpMKp+EHi4v4caWEtPhXs67+wq5_cRfHoKOVQ@mail.gmail.com>
+	<CAJnHWXtZFURJ1UH1jbWpeOPLO4BvXwnW2G__J-uy5O0=+QXEPw@mail.gmail.com>
+	<CACe9Y3o_ekViv+ZVdB-J057KvC4H+im=zxDBoeuEp2A9SkCqSw@mail.gmail.com>
+	<CA+4_Dk6Xht94FECBLN5JrhNR3eJOPG5_oMGih3a52u7czRWa1Q@mail.gmail.com>
+Message-ID: <504F7F3A.9060501@mozilla.com>
+
+On 9/11/12 11:11 AM, Nathan wrote:
+> As a slight tangent: I'd like to see all of the rust compiler packaged
+> into a clean modular interface which is highly available (perhaps even
+> in std::rust for example), so that IDE / analysis tool authors have a
+> leg up on writing parsers, code prettifiers, etc...
+
+libsyntax (the syntax part of the parser) is usable by external tools.
+
+Patrick
+
+
+From pwalton at mozilla.com  Tue Sep 11 11:13:38 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Tue, 11 Sep 2012 11:13:38 -0700
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <504F7F3A.9060501@mozilla.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E5B45.7000605@mozilla.com> <504E9FA5.4000303@alum.mit.edu>
+	<CACe9Y3r-_Mnp3Rwb0hmWa=9eMeAHkbtZFnP5iuGToozCw3d1dw@mail.gmail.com>
+	<504F4762.4060007@alum.mit.edu>
+	<CACe9Y3on4se9oXpMKp+EHi4v4caWEtPhXs67+wq5_cRfHoKOVQ@mail.gmail.com>
+	<CAJnHWXtZFURJ1UH1jbWpeOPLO4BvXwnW2G__J-uy5O0=+QXEPw@mail.gmail.com>
+	<CACe9Y3o_ekViv+ZVdB-J057KvC4H+im=zxDBoeuEp2A9SkCqSw@mail.gmail.com>
+	<CA+4_Dk6Xht94FECBLN5JrhNR3eJOPG5_oMGih3a52u7czRWa1Q@mail.gmail.com>
+	<504F7F3A.9060501@mozilla.com>
+Message-ID: <504F7F52.2030401@mozilla.com>
+
+On 9/11/12 11:13 AM, Patrick Walton wrote:
+> On 9/11/12 11:11 AM, Nathan wrote:
+>> As a slight tangent: I'd like to see all of the rust compiler packaged
+>> into a clean modular interface which is highly available (perhaps even
+>> in std::rust for example), so that IDE / analysis tool authors have a
+>> leg up on writing parsers, code prettifiers, etc...
+>
+> libsyntax (the syntax part of the parser) is usable by external tools.
+
+Err, the syntax part of the *compiler*.
+
+Patrick
+
+
+From ben.striegel at gmail.com  Tue Sep 11 11:21:08 2012
+From: ben.striegel at gmail.com (Benjamin Striegel)
+Date: Tue, 11 Sep 2012 14:21:08 -0400
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <CACe9Y3o_ekViv+ZVdB-J057KvC4H+im=zxDBoeuEp2A9SkCqSw@mail.gmail.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E5B45.7000605@mozilla.com> <504E9FA5.4000303@alum.mit.edu>
+	<CACe9Y3r-_Mnp3Rwb0hmWa=9eMeAHkbtZFnP5iuGToozCw3d1dw@mail.gmail.com>
+	<504F4762.4060007@alum.mit.edu>
+	<CACe9Y3on4se9oXpMKp+EHi4v4caWEtPhXs67+wq5_cRfHoKOVQ@mail.gmail.com>
+	<CAJnHWXtZFURJ1UH1jbWpeOPLO4BvXwnW2G__J-uy5O0=+QXEPw@mail.gmail.com>
+	<CACe9Y3o_ekViv+ZVdB-J057KvC4H+im=zxDBoeuEp2A9SkCqSw@mail.gmail.com>
+Message-ID: <CAAvrL-mvSfFfBBEo27ghjQF5p_43f8GS6_ua5gvVWZUb1FU3eQ@mail.gmail.com>
+
+> Ah, thank you for the clarification.  I was not aware that such an
+> operation could occur.  (There are no examples of anything like it
+> in the Tutorial or Reference Manual.)
+
+Be sure that you're looking at the up-to-date docs:
+
+http://dl.rust-lang.org/doc/tutorial.html#structs
+
+"Rust struct types must be declared before they are used using the
+structsyntax: struct
+Name { field1: T1, field2: T2 [, ...] }, where T1, T2, ... denote types. To
+construct a struct, use the same syntax, but leave off the struct; for
+example: Point { x: 1.0, y: 2.0 }."
+
+Note that these are *not* the docs linked from the rust-lang.org homepage.
+
+FWIW, I really love Rust's closure syntax. And since no two languages can
+agree on closure syntax, there's really no single "right" way to do it.
+
+On Tue, Sep 11, 2012 at 11:36 AM, James Boyden <j.a.boyden at gmail.com> wrote:
+
+> On Wed, Sep 12, 2012 at 1:10 AM, Marijn Haverbeke <marijnh at gmail.com>
+> wrote:
+> >> Are you saying that struct destructuring also occurs outside of
+> >> match constructs, as a stand-alone assignment statement?
+> >
+> > Yes, he is, and that fact is one of the major constraints on what
+> > patterns may look like. The same pattern syntax is used in regular
+> > assignment and alt matching.
+>
+> Ah, thank you for the clarification.  I was not aware that such an
+> operation could occur.  (There are no examples of anything like it
+> in the Tutorial or Reference Manual.)
+>
+> I wouldn't be particularly keen on a 'let'-laden syntax like:
+>     let Foo { x: let x, y: let y } = ...;
+>
+> The obvious alternative is a version without an initial 'let':
+>     Foo { x: let x, y: let y } = ...;
+>
+> But would this be parseable?
+>
+> And even if it _were_ parseable, it's still closer to the "subtle" end
+> of the statement spectrum than I'd like -- you don't really know what
+> you're looking at until you reach the 4th whitespace-delimited token.
+>
+> I'll have to think about this further.
+>
+> Thanks,
+> jb
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120911/5274acf4/attachment.html>
+
+From graydon at mozilla.com  Tue Sep 11 13:02:01 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 11 Sep 2012 13:02:01 -0700
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <CA+4_Dk6Xht94FECBLN5JrhNR3eJOPG5_oMGih3a52u7czRWa1Q@mail.gmail.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E5B45.7000605@mozilla.com> <504E9FA5.4000303@alum.mit.edu>
+	<CACe9Y3r-_Mnp3Rwb0hmWa=9eMeAHkbtZFnP5iuGToozCw3d1dw@mail.gmail.com>
+	<504F4762.4060007@alum.mit.edu>
+	<CACe9Y3on4se9oXpMKp+EHi4v4caWEtPhXs67+wq5_cRfHoKOVQ@mail.gmail.com>
+	<CAJnHWXtZFURJ1UH1jbWpeOPLO4BvXwnW2G__J-uy5O0=+QXEPw@mail.gmail.com>
+	<CACe9Y3o_ekViv+ZVdB-J057KvC4H+im=zxDBoeuEp2A9SkCqSw@mail.gmail.com>
+	<CA+4_Dk6Xht94FECBLN5JrhNR3eJOPG5_oMGih3a52u7czRWa1Q@mail.gmail.com>
+Message-ID: <504F98B9.8020505@mozilla.com>
+
+On 12-09-11 11:11 AM, Nathan wrote:
+
+> Wouldn't it be nice if one could answer all of these questions with
+> find and grep?
+
+It would be, but even in asm that is tricky.
+
+> I don't want to propose any specific syntax changes here, I just want
+> to suggest this perspective in syntax design.  If rust adopted James's
+> suggestion, we could find|grep for "let" to see where all bindings are
+> declared.  That'd be quite useful in some circumstances.
+
+It won't, sadly. We still have a macro system.
+
+> As a slight tangent: I'd like to see all of the rust compiler packaged
+> into a clean modular interface which is highly available (perhaps even
+> in std::rust for example), so that IDE / analysis tool authors have a
+> leg up on writing parsers, code prettifiers, etc...
+
+Yes, this has been a design goal all along. We expect to continue to 
+structure it with an eye to this sort of external use. And dogfooded to 
+the extent that we write our own tools (fuzzer, rustdoc, rustc, 
+soon-to-be rustfmt, etc.) using same.
+
+-Graydon
+
+
+From graydon at mozilla.com  Tue Sep 11 14:10:10 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 11 Sep 2012 14:10:10 -0700
+Subject: [rust-dev] Proposal/request to precede variable binding with
+ "let" in destructuring pattern matching and closures
+In-Reply-To: <504E5B45.7000605@mozilla.com>
+References: <CACe9Y3r8UCW-K-gOmuu8ZwhtQozpvG8cbk-kyYDOgpMujigUCg@mail.gmail.com>
+	<504E5B45.7000605@mozilla.com>
+Message-ID: <504FA8B2.1080902@mozilla.com>
+
+On 12-09-10 2:27 PM, Patrick Walton wrote:
+> Hi,
+>
+> This leads to this issue:
+>
+>      let (let x, let y) = (1, 2);
+>
+> And it would be very difficult to parse something like this:
+>
+>      (let x, let y) = (1, 2);
+>
+> Because the parser would have to do unbounded lookahead here to
+> determine whether we're in a pattern or not.
+
+Yeah. I have read through this thread and while I'm sympathetic to the 
+desire (you may recall I used to feel that ?x on variable-captures was 
+ideal) I'm not too warm to the actual details here.
+
+Most syntax changes are a mixture of goods and bads and while I'm the 
+first to admit the residual sore spots in ours (I hit the 
+pattern-match-against-a-constant today, grr) I don't think the 'let to 
+bind each var' thing is going to help more than it hurts. Winds up 
+needing to add more special cases for the top-level-destructuring-let 
+and not-required-lets-when-nested cases, and makes things chattier.
+
+This particular horse keeps coming up for a further kicking, so it may 
+not be _entirely_ dead yet. If I can concentrate the matter a bit in 
+order to clarify what you're dealing with: you need to figure out a way 
+to make these minimal cases not explode in a shower of ugly:
+
+  "let x = 10;"                            // Simple let
+  "let (x,y) = foo();"                     // Destructuring let
+  "match x { Red => 1, Green => 2 }"       // Ctors alone
+  "match x { Foo {a, b} => a+b, _ => 2 }"  // Ctors with destructuring
+  "match x { Foo {ref a, ..} => z }"       // &-based destructuring
+
+They work today, but only at the cost of some resolution-ambiguity 
+between constructors and captures. And they don't handle matching named 
+constants (thought this could probably be shoved back to "working" if we 
+changed the resolution disambiguation rule a bit).
+
+It's a super cramped space. Everyone wants to be in sigil-free, 
+qualifier-free position. We've been struggling with the tradeoffs here 
+for nearly a year and a half, but by all means, keep trying to arrange 
+it into a tighter bundle than we've got.
+
+As for lambda ... well, there's quite a variety to pick from:
+
+http://rigaux.org/language-study/syntax-across-languages/Fnctn.html#FnctnnnmsFnct
+
+I'm finding ours works well, particularly given the integration with our 
+block-forms, which are probably the main use-case. The block-head is 
+usually already pretty cramped on a line, which is why we went with the 
+"very minimal" form we have now.
+
+-Graydon
+
+From pwalton at mozilla.com  Wed Sep 12 07:36:20 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 12 Sep 2012 07:36:20 -0700
+Subject: [rust-dev] RFC: Load external crates with "use"
+Message-ID: <50509DE4.6030009@mozilla.com>
+
+Hi everyone,
+
+Currently, "extern mod" links to external crates and "use" performs 
+namespace management. It might be preferable to repurpose "use" for both 
+of these purposes.
+
+So instead of:
+
+     extern mod std;
+     use std::json::Json;
+
+You'd write:
+
+     use std::json::Json;
+
+The semantics of this would be that names of external crates form a sort 
+of "outer namespace" one level higher than the root of the crate being 
+compiled. Equivalently, it could be understood as "if regular resolution 
+of a module fails, try to load a crate". This would only work for "use" 
+statements; explicitly-namespace-qualified identifiers would not be 
+eligible for this magic.
+
+This is what Python does, and it seems to work quite well for them.
+
+Thoughts?
+
+Patrick
+
+From graydon at mozilla.com  Wed Sep 12 08:29:42 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 12 Sep 2012 08:29:42 -0700
+Subject: [rust-dev] RFC: Load external crates with "use"
+In-Reply-To: <50509DE4.6030009@mozilla.com>
+References: <50509DE4.6030009@mozilla.com>
+Message-ID: <5050AA66.4060905@mozilla.com>
+
+Apologies, this is my first email of the morning, with all the pedantry 
+and over-arguing for no good reason that implies. I've tried to keep it 
+brief but partly it's just a factor of time. Turn the mood-filter to 
+"not really as grumpy as this sounds", if possible :(
+
+On 12/09/2012 7:36 AM, Patrick Walton wrote:
+> So instead of:
+>
+>      extern mod std;
+>      use std::json::Json;
+>
+> You'd write:
+>
+>      use std::json::Json;
+>
+> The semantics of this would be that names of external crates form a sort
+> of "outer namespace" one level higher than the root of the crate being
+> compiled. Equivalently, it could be understood as "if regular resolution
+> of a module fails, try to load a crate". This would only work for "use"
+> statements; explicitly-namespace-qualified identifiers would not be
+> eligible for this magic.
+>
+> This is what Python does, and it seems to work quite well for them.
+>
+> Thoughts?
+
+Not too keen, as-written. There might be something in this space we can 
+do, say 'use std = (<matchers>);' or something, but even that feels like 
+a toss-up in terms of clarity (see point 3 and footnote [1] below).
+
+As written it suffers from three things that make me uncomfortable:
+
+   - Abandons the distinction between short-name lookup and metadata
+     matching. I know most of our testcases just said "use foo;" before
+     but anything for deployment or major reuse really ought to be using
+     metadata matching so it's somewhat robust against installation in
+     an environment with more than one thing called 'foo'. Also, we've
+     some (vague) plan to shift the package management scheme to using
+     matchers as URL sources for installing missing crates, and that
+     vanishes.
+
+   - Contravenes the explicit-is-better-than-implicit principle. Readers
+     don't know (and can't see) where the crate-dependencies are.
+
+   - Breaks the two-fold symmetry with other uses of 'extern' and other
+     uses of 'mod foo = ...'; I actually think this is quite a compact
+     factoring where the meanings fall out naturally from the code:
+
+       mod foo = "foo.rs"      // compile-in other .rs files
+       extern { ... }          // link-to non-rust, declared symbols[1]
+       extern mod foo = <matchers>;   // link-to external rust code
+       extern mod foo;                // short DWIM-form for same
+
+In general I'm a bit wary of optimizing this case too hard for ultimate 
+brevity. The 'use' directive that shows up a lot in programs is the one 
+managing the internal namespace. The linkage directives are few and far 
+between, and should usually all reside in one top-level file that is 
+barely ever opened or changed[2].
+
+I really think the 'short programs' case shouldn't motivate design 
+choices. Truly short programs -- one-liners or the sort that wind up on 
+website front pages and might scare users off if too chatty -- just link 
+with libcore anyways, which is implicitly linked. Real crates can't get 
+by with tiny DWIM-y utterances because they need to be precise (and 
+offer information about URLs, versions, crate-wide compilation settings, 
+etc.)
+
+I mean, I know we're "getting rid of crate files", in the sense of 
+eliminating the file-type distinction in favour of a couple special 
+syntactic forms, but in any nontrivial crate, top-level files with 
+similar amounts of chatter are very likely going to take their place. 
+Take a look at these:
+
+    https://github.com/mozilla/rust/blob/master/src/cargo/cargo.rc
+    https://github.com/mozilla/rust/blob/master/src/libstd/std.rc
+
+I don't know that there's a way around it. If we don't write some of 
+this stuff down _somewhere_, it winds up in Makefiles, and then we have 
+two (well, like, 10) problems.
+
+-Graydon
+
+[1] As an aside about a 3rd possible use of 'extern', given that we need 
+_some_ word for this role in a couple contexts (the old uses of 'crust' 
+and 'native'), it's occurred to me that it might also recycle 'extern' 
+for the putative 'package-level export' we've sometimes talked about. 
+That is, 'pub' and 'priv' carry on meaning what they mean _within_ a 
+crate, but the question of whether a symbol is exposed for linkage from 
+_outside_ a crate could be predicated on the word 'extern', with the 
+default being 'anything pub', but overridden by explicit declarations.
+
+[2] Indeed, I'm still struggling with the issue of whether to re-enforce 
+a limit on where linkage declarations can even occur, so that the 
+compiler / package manager can _scan_ for them all without having to run 
+the entire front-end and elaborate any macros / evaluate all the 
+attributes. Initially 'use' directives were only allowed in crate files, 
+for just this reason, but that restriction vanished sometime around the 
+transition to declaring native-mods in separate files, killing off the 
+crate-evaluation phase and adding in conditional attributes. Still, 
+where we are presently is worrying; the compiler can't tell what it's 
+going to want to link until very late in the game.
+
+From banderson at mozilla.com  Wed Sep 12 11:19:03 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Wed, 12 Sep 2012 11:19:03 -0700
+Subject: [rust-dev] RFC: Load external crates with "use"
+In-Reply-To: <5050AA66.4060905@mozilla.com>
+References: <50509DE4.6030009@mozilla.com> <5050AA66.4060905@mozilla.com>
+Message-ID: <5050D217.4080609@mozilla.com>
+
+On 09/12/2012 08:29 AM, Graydon Hoare wrote:
+> Apologies, this is my first email of the morning, with all the pedantry
+> and over-arguing for no good reason that implies. I've tried to keep it
+> brief but partly it's just a factor of time. Turn the mood-filter to
+> "not really as grumpy as this sounds", if possible :(
+>
+> On 12/09/2012 7:36 AM, Patrick Walton wrote:
+>> So instead of:
+>>
+>>      extern mod std;
+>>      use std::json::Json;
+>>
+>> You'd write:
+>>
+>>      use std::json::Json;
+>>
+>> The semantics of this would be that names of external crates form a sort
+>> of "outer namespace" one level higher than the root of the crate being
+>> compiled. Equivalently, it could be understood as "if regular resolution
+>> of a module fails, try to load a crate". This would only work for "use"
+>> statements; explicitly-namespace-qualified identifiers would not be
+>> eligible for this magic.
+>>
+>> This is what Python does, and it seems to work quite well for them.
+>>
+>> Thoughts?
+>
+> Not too keen, as-written. There might be something in this space we can
+> do, say 'use std = (<matchers>);' or something, but even that feels like
+> a toss-up in terms of clarity (see point 3 and footnote [1] below).
+>
+> As written it suffers from three things that make me uncomfortable:
+>
+>    - Abandons the distinction between short-name lookup and metadata
+>      matching. I know most of our testcases just said "use foo;" before
+>      but anything for deployment or major reuse really ought to be using
+>      metadata matching so it's somewhat robust against installation in
+>      an environment with more than one thing called 'foo'. Also, we've
+>      some (vague) plan to shift the package management scheme to using
+>      matchers as URL sources for installing missing crates, and that
+>      vanishes.
+>
+>    - Contravenes the explicit-is-better-than-implicit principle. Readers
+>      don't know (and can't see) where the crate-dependencies are.
+>
+>    - Breaks the two-fold symmetry with other uses of 'extern' and other
+>      uses of 'mod foo = ...'; I actually think this is quite a compact
+>      factoring where the meanings fall out naturally from the code:
+>
+>        mod foo = "foo.rs"      // compile-in other .rs files
+>        extern { ... }          // link-to non-rust, declared symbols[1]
+>        extern mod foo = <matchers>;   // link-to external rust code
+>        extern mod foo;                // short DWIM-form for same
+
+I disagree with this symmetry argument and suspect the dual meanings of 
+'extern' will be confusing. An 'extern mod' is a rust crate. An 'extern 
+fn' is a non-Rust function. I also don't agree with reusing 'use' for 
+crate linking though, and I suppose I would just prefer a different keyword.
+
+>
+> In general I'm a bit wary of optimizing this case too hard for ultimate
+> brevity. The 'use' directive that shows up a lot in programs is the one
+> managing the internal namespace. The linkage directives are few and far
+> between, and should usually all reside in one top-level file that is
+> barely ever opened or changed[2].
+
+Personally, brevity is not my concern with 'extern mod'.
+
+>
+> I really think the 'short programs' case shouldn't motivate design
+> choices. Truly short programs -- one-liners or the sort that wind up on
+> website front pages and might scare users off if too chatty -- just link
+> with libcore anyways, which is implicitly linked. Real crates can't get
+> by with tiny DWIM-y utterances because they need to be precise (and
+> offer information about URLs, versions, crate-wide compilation settings,
+> etc.)
+>
+> I mean, I know we're "getting rid of crate files", in the sense of
+> eliminating the file-type distinction in favour of a couple special
+> syntactic forms, but in any nontrivial crate, top-level files with
+> similar amounts of chatter are very likely going to take their place.
+> Take a look at these:
+>
+>     https://github.com/mozilla/rust/blob/master/src/cargo/cargo.rc
+>     https://github.com/mozilla/rust/blob/master/src/libstd/std.rc
+>
+> I don't know that there's a way around it. If we don't write some of
+> this stuff down _somewhere_, it winds up in Makefiles, and then we have
+> two (well, like, 10) problems.
+>
+> -Graydon
+>
+> [1] As an aside about a 3rd possible use of 'extern', given that we need
+> _some_ word for this role in a couple contexts (the old uses of 'crust'
+> and 'native'), it's occurred to me that it might also recycle 'extern'
+> for the putative 'package-level export' we've sometimes talked about.
+> That is, 'pub' and 'priv' carry on meaning what they mean _within_ a
+> crate, but the question of whether a symbol is exposed for linkage from
+> _outside_ a crate could be predicated on the word 'extern', with the
+> default being 'anything pub', but overridden by explicit declarations.
+
+I'm not crazy about overloading 'extern' further.
+
+>
+> [2] Indeed, I'm still struggling with the issue of whether to re-enforce
+> a limit on where linkage declarations can even occur, so that the
+> compiler / package manager can _scan_ for them all without having to run
+> the entire front-end and elaborate any macros / evaluate all the
+> attributes. Initially 'use' directives were only allowed in crate files,
+> for just this reason, but that restriction vanished sometime around the
+> transition to declaring native-mods in separate files, killing off the
+> crate-evaluation phase and adding in conditional attributes. Still,
+> where we are presently is worrying; the compiler can't tell what it's
+> going to want to link until very late in the game.
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From banderson at mozilla.com  Wed Sep 12 11:21:24 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Wed, 12 Sep 2012 11:21:24 -0700
+Subject: [rust-dev] RFC: Load external crates with "use"
+In-Reply-To: <50509DE4.6030009@mozilla.com>
+References: <50509DE4.6030009@mozilla.com>
+Message-ID: <5050D2A4.5020909@mozilla.com>
+
+On 09/12/2012 07:36 AM, Patrick Walton wrote:
+> Hi everyone,
+>
+> Currently, "extern mod" links to external crates and "use" performs
+> namespace management. It might be preferable to repurpose "use" for both
+> of these purposes.
+>
+> So instead of:
+>
+>      extern mod std;
+>      use std::json::Json;
+>
+> You'd write:
+>
+>      use std::json::Json;
+>
+> The semantics of this would be that names of external crates form a sort
+> of "outer namespace" one level higher than the root of the crate being
+> compiled. Equivalently, it could be understood as "if regular resolution
+> of a module fails, try to load a crate". This would only work for "use"
+> statements; explicitly-namespace-qualified identifiers would not be
+> eligible for this magic.
+>
+
+I am not crazy about this because it becomes not obvious what 'use' will 
+actually do, and its behavior changes based on what's in scope (and we 
+have some bizarre cross-file scope problems).
+
+
+From pwalton at mozilla.com  Wed Sep 12 11:29:17 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 12 Sep 2012 11:29:17 -0700
+Subject: [rust-dev] RFC: Load external crates with "use"
+In-Reply-To: <5050D2A4.5020909@mozilla.com>
+References: <50509DE4.6030009@mozilla.com> <5050D2A4.5020909@mozilla.com>
+Message-ID: <5050D47D.6050309@mozilla.com>
+
+On 9/12/12 11:21 AM, Brian Anderson wrote:
+> I am not crazy about this because it becomes not obvious what 'use' will
+> actually do, and its behavior changes based on what's in scope (and we
+> have some bizarre cross-file scope problems).
+
+Fair enough. And Graydon's comments about versioning are totally 
+spot-on. I agree with you in your other post re. the choice of keyword.
+
+Patrick
+
+
+From eschew at gmail.com  Wed Sep 12 13:21:03 2012
+From: eschew at gmail.com (Ben Karel)
+Date: Wed, 12 Sep 2012 16:21:03 -0400
+Subject: [rust-dev] GC-based cleanup in incoming
+In-Reply-To: <588929117.7325051.1347059844919.JavaMail.root@mozilla.com>
+References: <588929117.7325051.1347059844919.JavaMail.root@mozilla.com>
+Message-ID: <CABQwL+GKX5CARFPK6AfvmeMDiB9FVWnbf2N=autCSFhSFn8VcQ@mail.gmail.com>
+
+On Fri, Sep 7, 2012 at 7:17 PM, Elliott Slaughter <eslaughter at mozilla.com>wrote:
+
+> Hi all,
+>
+> As of cb53623341, precise GC-based cleanup has landed in incoming. There
+> are still many rough edges, but this should be enough to get your feet wet
+> and try the GC out.
+>
+> I have written up a document describing the GC implementation details,
+> current status, etc. You can find it here:
+>
+> https://github.com/elliottslaughter/rust-gc-notes
+>
+> Thanks everyone for a great summer. I have to say, Rust is by far my
+> favorite language now. I had a lot of fun working on GC, and I hope this is
+> the beginning of real GC support in LLVM.
+>
+> --
+> Elliott Slaughter
+
+
+This looks interesting! I had a few questions after reading your notes:
+
+Does adding fake machine insns to the automatic root inference scheme yield
+support for moving collectors? I'm not clear on how root inference avoids
+the problems with GC-invariant-violation associated with explicit register
+roots.
+
+It sounds like root inference is structured as a transformation from IR to
+IR-plus-fake-gcregroot-insns, rather than from IR to
+IR-plus-stack-roots-and-gcroot-annotations. Is this accurate? Is the
+motivation mainly to reuse the existing liveness computation for machine
+instructions, rather than re-implementing liveness for LLVM IR? Or are
+there other motivations to avoid optimized insertion of gcroot
+slots/loads/etc?
+
+Regarding cleanup, you note that stack allocations lack the object header
+associated with heap allocations. Is there an obstacle to adding such a
+header to stack allocations?
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120912/e4c14e04/attachment.html>
+
+From niko at alum.mit.edu  Wed Sep 12 13:33:32 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Wed, 12 Sep 2012 13:33:32 -0700
+Subject: [rust-dev] a note on mutability and soundness (and the lack of it
+	in our libraries)
+Message-ID: <5050F19C.1060907@alum.mit.edu>
+
+I just found that (again...) the types in the vec module were changed 
+and they are now unsound with respect to mutability.  I just wanted to 
+send a brief e-mail to try and explain why things are the way they are.  
+In general, we are too loose with respect to mutability when it comes to 
+unsafe pointers, and we make excessive use of reinterpret_cast, so the 
+compiler can't help us catch mistakes.  We then end up with "safe" 
+external interfaces that are in fact unsafe.  Prime among them, 
+`vec::each`, which is currently written:
+
+     fn each(v: &[const T], f: fn(&&v: T) -> bool) { ... }
+
+The reason that this is unsafe is because the callback `f` expects an 
+*immutable reference* to `T`.  This means, in practice, it expects a 
+pointer to `T` that it can rely upon not to be overwritten.  But the 
+vector we are iterating over, `v`, is not guaranteed to have *immutable* 
+contents, only *const* contents (that is, contents which may or may not 
+be immutable).
+
+The reason that this function compiles at all is because `as_buf()` has 
+incorrect types:
+
+     fn as_buf(v: &[const T], f: fn(*T, uint));
+
+Here you see that `as_buf` takes a vector with `const` contents and 
+produces a pointer `*T` that is supposedly pointing at *immutable* 
+memory.  But of course it's not, not really, it's pointing at const 
+memory.  The correct type of as_buf is:
+
+     fn as_buf(v: &[T], f: fn(*T, uint));
+
+To accomodate `&[const T]` or `&[mut T]`, there are other functions:
+
+     fn as_const_buf(v: &[const T], f: fn(*const T, uint));
+     fn as_mut_buf(v: &[mut T], f: fn(*mut T, uint));
+
+All of these functions exist (I put them in a while back), but 
+`as_buf()` is over-used because it is incorrectly typed.
+
+In practice, what these various rules mean is that basically what winds 
+up happening is that almost all `vec` functions only work on `&[T]`.  
+This is generally ok for two reasons.  First, I would say that the type 
+`~[mut T]` is almost always not what you want. Due to inherited 
+mutability, you probably want to replace code like this:
+
+     let x = ~[mut 1, 2, 3];
+     x[0] += 1;
+
+with
+
+     let mut x = ~[1, 2, 3];
+     x[0] += 1;
+
+In fact, your variable was probably `mut` to begin with, since you 
+probably had to grow up your array.
+
+But, even if you continue to use `~[mut T]` for some reason, such a type 
+can in fact *still be coerced to &[T]*, so long as the fn using the 
+slice is pure.  Most places in vec that today are written with `&[const 
+T]` basically just want an array they can read. It is better to declare 
+such fns as pure and require a `&[T]`.
+
+In fact, I think we should probably just remove the notion of a `~[mut 
+T]` array type.  Mutability qualifiers should only appear on variable 
+names, field names, and after an `&` or `*` sigil.  But that's for 
+another e-mail.
+
+
+Niko
+
+From niko at alum.mit.edu  Wed Sep 12 13:36:01 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Wed, 12 Sep 2012 13:36:01 -0700
+Subject: [rust-dev] a note on mutability and soundness (and the lack of
+ it in our libraries)
+In-Reply-To: <5050F19C.1060907@alum.mit.edu>
+References: <5050F19C.1060907@alum.mit.edu>
+Message-ID: <5050F231.1040509@alum.mit.edu>
+
+To be clear: I just pushed a patch that corrects these mistakes.  It's 
+just that I've pushed this patch before so I wanted to send a more 
+detailed e-mail explaining what was going on.
+
+
+Niko
+
+On 9/12/12 1:33 PM, Niko Matsakis wrote:
+> I just found that (again...) the types in the vec module were changed 
+> and they are now unsound with respect to mutability.  I just wanted to 
+> send a brief e-mail to try and explain why things are the way they 
+> are.  In general, we are too loose with respect to mutability when it 
+> comes to unsafe pointers, and we make excessive use of 
+> reinterpret_cast, so the compiler can't help us catch mistakes.  We 
+> then end up with "safe" external interfaces that are in fact unsafe.  
+> Prime among them, `vec::each`, which is currently written:
+>
+>     fn each(v: &[const T], f: fn(&&v: T) -> bool) { ... }
+>
+> The reason that this is unsafe is because the callback `f` expects an 
+> *immutable reference* to `T`.  This means, in practice, it expects a 
+> pointer to `T` that it can rely upon not to be overwritten.  But the 
+> vector we are iterating over, `v`, is not guaranteed to have 
+> *immutable* contents, only *const* contents (that is, contents which 
+> may or may not be immutable).
+>
+> The reason that this function compiles at all is because `as_buf()` 
+> has incorrect types:
+>
+>     fn as_buf(v: &[const T], f: fn(*T, uint));
+>
+> Here you see that `as_buf` takes a vector with `const` contents and 
+> produces a pointer `*T` that is supposedly pointing at *immutable* 
+> memory.  But of course it's not, not really, it's pointing at const 
+> memory.  The correct type of as_buf is:
+>
+>     fn as_buf(v: &[T], f: fn(*T, uint));
+>
+> To accomodate `&[const T]` or `&[mut T]`, there are other functions:
+>
+>     fn as_const_buf(v: &[const T], f: fn(*const T, uint));
+>     fn as_mut_buf(v: &[mut T], f: fn(*mut T, uint));
+>
+> All of these functions exist (I put them in a while back), but 
+> `as_buf()` is over-used because it is incorrectly typed.
+>
+> In practice, what these various rules mean is that basically what 
+> winds up happening is that almost all `vec` functions only work on 
+> `&[T]`.  This is generally ok for two reasons.  First, I would say 
+> that the type `~[mut T]` is almost always not what you want. Due to 
+> inherited mutability, you probably want to replace code like this:
+>
+>     let x = ~[mut 1, 2, 3];
+>     x[0] += 1;
+>
+> with
+>
+>     let mut x = ~[1, 2, 3];
+>     x[0] += 1;
+>
+> In fact, your variable was probably `mut` to begin with, since you 
+> probably had to grow up your array.
+>
+> But, even if you continue to use `~[mut T]` for some reason, such a 
+> type can in fact *still be coerced to &[T]*, so long as the fn using 
+> the slice is pure.  Most places in vec that today are written with 
+> `&[const T]` basically just want an array they can read. It is better 
+> to declare such fns as pure and require a `&[T]`.
+>
+> In fact, I think we should probably just remove the notion of a `~[mut 
+> T]` array type.  Mutability qualifiers should only appear on variable 
+> names, field names, and after an `&` or `*` sigil.  But that's for 
+> another e-mail.
+>
+>
+> Niko
+
+
+From banderson at mozilla.com  Wed Sep 12 14:54:11 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Wed, 12 Sep 2012 14:54:11 -0700
+Subject: [rust-dev] Time to rename the 'unsafe' mods
+Message-ID: <50510483.60103@mozilla.com>
+
+'unsafe' is the final holdout keyword that can still be used as an 
+ident, and we love using it as a module name: core::unsafe, 
+core::vec::unsafe, core::str::unsafe, core::at_vec::unsafe.
+
+In order to convert 'unsafe' to a true keyword we need a different 
+strategy for coralling unsafe functions. There are two options: 1) pick 
+a different name for unsafe modules, 2) move all the unsafe functions up 
+a level so they aren't in their own mod (since unsafety is part of the 
+type they don't _need_ to be otherwise marked unsafe).
+
+Here's how it reads now:
+
+   vec::unsafe::frob_bytes()
+
+Here are some possible alternate names:
+
+   vec::risky::frob_bytes()
+   vec::danger::frob_bytes()
+   vec::dangerous::frob_bytes()
+   vec::chancy::frob_bytes()
+   vec::unsaf::frob_bytes()
+
+Personally, I do think it is useful continue putting all the unsafe code 
+into a submodule. I also can't think of a new name that I like.
+
+So I don't have any great ideas. Do you?
+
+-Brian
+
+From pwalton at mozilla.com  Wed Sep 12 14:55:38 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 12 Sep 2012 14:55:38 -0700
+Subject: [rust-dev] Time to rename the 'unsafe' mods
+In-Reply-To: <50510483.60103@mozilla.com>
+References: <50510483.60103@mozilla.com>
+Message-ID: <505104DA.6020805@mozilla.com>
+
+On 9/12/12 2:54 PM, Brian Anderson wrote:
+> So I don't have any great ideas. Do you?
+
+"raw"? "lowlevel" ("ll")? "machine"? "sys"?
+
+Patrick
+
+
+From hatahet at gmail.com  Wed Sep 12 14:57:09 2012
+From: hatahet at gmail.com (Ziad Hatahet)
+Date: Wed, 12 Sep 2012 14:57:09 -0700
+Subject: [rust-dev] Time to rename the 'unsafe' mods
+In-Reply-To: <505104DA.6020805@mozilla.com>
+References: <50510483.60103@mozilla.com> <505104DA.6020805@mozilla.com>
+Message-ID: <CAN1rdEyamXmnL=oVDaCLHBTnWboSA0sTFPEHPKPnenAM41_gcQ@mail.gmail.com>
+
++1 for "sys" or "system".
+
+
+--
+Ziad
+
+
+On Wed, Sep 12, 2012 at 2:55 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+
+> On 9/12/12 2:54 PM, Brian Anderson wrote:
+>
+>> So I don't have any great ideas. Do you?
+>>
+>
+> "raw"? "lowlevel" ("ll")? "machine"? "sys"?
+>
+> Patrick
+>
+>
+> ______________________________**_________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/**listinfo/rust-dev<https://mail.mozilla.org/listinfo/rust-dev>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120912/e8202dbb/attachment.html>
+
+From arcata at gmail.com  Wed Sep 12 14:58:40 2012
+From: arcata at gmail.com (Joe Groff)
+Date: Wed, 12 Sep 2012 14:58:40 -0700
+Subject: [rust-dev] RFC: Load external crates with "use"
+In-Reply-To: <5050D47D.6050309@mozilla.com>
+References: <50509DE4.6030009@mozilla.com> <5050D2A4.5020909@mozilla.com>
+	<5050D47D.6050309@mozilla.com>
+Message-ID: <CALz=kugcN5u8LTptTGMPd1mcfXTyVvmFonB7nFgnGrL+RYm7Sg@mail.gmail.com>
+
+On Wed, Sep 12, 2012 at 11:29 AM, Patrick Walton <pwalton at mozilla.com> wrote:
+> Fair enough. And Graydon's comments about versioning are totally spot-on. I
+> agree with you in your other post re. the choice of keyword.
+
+A random idea: have `mod` be a modifier for `use`, for example:
+
+use mod std;
+use std::json::Json;
+
+And maybe allow a crate and module use to be combined, for example:
+
+use mod std::json::Json;
+
+-Joe
+
+From pwalton at mozilla.com  Wed Sep 12 14:59:58 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 12 Sep 2012 14:59:58 -0700
+Subject: [rust-dev] RFC: Load external crates with "use"
+In-Reply-To: <CALz=kugcN5u8LTptTGMPd1mcfXTyVvmFonB7nFgnGrL+RYm7Sg@mail.gmail.com>
+References: <50509DE4.6030009@mozilla.com> <5050D2A4.5020909@mozilla.com>
+	<5050D47D.6050309@mozilla.com>
+	<CALz=kugcN5u8LTptTGMPd1mcfXTyVvmFonB7nFgnGrL+RYm7Sg@mail.gmail.com>
+Message-ID: <505105DE.2050001@mozilla.com>
+
+On 9/12/12 2:58 PM, Joe Groff wrote:
+> On Wed, Sep 12, 2012 at 11:29 AM, Patrick Walton <pwalton at mozilla.com> wrote:
+>> Fair enough. And Graydon's comments about versioning are totally spot-on. I
+>> agree with you in your other post re. the choice of keyword.
+>
+> A random idea: have `mod` be a modifier for `use`, for example:
+>
+> use mod std;
+> use std::json::Json;
+
+"use mod" is already in use for importing a module. This will soon 
+become necessary to import modules to fix some difficult semantic issues 
+in name resolution.
+
+Patrick
+
+From graydon at mozilla.com  Wed Sep 12 15:00:24 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 12 Sep 2012 15:00:24 -0700
+Subject: [rust-dev] Time to rename the 'unsafe' mods
+In-Reply-To: <505104DA.6020805@mozilla.com>
+References: <50510483.60103@mozilla.com> <505104DA.6020805@mozilla.com>
+Message-ID: <505105F8.2030703@mozilla.com>
+
+On 12-09-12 2:55 PM, Patrick Walton wrote:
+> On 9/12/12 2:54 PM, Brian Anderson wrote:
+>> So I don't have any great ideas. Do you?
+>
+> "raw"? "lowlevel" ("ll")? "machine"? "sys"?
+
+I think 'raw' is good here; also a slightly less clunky word for the 
+*foo pointer type: 'raw pointer'. They're not always unsafe, just 
+dereferencing them :)
+
+-Graydon
+
+
+From banderson at mozilla.com  Wed Sep 12 15:00:36 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Wed, 12 Sep 2012 15:00:36 -0700
+Subject: [rust-dev] a note on mutability and soundness (and the lack of
+ it in our libraries)
+In-Reply-To: <5050F231.1040509@alum.mit.edu>
+References: <5050F19C.1060907@alum.mit.edu> <5050F231.1040509@alum.mit.edu>
+Message-ID: <50510604.1080700@mozilla.com>
+
+On 09/12/2012 01:36 PM, Niko Matsakis wrote:
+> To be clear: I just pushed a patch that corrects these mistakes.  It's
+> just that I've pushed this patch before so I wanted to send a more
+> detailed e-mail explaining what was going on.
+>
+
+Thanks, Niko. I was reviewing core::vec recently with someone on IRC and 
+started to get a sinking feeling that something was wrong. The amount of 
+unsafe code in core::vec (and perhaps core::str) is frightening. Surely 
+a lot of it can be extracted into (yet more) unsafe helper functions.
+
+From ben.striegel at gmail.com  Wed Sep 12 16:59:18 2012
+From: ben.striegel at gmail.com (Benjamin Striegel)
+Date: Wed, 12 Sep 2012 19:59:18 -0400
+Subject: [rust-dev] GC-based cleanup in incoming
+In-Reply-To: <CABQwL+GKX5CARFPK6AfvmeMDiB9FVWnbf2N=autCSFhSFn8VcQ@mail.gmail.com>
+References: <588929117.7325051.1347059844919.JavaMail.root@mozilla.com>
+	<CABQwL+GKX5CARFPK6AfvmeMDiB9FVWnbf2N=autCSFhSFn8VcQ@mail.gmail.com>
+Message-ID: <CAAvrL-mBPui3f9FF21mEpY1JAbKAhv1CFhpGtbuyZ6P5UG7REw@mail.gmail.com>
+
+> Does adding fake machine insns to the automatic root inference scheme
+yield support for moving collectors?
+
+Not sure about your other questions, but this document answers your
+questions in regards to moving GCs:
+
+https://github.com/elliottslaughter/rust-gc-notes
+
+"The disadvantage was that this would limit what GC algorithms we could
+make use of. Specifically, LLVM would be free to make copies of pointers
+and put them anywhere, so we wouldn't necessarily know about all copies of
+given pointer. So we wouldn't be able to implement any moving GC algorithms
+with this approach, leaving primarily mark-and-sweep GC algorithms on the
+table."
+
+On Wed, Sep 12, 2012 at 4:21 PM, Ben Karel <eschew at gmail.com> wrote:
+
+> On Fri, Sep 7, 2012 at 7:17 PM, Elliott Slaughter <eslaughter at mozilla.com>wrote:
+>
+>> Hi all,
+>>
+>> As of cb53623341, precise GC-based cleanup has landed in incoming. There
+>> are still many rough edges, but this should be enough to get your feet wet
+>> and try the GC out.
+>>
+>> I have written up a document describing the GC implementation details,
+>> current status, etc. You can find it here:
+>>
+>> https://github.com/elliottslaughter/rust-gc-notes
+>>
+>> Thanks everyone for a great summer. I have to say, Rust is by far my
+>> favorite language now. I had a lot of fun working on GC, and I hope this is
+>> the beginning of real GC support in LLVM.
+>>
+>> --
+>> Elliott Slaughter
+>
+>
+> This looks interesting! I had a few questions after reading your notes:
+>
+> Does adding fake machine insns to the automatic root inference scheme
+> yield support for moving collectors? I'm not clear on how root inference
+> avoids the problems with GC-invariant-violation associated with explicit
+> register roots.
+>
+> It sounds like root inference is structured as a transformation from IR to
+> IR-plus-fake-gcregroot-insns, rather than from IR to
+> IR-plus-stack-roots-and-gcroot-annotations. Is this accurate? Is the
+> motivation mainly to reuse the existing liveness computation for machine
+> instructions, rather than re-implementing liveness for LLVM IR? Or are
+> there other motivations to avoid optimized insertion of gcroot
+> slots/loads/etc?
+>
+> Regarding cleanup, you note that stack allocations lack the object header
+> associated with heap allocations. Is there an obstacle to adding such a
+> header to stack allocations?
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120912/c62897e0/attachment.html>
+
+From eschew at gmail.com  Wed Sep 12 18:56:38 2012
+From: eschew at gmail.com (Ben Karel)
+Date: Wed, 12 Sep 2012 21:56:38 -0400
+Subject: [rust-dev] GC-based cleanup in incoming
+In-Reply-To: <CAAvrL-mBPui3f9FF21mEpY1JAbKAhv1CFhpGtbuyZ6P5UG7REw@mail.gmail.com>
+References: <588929117.7325051.1347059844919.JavaMail.root@mozilla.com>
+	<CABQwL+GKX5CARFPK6AfvmeMDiB9FVWnbf2N=autCSFhSFn8VcQ@mail.gmail.com>
+	<CAAvrL-mBPui3f9FF21mEpY1JAbKAhv1CFhpGtbuyZ6P5UG7REw@mail.gmail.com>
+Message-ID: <CABQwL+FU0k+mKBZHSLo7sTJDRKjE-U_+fLcjCcsYhRf-Bp+ZMA@mail.gmail.com>
+
+On Wed, Sep 12, 2012 at 7:59 PM, Benjamin Striegel
+<ben.striegel at gmail.com>wrote:
+
+> > Does adding fake machine insns to the automatic root inference scheme
+> yield support for moving collectors?
+>
+> Not sure about your other questions, but this document answers your
+> questions in regards to moving GCs:
+>
+> https://github.com/elliottslaughter/rust-gc-notes
+>
+> "The disadvantage was that this would limit what GC algorithms we could
+> make use of. Specifically, LLVM would be free to make copies of pointers
+> and put them anywhere, so we wouldn't necessarily know about all copies of
+> given pointer. So we wouldn't be able to implement any moving GC algorithms
+> with this approach, leaving primarily mark-and-sweep GC algorithms on the
+> table."
+>
+
+I saw that paragraph, but it seemed to be talking about automatic root
+inference alone (without the extra fake machine instructions, which were
+introduced two paragraphs later). My question was precisely whether the
+addition of fake machine instructions fixes that shortcoming, or not.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120912/9843d84c/attachment.html>
+
+From banderson at mozilla.com  Thu Sep 13 11:54:00 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Thu, 13 Sep 2012 11:54:00 -0700
+Subject: [rust-dev] Time to rename the 'unsafe' mods
+In-Reply-To: <50510483.60103@mozilla.com>
+References: <50510483.60103@mozilla.com>
+Message-ID: <50522BC8.2080300@mozilla.com>
+
+On 09/12/2012 02:54 PM, Brian Anderson wrote:
+> 'unsafe' is the final holdout keyword that can still be used as an
+> ident, and we love using it as a module name: core::unsafe,
+> core::vec::unsafe, core::str::unsafe, core::at_vec::unsafe.
+>
+
+
+> So I don't have any great ideas. Do you?
+>
+
+I'm going to use Graydon's 'raw' suggestion for vec::unsafe, 
+str::unsafe, and at_vec::unsafe, and move the contents of core::unsafe 
+to other modules.
+
+Thanks.
+
+From arcata at gmail.com  Fri Sep 14 17:14:03 2012
+From: arcata at gmail.com (Joe Groff)
+Date: Fri, 14 Sep 2012 17:14:03 -0700
+Subject: [rust-dev] RFC: Load external crates with "use"
+In-Reply-To: <505105DE.2050001@mozilla.com>
+References: <50509DE4.6030009@mozilla.com> <5050D2A4.5020909@mozilla.com>
+	<5050D47D.6050309@mozilla.com>
+	<CALz=kugcN5u8LTptTGMPd1mcfXTyVvmFonB7nFgnGrL+RYm7Sg@mail.gmail.com>
+	<505105DE.2050001@mozilla.com>
+Message-ID: <CALz=kui6uO2MZH9JTHCQ4rbnPC5fTNb2Hy2gPKF5=8X-YLTxTQ@mail.gmail.com>
+
+On Wed, Sep 12, 2012 at 2:59 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+> "use mod" is already in use for importing a module. This will soon become
+> necessary to import modules to fix some difficult semantic issues in name
+> resolution.
+
+Oops. Nonetheless, what do you think of having a combined `extern mod`
++ `use` form? For example:
+
+```
+// equivalent to `extern mod std; use std::json::Json;`
+extern use std::json::Json;
+```
+
+That has almost the brevity of adding implicit extern lookup to `use`
+while still keeping the behavior of the form explicit.
+
+-Joe
+
+From me at kevincantu.org  Fri Sep 14 17:28:28 2012
+From: me at kevincantu.org (Kevin Cantu)
+Date: Fri, 14 Sep 2012 17:28:28 -0700
+Subject: [rust-dev] RFC: Load external crates with "use"
+In-Reply-To: <CALz=kui6uO2MZH9JTHCQ4rbnPC5fTNb2Hy2gPKF5=8X-YLTxTQ@mail.gmail.com>
+References: <50509DE4.6030009@mozilla.com> <5050D2A4.5020909@mozilla.com>
+	<5050D47D.6050309@mozilla.com>
+	<CALz=kugcN5u8LTptTGMPd1mcfXTyVvmFonB7nFgnGrL+RYm7Sg@mail.gmail.com>
+	<505105DE.2050001@mozilla.com>
+	<CALz=kui6uO2MZH9JTHCQ4rbnPC5fTNb2Hy2gPKF5=8X-YLTxTQ@mail.gmail.com>
+Message-ID: <CABq6+ae7KGowLMTBK435vxdyT=vCGL4gRFXo+rbQfCH4L0fapA@mail.gmail.com>
+
+I'm still not sure why two (or three) distinct actions should try to share
+the same syntax.
+
+Linking to an external library, referring to a module defined outside the
+current source file, and adding to the current set of open namespaces seem
+different enough to me...
+
+-Kevin
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120914/8a9bace1/attachment.html>
+
+From lists.rust at dbp.mm.st  Fri Sep 14 17:44:23 2012
+From: lists.rust at dbp.mm.st (Daniel Patterson)
+Date: Fri, 14 Sep 2012 20:44:23 -0400
+Subject: [rust-dev] RFC: Load external crates with "use"
+In-Reply-To: <CABq6+ae7KGowLMTBK435vxdyT=vCGL4gRFXo+rbQfCH4L0fapA@mail.gmail.com>
+References: <50509DE4.6030009@mozilla.com> <5050D2A4.5020909@mozilla.com>
+	<5050D47D.6050309@mozilla.com>
+	<CALz=kugcN5u8LTptTGMPd1mcfXTyVvmFonB7nFgnGrL+RYm7Sg@mail.gmail.com>
+	<505105DE.2050001@mozilla.com>
+	<CALz=kui6uO2MZH9JTHCQ4rbnPC5fTNb2Hy2gPKF5=8X-YLTxTQ@mail.gmail.com>
+	<CABq6+ae7KGowLMTBK435vxdyT=vCGL4gRFXo+rbQfCH4L0fapA@mail.gmail.com>
+Message-ID: <C40EEB44-E346-4B48-8AFF-083DCDEE63BA@dbp.mm.st>
+
+As a semi-counter point, these are all operations that relate to "bring external functionality into the current scope". 
+
+Based on this, what would make the most sense to me is similar though distinct syntax. 
+
+So something like "use extern ?", "use mod ?", "use std::?". 
+
+Those might not be the right ones, but it seems like they should be tied (syntactically) somehow. 
+
+On Sep 14, 2012, at 8:28 PM, Kevin Cantu wrote:
+
+> I'm still not sure why two (or three) distinct actions should try to share the same syntax.
+> 
+> Linking to an external library, referring to a module defined outside the current source file, and adding to the current set of open namespaces seem different enough to me...
+> 
+> -Kevin
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120914/34ebe8de/attachment.html>
+
+From pwalton at mozilla.com  Fri Sep 14 17:54:02 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 14 Sep 2012 17:54:02 -0700
+Subject: [rust-dev] RFC: Load external crates with "use"
+In-Reply-To: <C40EEB44-E346-4B48-8AFF-083DCDEE63BA@dbp.mm.st>
+References: <50509DE4.6030009@mozilla.com> <5050D2A4.5020909@mozilla.com>
+	<5050D47D.6050309@mozilla.com>
+	<CALz=kugcN5u8LTptTGMPd1mcfXTyVvmFonB7nFgnGrL+RYm7Sg@mail.gmail.com>
+	<505105DE.2050001@mozilla.com>
+	<CALz=kui6uO2MZH9JTHCQ4rbnPC5fTNb2Hy2gPKF5=8X-YLTxTQ@mail.gmail.com>
+	<CABq6+ae7KGowLMTBK435vxdyT=vCGL4gRFXo+rbQfCH4L0fapA@mail.gmail.com>
+	<C40EEB44-E346-4B48-8AFF-083DCDEE63BA@dbp.mm.st>
+Message-ID: <5053D1AA.7030508@mozilla.com>
+
+I think I'd actually prefer "require" in place of "extern mod" to any 
+use of the "extern" keyword. "extern" should solely be associated with 
+the FFI; overloading the term to refer to pure Rust code is confusing.
+
+Yes, it's an extra keyword, but few use the term "require" as an 
+identifier, and "require" has huge precedent.
+
+Patrick
+
+From ted.horst at earthlink.net  Fri Sep 14 19:24:10 2012
+From: ted.horst at earthlink.net (Ted Horst)
+Date: Fri, 14 Sep 2012 21:24:10 -0500
+Subject: [rust-dev] RFC: Load external crates with "use"
+In-Reply-To: <5053D1AA.7030508@mozilla.com>
+References: <50509DE4.6030009@mozilla.com> <5050D2A4.5020909@mozilla.com>
+	<5050D47D.6050309@mozilla.com>
+	<CALz=kugcN5u8LTptTGMPd1mcfXTyVvmFonB7nFgnGrL+RYm7Sg@mail.gmail.com>
+	<505105DE.2050001@mozilla.com>
+	<CALz=kui6uO2MZH9JTHCQ4rbnPC5fTNb2Hy2gPKF5=8X-YLTxTQ@mail.gmail.com>
+	<CABq6+ae7KGowLMTBK435vxdyT=vCGL4gRFXo+rbQfCH4L0fapA@mail.gmail.com>
+	<C40EEB44-E346-4B48-8AFF-083DCDEE63BA@dbp.mm.st>
+	<5053D1AA.7030508@mozilla.com>
+Message-ID: <8EBC042C-7747-4B49-9654-7CADBAECD619@earthlink.net>
+
++1 on having FFI functions use a distinct syntax.
+
+Ted
+
+On 2012-09-14, at 19:54, Patrick Walton wrote:
+
+> I think I'd actually prefer "require" in place of "extern mod" to any use of the "extern" keyword. "extern" should solely be associated with the FFI; overloading the term to refer to pure Rust code is confusing.
+> 
+> Yes, it's an extra keyword, but few use the term "require" as an identifier, and "require" has huge precedent.
+> 
+> Patrick
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From atri.jiit at gmail.com  Fri Sep 14 23:56:07 2012
+From: atri.jiit at gmail.com (Atri Sharma)
+Date: Sat, 15 Sep 2012 12:26:07 +0530
+Subject: [rust-dev] Help required to get the task that called a function
+Message-ID: <CAOeZVifUAK19EF_kekcrP4srXzW7VhoOQFFAA4ibvoCRzXpEFQ@mail.gmail.com>
+
+Hi all,
+
+I want to get the name of the task that called a Rust function in my
+Rust code.How do I do that in Rust(I think,in C++,we will do it by
+rust_task *task = rust_get_current_task();)
+
+Atri
+
+-- 
+Regards,
+
+Atri
+l'apprenant
+
+From niko at alum.mit.edu  Sat Sep 15 09:27:58 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Sat, 15 Sep 2012 09:27:58 -0700
+Subject: [rust-dev] Help required to get the task that called a function
+In-Reply-To: <CAOeZVifUAK19EF_kekcrP4srXzW7VhoOQFFAA4ibvoCRzXpEFQ@mail.gmail.com>
+References: <CAOeZVifUAK19EF_kekcrP4srXzW7VhoOQFFAA4ibvoCRzXpEFQ@mail.gmail.com>
+Message-ID: <5054AC8E.7080902@alum.mit.edu>
+
+The function task::get_task() will do what you want.
+
+> Atri Sharma <mailto:atri.jiit at gmail.com>
+> September 14, 2012 11:56 PM
+> Hi all,
+>
+> I want to get the name of the task that called a Rust function in my
+> Rust code.How do I do that in Rust(I think,in C++,we will do it by
+> rust_task *task = rust_get_current_task();)
+>
+> Atri
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120915/39bdd9a5/attachment.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: compose-unknown-contact.jpg
+Type: image/jpeg
+Size: 770 bytes
+Desc: not available
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120915/39bdd9a5/attachment.jpg>
+
+From atri.jiit at gmail.com  Sat Sep 15 09:59:53 2012
+From: atri.jiit at gmail.com (Atri Sharma)
+Date: Sat, 15 Sep 2012 12:59:53 -0400
+Subject: [rust-dev] Help required to get the task that called a function
+In-Reply-To: <5054AC8E.7080902@alum.mit.edu>
+References: <CAOeZVifUAK19EF_kekcrP4srXzW7VhoOQFFAA4ibvoCRzXpEFQ@mail.gmail.com>
+	<5054AC8E.7080902@alum.mit.edu>
+Message-ID: <CAOeZVieeT-NLkoHvsbM+XSQooKg+6tBm9V9scH7eEYXka6WDVw@mail.gmail.com>
+
+Thanks Niko!
+
+Atri
+
+On Sat, Sep 15, 2012 at 12:27 PM, Niko Matsakis <niko at alum.mit.edu> wrote:
+
+> The function task::get_task() will do what you want.
+>
+>   Atri Sharma <atri.jiit at gmail.com>
+>  September 14, 2012 11:56 PM
+> Hi all,
+>
+> I want to get the name of the task that called a Rust function in my
+> Rust code.How do I do that in Rust(I think,in C++,we will do it by
+> rust_task *task = rust_get_current_task();)
+>
+> Atri
+>
+>
+
+
+-- 
+Regards,
+
+Atri
+*l'apprenant*
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120915/741bd294/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: compose-unknown-contact.jpg
+Type: image/jpeg
+Size: 770 bytes
+Desc: not available
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120915/741bd294/attachment-0001.jpg>
+
+From ben.striegel at gmail.com  Sat Sep 15 17:10:36 2012
+From: ben.striegel at gmail.com (Benjamin Striegel)
+Date: Sat, 15 Sep 2012 20:10:36 -0400
+Subject: [rust-dev] RFC: Load external crates with "use"
+In-Reply-To: <5053D1AA.7030508@mozilla.com>
+References: <50509DE4.6030009@mozilla.com> <5050D2A4.5020909@mozilla.com>
+	<5050D47D.6050309@mozilla.com>
+	<CALz=kugcN5u8LTptTGMPd1mcfXTyVvmFonB7nFgnGrL+RYm7Sg@mail.gmail.com>
+	<505105DE.2050001@mozilla.com>
+	<CALz=kui6uO2MZH9JTHCQ4rbnPC5fTNb2Hy2gPKF5=8X-YLTxTQ@mail.gmail.com>
+	<CABq6+ae7KGowLMTBK435vxdyT=vCGL4gRFXo+rbQfCH4L0fapA@mail.gmail.com>
+	<C40EEB44-E346-4B48-8AFF-083DCDEE63BA@dbp.mm.st>
+	<5053D1AA.7030508@mozilla.com>
+Message-ID: <CAAvrL-npqrP3ss88aMVa762GdwVPMwLASOT3XFiOGj-MR=htBA@mail.gmail.com>
+
+> I think I'd actually prefer "require" in place of "extern mod" to any use
+of the "extern" keyword. "extern" should solely be associated with the FFI;
+overloading the term to refer to pure Rust code is confusing.
+
+I like this. One more keyword is a small price to pay for clarity. "link"
+could also be used if "require" is too many characters.
+
+On Fri, Sep 14, 2012 at 8:54 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+
+> I think I'd actually prefer "require" in place of "extern mod" to any use
+> of the "extern" keyword. "extern" should solely be associated with the FFI;
+> overloading the term to refer to pure Rust code is confusing.
+>
+> Yes, it's an extra keyword, but few use the term "require" as an
+> identifier, and "require" has huge precedent.
+>
+> Patrick
+>
+> ______________________________**_________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/**listinfo/rust-dev<https://mail.mozilla.org/listinfo/rust-dev>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120915/094427b8/attachment.html>
+
+From banderson at mozilla.com  Mon Sep 24 13:52:07 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Mon, 24 Sep 2012 13:52:07 -0700
+Subject: [rust-dev] Student projects
+In-Reply-To: <503FAE38.8030808@mozilla.com>
+References: <503381CA.80609@mozilla.com> <5033E7C0.9080401@mozilla.com>
+	<50348A13.1080606@mozilla.com> <503731BF.5060408@mozilla.com>
+	<503FAE38.8030808@mozilla.com>
+Message-ID: <5060C7F7.7060001@mozilla.com>
+
+On 08/30/2012 11:17 AM, David Rajchenbach-Teller wrote:
+> Actually, it dawns to me that I could outsource this.
+>
+> I have put together a bug tracker for student projects that do not fit
+> in BMO:
+> https://github.com/Yoric/Mozilla-Student-Projects/issues?sort=created&state=open
+>
+> Could someone please add either the Rust-related projects or a blanket
+> Rust project and a link to the list of issues that can be turned into
+> student projects on the Rust bug tracker?
+
+I've finally done this.
+
+
+From dteller at mozilla.com  Mon Sep 24 16:20:20 2012
+From: dteller at mozilla.com (David Rajchenbach-Teller)
+Date: Tue, 25 Sep 2012 01:20:20 +0200
+Subject: [rust-dev] Student projects
+In-Reply-To: <5060C7F7.7060001@mozilla.com>
+References: <503381CA.80609@mozilla.com> <5033E7C0.9080401@mozilla.com>
+	<50348A13.1080606@mozilla.com> <503731BF.5060408@mozilla.com>
+	<503FAE38.8030808@mozilla.com> <5060C7F7.7060001@mozilla.com>
+Message-ID: <5060EAB4.1030403@mozilla.com>
+
+On Mon Sep 24 22:52:07 2012, Brian Anderson wrote:
+> On 08/30/2012 11:17 AM, David Rajchenbach-Teller wrote:
+>> Actually, it dawns to me that I could outsource this.
+>>
+>> I have put together a bug tracker for student projects that do not fit
+>> in BMO:
+>> https://github.com/Yoric/Mozilla-Student-Projects/issues?sort=created&state=open
+>>
+>>
+>> Could someone please add either the Rust-related projects or a blanket
+>> Rust project and a link to the list of issues that can be turned into
+>> student projects on the Rust bug tracker?
+>
+> I've finally done this.
+>
+
+Looks like a great list, thank you very much!
+
+--
+David Rajchenbach-Teller, PhD
+ Performance Team, Mozilla
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 487 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120925/81173453/attachment.sig>
+
+From bblum at andrew.cmu.edu  Fri Sep 28 17:22:58 2012
+From: bblum at andrew.cmu.edu (Ben Blum)
+Date: Fri, 28 Sep 2012 20:22:58 -0400
+Subject: [rust-dev] The new face of Rustic concurrency
+Message-ID: <20120929002258.GA31809@ghc17.ghc.andrew.cmu.edu>
+
+Hi folks,
+
+Many of you know this by now, but I'm sure there are people here who
+didn't sit in the same room as me this summer (videoconference rooms
+included).
+
+This summer I worked on Rust's concurrency/parallelism libraries. I
+contributed two shiny new features:
+
+- Linked task failure. When spawning a task, you can optionally
+  configure whether failure (i.e., "fail", array out of bounds,
+  assertions, etc) propagates from child to parent and whether it
+  propagates from parent to child.
+
+  Of particular note is task::spawn_supervised, which allows you to
+  model a "supervision tree", in which if a parent task fails it will
+  automatically kill all of its descendants, but child task failure can
+  be handled gracefully.
+
+- Shared mutable (typesafe) state. In addition to the ARC ("atomically
+  reference counted object"), which allows tasks to alias the same
+  immutable state, we now also have the RWARC ("reader-writer ARC"),
+  which uses locks and closures to allow tasks to share mutable state.
+  The type system statically guarantees that data-races are impossible.
+  See std::arc for more.
+
+  (The underlying concurrency primitives - semaphores, mutexes, rwlocks,
+  condvars - can also be used directly, in std::sync, in case you have
+  some state external to rust that needs to be protected, such as when
+  linking to a C library or using the filesystem. These should be
+  preferred over the pthread ones because these are rust-scheduler-
+  aware; i.e., other rust tasks can be scheduled on your CPU while you
+  are blocked on one of these.)
+
+I wrote a series of blog posts, some of which explain Rust's features
+and syntax, others of which explain these two projects:
+
+http://winningraceconditions.blogspot.com/2012/09/rust-1-primer.html
+http://winningraceconditions.blogspot.com/2012/09/rust-2-linked-task-failure.html
+http://winningraceconditions.blogspot.com/2012/09/rust-3-typesafe-shared-state.html
+http://winningraceconditions.blogspot.com/2012/09/rust-4-typesafe-shared-mutable-state.html
+http://winningraceconditions.blogspot.com/2012/09/rust-0-index-and-conclusion.html
+
+Thanks to you all - you're a great community, I really enjoyed
+contributing this summer, and I have high hopes for Rust turning out to
+be a great language.
+
+Ben
+
+From dherman at mozilla.com  Fri Sep 28 18:18:32 2012
+From: dherman at mozilla.com (David Herman)
+Date: Fri, 28 Sep 2012 18:18:32 -0700
+Subject: [rust-dev] The new face of Rustic concurrency
+In-Reply-To: <20120929002258.GA31809@ghc17.ghc.andrew.cmu.edu>
+References: <20120929002258.GA31809@ghc17.ghc.andrew.cmu.edu>
+Message-ID: <B77802A1-C42A-41F3-AC41-F9032C0A1636@mozilla.com>
+
+Hi Ben,
+
+Thanks for all your awesome work. This is really exciting stuff, and I also appreciate your write-ups on your blog.
+
+Dave
+
+On Sep 28, 2012, at 5:22 PM, Ben Blum <bblum at andrew.cmu.edu> wrote:
+
+> Hi folks,
+> 
+> Many of you know this by now, but I'm sure there are people here who
+> didn't sit in the same room as me this summer (videoconference rooms
+> included).
+> 
+> This summer I worked on Rust's concurrency/parallelism libraries. I
+> contributed two shiny new features:
+> 
+> - Linked task failure. When spawning a task, you can optionally
+>  configure whether failure (i.e., "fail", array out of bounds,
+>  assertions, etc) propagates from child to parent and whether it
+>  propagates from parent to child.
+> 
+>  Of particular note is task::spawn_supervised, which allows you to
+>  model a "supervision tree", in which if a parent task fails it will
+>  automatically kill all of its descendants, but child task failure can
+>  be handled gracefully.
+> 
+> - Shared mutable (typesafe) state. In addition to the ARC ("atomically
+>  reference counted object"), which allows tasks to alias the same
+>  immutable state, we now also have the RWARC ("reader-writer ARC"),
+>  which uses locks and closures to allow tasks to share mutable state.
+>  The type system statically guarantees that data-races are impossible.
+>  See std::arc for more.
+> 
+>  (The underlying concurrency primitives - semaphores, mutexes, rwlocks,
+>  condvars - can also be used directly, in std::sync, in case you have
+>  some state external to rust that needs to be protected, such as when
+>  linking to a C library or using the filesystem. These should be
+>  preferred over the pthread ones because these are rust-scheduler-
+>  aware; i.e., other rust tasks can be scheduled on your CPU while you
+>  are blocked on one of these.)
+> 
+> I wrote a series of blog posts, some of which explain Rust's features
+> and syntax, others of which explain these two projects:
+> 
+> http://winningraceconditions.blogspot.com/2012/09/rust-1-primer.html
+> http://winningraceconditions.blogspot.com/2012/09/rust-2-linked-task-failure.html
+> http://winningraceconditions.blogspot.com/2012/09/rust-3-typesafe-shared-state.html
+> http://winningraceconditions.blogspot.com/2012/09/rust-4-typesafe-shared-mutable-state.html
+> http://winningraceconditions.blogspot.com/2012/09/rust-0-index-and-conclusion.html
+> 
+> Thanks to you all - you're a great community, I really enjoyed
+> contributing this summer, and I have high hopes for Rust turning out to
+> be a great language.
+> 
+> Ben
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From banderson at mozilla.com  Fri Sep 28 18:42:20 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Fri, 28 Sep 2012 18:42:20 -0700
+Subject: [rust-dev] The new face of Rustic concurrency
+In-Reply-To: <B77802A1-C42A-41F3-AC41-F9032C0A1636@mozilla.com>
+References: <20120929002258.GA31809@ghc17.ghc.andrew.cmu.edu>
+	<B77802A1-C42A-41F3-AC41-F9032C0A1636@mozilla.com>
+Message-ID: <506651FC.1010603@mozilla.com>
+
+On 09/28/2012 06:18 PM, David Herman wrote:
+> Hi Ben,
+>
+> Thanks for all your awesome work. This is really exciting stuff, and I also appreciate your write-ups on your blog.
+>
+
+Agreed. Great work this summer, Ben.
+
+
+From xtzgzorex at gmail.com  Sat Sep 29 10:43:29 2012
+From: xtzgzorex at gmail.com (=?ISO-8859-1?Q?Alex_R=F8nne_Petersen?=)
+Date: Sat, 29 Sep 2012 19:43:29 +0200
+Subject: [rust-dev] Justification for abi attribute limitation?
+Message-ID: <CAEnAdhai4WKM9W2hhj6V42wo1jrn4weQfnu1bsppry9cpRggAA@mail.gmail.com>
+
+Hi folks,
+
+I just read this in tutorial-ffi.md:
+
+    The `"abi"` attribute applies to a foreign module (it can not be applied
+    to a single function within a module), and must be either `"cdecl"`
+    or `"stdcall"`. Other conventions may be defined in the future.
+
+Why must it be applied to a module as a whole? I don't quite
+understand why this limitation is there.
+
+I realize that a C library mixing calling conventions would be quite
+pathological, but it just seems completely arbitrary that the
+attribute is only allowed on modules. I don't think Rust should try to
+dictate how external modules are written.
+
+Could anyone shed some light on this?
+
+Thanks!
+
+Regards,
+Alex
+
+From banderson at mozilla.com  Sat Sep 29 14:06:16 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Sat, 29 Sep 2012 14:06:16 -0700
+Subject: [rust-dev] Justification for abi attribute limitation?
+In-Reply-To: <CAEnAdhai4WKM9W2hhj6V42wo1jrn4weQfnu1bsppry9cpRggAA@mail.gmail.com>
+References: <CAEnAdhai4WKM9W2hhj6V42wo1jrn4weQfnu1bsppry9cpRggAA@mail.gmail.com>
+Message-ID: <506762C8.8020402@mozilla.com>
+
+On 09/29/2012 10:43 AM, Alex R?nne Petersen wrote:
+> Hi folks,
+>
+> I just read this in tutorial-ffi.md:
+>
+>      The `"abi"` attribute applies to a foreign module (it can not be applied
+>      to a single function within a module), and must be either `"cdecl"`
+>      or `"stdcall"`. Other conventions may be defined in the future.
+>
+> Why must it be applied to a module as a whole? I don't quite
+> understand why this limitation is there.
+
+The main reason for this arrangement is that one platform, OS X, does 
+symbol resolution using a 'two-level namespace' that includes the name 
+of the library, so encoding that information in the structure of the 
+bindings is attractive.
+
+>
+> I realize that a C library mixing calling conventions would be quite
+> pathological, but it just seems completely arbitrary that the
+> attribute is only allowed on modules. I don't think Rust should try to
+> dictate how external modules are written.
+
+There are workarounds for most of Rust's FFI limitations. In this case 
+you can (probably) declare multiple extern mods with different abi's.
+
+>
+> Could anyone shed some light on this?
+
+The FFI is not expressive enough to encode all the information you might 
+want. It isn't because of any fundamental design reason, but because all 
+the use cases haven't been accounted for yet. Most aspects
+of the FFI are getting an overhaul.
+
+After the overhaul the ABI will be encoded in the type of the function 
+and the value of that function will directly represent the foreign 
+function, as opposed to now where it is Rust ABI wrapper around that 
+function.
+
+// Explict
+extern "C" fn foo();
+
+// Implicit
+extern fn foo();
+
+// Windows
+extern "stdcall" fn foo();
+
+// You can probably encode the convention in an entire extern block
+extern "C" {
+     fn foo();
+     fn bar();
+}
+
+Linkage will be done completely differently with a more expressive 
+attribute language, instead of trying to guess from the name of the 
+extern mod.
+
+Some open bugs:
+
+first class extern fns: https://github.com/mozilla/rust/issues/3321
+linkage: https://github.com/mozilla/rust/issues/3321
+
+
+-Brian
+
+
+From banderson at mozilla.com  Sat Sep 29 14:11:46 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Sat, 29 Sep 2012 14:11:46 -0700
+Subject: [rust-dev] Justification for abi attribute limitation?
+In-Reply-To: <506762C8.8020402@mozilla.com>
+References: <CAEnAdhai4WKM9W2hhj6V42wo1jrn4weQfnu1bsppry9cpRggAA@mail.gmail.com>
+	<506762C8.8020402@mozilla.com>
+Message-ID: <50676412.7050706@mozilla.com>
+
+On 09/29/2012 02:06 PM, Brian Anderson wrote:
+> On 09/29/2012 10:43 AM, Alex R?nne Petersen wrote:
+>> Hi folks,
+>>
+>> I just read this in tutorial-ffi.md:
+>>
+>>      The `"abi"` attribute applies to a foreign module (it can not be
+>> applied
+>>      to a single function within a module), and must be either `"cdecl"`
+>>      or `"stdcall"`. Other conventions may be defined in the future.
+>>
+>> Why must it be applied to a module as a whole? I don't quite
+>> understand why this limitation is there.
+>
+> The main reason for this arrangement is that one platform, OS X, does
+> symbol resolution using a 'two-level namespace' that includes the name
+> of the library, so encoding that information in the structure of the
+> bindings is attractive.
+
+I just realized that this didn't answer your question at all. There is 
+no particular reason for the limitation except that nobody has written 
+the code to support it.
+

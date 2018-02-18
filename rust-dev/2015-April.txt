@@ -1,0 +1,1220 @@
+From wesley at terpstra.ca  Mon Apr  6 13:23:41 2015
+From: wesley at terpstra.ca (Wesley W. Terpstra)
+Date: Mon, 6 Apr 2015 15:23:41 +0200
+Subject: [rust-dev] Newcomer to Rust: my experience
+Message-ID: <CAA-O0XjaJGtZNRdHZ2==rswmXnokdXp4BDXQiYaGpNjyV6a_Lg@mail.gmail.com>
+
+Good afternoon and happy easter,
+
+I am a newcomer to Rust and recently finished working through your
+tutorial. Before I get too much further into reading the standard
+library, I wanted to share my experience as a complete Rust newbie
+starting out only with your documentation, before I forget it. I
+regret that I did not start taking notes immediately, but it was not
+yet clear to me how much I was going to like Rust, so a lot of this
+will be me recalling my experience, without notes.
+
+First, my background. I've been programming in C++ for 20 years and
+used MLton (Standard ML) heavily for about 5 years, 4 years ago. I
+have dabbled with Haskell, but not seriously. So, as far as beginners
+to Rust go, I suspect I would be the sort of person who should
+definitely have been able to go through your tutorial and come out at
+the other end with a clear mental model of the language, as I've been
+exposed to almost all of the concepts before.
+
+1- I had heard about Rust through the odd talk at ML workshops via
+youtube, although the last ML workshop I attended in person was ~6
+years ago. The main thing that raised Rust to my attention was your
+v1.0 release which was mentioned on Slashdot. A few days ago, I saw a
+comment posted somewhere that reminded me about it and contained these
+two keywords: functional + no-GC. That got me interested enough to
+head over to your main page.
+
+2- I really liked how on the front page there was a feature list that
+summarised what I could expect from the language. I was surprised not
+to see a bullet point reaffirming that there was no garbage collector
+necessary. I then started reading the Rust tutorial "book" in order.
+
+3- Installing Rust on Mavericks worked perfectly and I was happy to
+see it supported all three major platforms. I almost made the mistake
+of installing the old rust package in macports instead of running the
+macports version (0.12.0). From what I've read since, this would have
+been a critical mistake since Rust has evolved so quickly in the near
+past. Perhaps this package should be either removed or updated.
+
+4- I was a bit annoyed that I had to wade through Cargo stuff before
+getting to the details of the language, since I was still in the
+"evaluating if Rust is interesting" phase and had very little interest
+in packaging minutia in the introduction.
+
+5- Coming from an ML background, I only needed to skim most of the
+"basics", taking note of which features were slightly different.
+
+6- The moment I saw "for x in 0..10", I immediately wanted to know if
+I would be able to use the ".." notation on my own types.
+
+7- I was again annoyed by the crates/modules/testing sections at the
+start of Section 3. I had completed reading the "Basics" section and
+had yet to see why I should care about Rust. The key Rust feature,
+resource management was still nowhere to be seen.
+
+8- Finally I reached the "Pointers" section I had been basically
+waiting to get to this whole time. Then I had to wade through pointer
+problems that any C programmer already knows intimately, before
+getting to how Rust does things. These two sections, 3.3 and 3.4, are
+probably the MOST important sections in the entire tutorial, but they
+come very late and are not well described. I would have expected to
+see a top-down approach to explanation. A "here is how Rust deals with
+memory" and THEN "here is how this solves these problems". Instead, I
+got a "here are problems you already know" and then a "here's how Rust
+does stuff". Due to this presentation approach, section 3.3 is very
+disjointed and I didn't come away from it with a clear idea of how
+this all works. It is also very jarring, because the rest of the
+tutorial is pretty Micky-Mouse and then suddenly the main new concept
+of Rust is explained with only surface detail in two tiny
+sections---completely inadequately.
+
+9- I entered the "Ownership" section quite annoyed from the terrible
+preceding section. I *still* don't really understand lifetimes, even
+after having sorted out the way Rust ownership works. These two
+sections are the worst in the tutorial, while also being the most
+important!
+
+At this point, I played around with Rust to try and understand the
+calling convention, move, copy, and borrow. I am pretty sure I
+understand it now, but I did *NOT* come away from the tutorial with
+this understanding. I would have presented the concepts in this order:
+
+1. Rust moves objects by default. Include example showing that "let y
+= x" makes "x" invalid afterwards. Explain that this ensures that
+there is exactly one release to each allocate---something that can
+easily be understood even without explaining C pointers. Show that
+this applies to function calls as well; let x = Foo; f(x);
+println!("{:?}", x); // <-- Bad
+
+2. Explain that some types can be copied instead. Mention that this is
+indicated by the "Copy+Clone" trait and show that "let y = x" and
+"f(x)" leave "x" valid afterwards. Mention that all basic types work
+this way, but that it is an opt-in feature.
+
+3. Show the "#[derive(Copy,Clone)]" syntax which is AFAICT nowhere
+mentioned in the tutorial. You can understand this even without
+knowing the details of how traits are actually implemented. This shows
+a user that he controls the choice between move/copy semantics.
+
+4. Now introduce Box::new(). Explain that it keeps its contents on the
+heap, but the pointer on the stack. Trust that programmers already
+know what heap/stack are without a bad recap. Demonstrate that move
+semantics mean that the heap object is freed exactly once. Perhaps
+mention that this is like C++'s unique_ptr.
+
+5. Explain that Box needs a destructor to do the free. Introduce the
+concept of Drop. Explain Box can never be marked Copy due to needing
+Drop. Perhaps mention that Copy+Drop are the only two special traits
+in Rust (is this right?).
+
+6. Maybe demonstrate another, more expensive, type of resource managed
+this way in Rust. Mention this automatic drop is something a GC
+language can't give you due to the lazy collection of finalizers.
+
+7. Only now introduce borrowing. The existing explanation is fine,
+just out-of-sequence.
+
+8. Now explain lifetimes as being a way to promise that the borrow is
+shorter than the life of the object or the borrow it came from. I am
+still unclear about which use of 'a defines the containing lifetime
+and which the contained. So, this definitely needs to be explained
+better, but I think it is WAY less important to understand the details
+of lifetimes than it is to understand the key concepts of: move vs.
+copy and RAII.
+
+This explanation (at least #1-#7) needs to come much sooner.
+Definitely still in the Basics sections. Anyway, back to my
+first-impression timeline:
+
+10- Sections 3.5-3.7 were easy. One and done.
+
+11- Associated Types (3.8). Why does this come before Traits (3.12)?
+
+12- The closures section was very cool. *After* I understood Traits.
+Traits are so important in Rust they need to come first! I was missing
+an explanation of what the syntactic sugar of "Fn(int) -> int" is all
+about. I only sort-of understood the point about why a closure has
+undefined size when returned, but it is fine when used as an argument.
+My gut feeling was that it is somehow because you left the scope of
+the monomorphized function that produced it.
+
+13- By the time I read "Static and Dynamic Dispatch" (3.13) I was
+hooked on Rust. At this point I'd already played around with rustc to
+understand the memory ownership concept. The static+dynamic dispatch
+is just so elegant, I was sold completely and totally at this point.
+MLton has to do escape analysis to determine which closures it can
+monomorphize away. That you put this directly under my control and
+completely side stepped this issue is just so elegant. Wow.
+
+14- I skimmed over the rest of the sections without any problems.
+
+I have yet to write serious code in Rust, but the confluence of "Just
+the Right Ideas" (TM) has pretty much convinced me. The documentation
+of the 'std' library looks pretty good, a clear upgrade of the
+Standard ML basis library it is came from. ;-) At the moment I am very
+hopeful that Rust is the language I've been waiting my entire
+professional career to learn.
+
+Thank you for your work on Rust!
+I hope my user report can help you improve the experience for the next newbie.
+
+From oleg at eterevsky.com  Mon Apr  6 13:34:59 2015
+From: oleg at eterevsky.com (Oleg Eterevsky)
+Date: Mon, 06 Apr 2015 13:34:59 +0000
+Subject: [rust-dev] Newcomer to Rust: my experience
+In-Reply-To: <CAA-O0XjaJGtZNRdHZ2==rswmXnokdXp4BDXQiYaGpNjyV6a_Lg@mail.gmail.com>
+References: <CAA-O0XjaJGtZNRdHZ2==rswmXnokdXp4BDXQiYaGpNjyV6a_Lg@mail.gmail.com>
+Message-ID: <CAPax79B+gFifbM3bKvNtYiXj+zc7r+p-9wvWW6cMxfnKpR=m8Q@mail.gmail.com>
+
+Hi Wesley!
+
+That's a very cool analysis. This sounds very much like my thoughts about
+the tutorial.
+
+I think you'd better post it on http://users.rust-lang.org/, since it is
+the main place for Rust discussions now. The mailing list is almost dead.
+
+--
+Oleg
+
+On Mon, Apr 6, 2015 at 4:23 PM Wesley W. Terpstra <wesley at terpstra.ca>
+wrote:
+
+> Good afternoon and happy easter,
+>
+> I am a newcomer to Rust and recently finished working through your
+> tutorial. Before I get too much further into reading the standard
+> library, I wanted to share my experience as a complete Rust newbie
+> starting out only with your documentation, before I forget it. I
+> regret that I did not start taking notes immediately, but it was not
+> yet clear to me how much I was going to like Rust, so a lot of this
+> will be me recalling my experience, without notes.
+>
+> First, my background. I've been programming in C++ for 20 years and
+> used MLton (Standard ML) heavily for about 5 years, 4 years ago. I
+> have dabbled with Haskell, but not seriously. So, as far as beginners
+> to Rust go, I suspect I would be the sort of person who should
+> definitely have been able to go through your tutorial and come out at
+> the other end with a clear mental model of the language, as I've been
+> exposed to almost all of the concepts before.
+>
+> 1- I had heard about Rust through the odd talk at ML workshops via
+> youtube, although the last ML workshop I attended in person was ~6
+> years ago. The main thing that raised Rust to my attention was your
+> v1.0 release which was mentioned on Slashdot. A few days ago, I saw a
+> comment posted somewhere that reminded me about it and contained these
+> two keywords: functional + no-GC. That got me interested enough to
+> head over to your main page.
+>
+> 2- I really liked how on the front page there was a feature list that
+> summarised what I could expect from the language. I was surprised not
+> to see a bullet point reaffirming that there was no garbage collector
+> necessary. I then started reading the Rust tutorial "book" in order.
+>
+> 3- Installing Rust on Mavericks worked perfectly and I was happy to
+> see it supported all three major platforms. I almost made the mistake
+> of installing the old rust package in macports instead of running the
+> macports version (0.12.0). From what I've read since, this would have
+> been a critical mistake since Rust has evolved so quickly in the near
+> past. Perhaps this package should be either removed or updated.
+>
+> 4- I was a bit annoyed that I had to wade through Cargo stuff before
+> getting to the details of the language, since I was still in the
+> "evaluating if Rust is interesting" phase and had very little interest
+> in packaging minutia in the introduction.
+>
+> 5- Coming from an ML background, I only needed to skim most of the
+> "basics", taking note of which features were slightly different.
+>
+> 6- The moment I saw "for x in 0..10", I immediately wanted to know if
+> I would be able to use the ".." notation on my own types.
+>
+> 7- I was again annoyed by the crates/modules/testing sections at the
+> start of Section 3. I had completed reading the "Basics" section and
+> had yet to see why I should care about Rust. The key Rust feature,
+> resource management was still nowhere to be seen.
+>
+> 8- Finally I reached the "Pointers" section I had been basically
+> waiting to get to this whole time. Then I had to wade through pointer
+> problems that any C programmer already knows intimately, before
+> getting to how Rust does things. These two sections, 3.3 and 3.4, are
+> probably the MOST important sections in the entire tutorial, but they
+> come very late and are not well described. I would have expected to
+> see a top-down approach to explanation. A "here is how Rust deals with
+> memory" and THEN "here is how this solves these problems". Instead, I
+> got a "here are problems you already know" and then a "here's how Rust
+> does stuff". Due to this presentation approach, section 3.3 is very
+> disjointed and I didn't come away from it with a clear idea of how
+> this all works. It is also very jarring, because the rest of the
+> tutorial is pretty Micky-Mouse and then suddenly the main new concept
+> of Rust is explained with only surface detail in two tiny
+> sections---completely inadequately.
+>
+> 9- I entered the "Ownership" section quite annoyed from the terrible
+> preceding section. I *still* don't really understand lifetimes, even
+> after having sorted out the way Rust ownership works. These two
+> sections are the worst in the tutorial, while also being the most
+> important!
+>
+> At this point, I played around with Rust to try and understand the
+> calling convention, move, copy, and borrow. I am pretty sure I
+> understand it now, but I did *NOT* come away from the tutorial with
+> this understanding. I would have presented the concepts in this order:
+>
+> 1. Rust moves objects by default. Include example showing that "let y
+> = x" makes "x" invalid afterwards. Explain that this ensures that
+> there is exactly one release to each allocate---something that can
+> easily be understood even without explaining C pointers. Show that
+> this applies to function calls as well; let x = Foo; f(x);
+> println!("{:?}", x); // <-- Bad
+>
+> 2. Explain that some types can be copied instead. Mention that this is
+> indicated by the "Copy+Clone" trait and show that "let y = x" and
+> "f(x)" leave "x" valid afterwards. Mention that all basic types work
+> this way, but that it is an opt-in feature.
+>
+> 3. Show the "#[derive(Copy,Clone)]" syntax which is AFAICT nowhere
+> mentioned in the tutorial. You can understand this even without
+> knowing the details of how traits are actually implemented. This shows
+> a user that he controls the choice between move/copy semantics.
+>
+> 4. Now introduce Box::new(). Explain that it keeps its contents on the
+> heap, but the pointer on the stack. Trust that programmers already
+> know what heap/stack are without a bad recap. Demonstrate that move
+> semantics mean that the heap object is freed exactly once. Perhaps
+> mention that this is like C++'s unique_ptr.
+>
+> 5. Explain that Box needs a destructor to do the free. Introduce the
+> concept of Drop. Explain Box can never be marked Copy due to needing
+> Drop. Perhaps mention that Copy+Drop are the only two special traits
+> in Rust (is this right?).
+>
+> 6. Maybe demonstrate another, more expensive, type of resource managed
+> this way in Rust. Mention this automatic drop is something a GC
+> language can't give you due to the lazy collection of finalizers.
+>
+> 7. Only now introduce borrowing. The existing explanation is fine,
+> just out-of-sequence.
+>
+> 8. Now explain lifetimes as being a way to promise that the borrow is
+> shorter than the life of the object or the borrow it came from. I am
+> still unclear about which use of 'a defines the containing lifetime
+> and which the contained. So, this definitely needs to be explained
+> better, but I think it is WAY less important to understand the details
+> of lifetimes than it is to understand the key concepts of: move vs.
+> copy and RAII.
+>
+> This explanation (at least #1-#7) needs to come much sooner.
+> Definitely still in the Basics sections. Anyway, back to my
+> first-impression timeline:
+>
+> 10- Sections 3.5-3.7 were easy. One and done.
+>
+> 11- Associated Types (3.8). Why does this come before Traits (3.12)?
+>
+> 12- The closures section was very cool. *After* I understood Traits.
+> Traits are so important in Rust they need to come first! I was missing
+> an explanation of what the syntactic sugar of "Fn(int) -> int" is all
+> about. I only sort-of understood the point about why a closure has
+> undefined size when returned, but it is fine when used as an argument.
+> My gut feeling was that it is somehow because you left the scope of
+> the monomorphized function that produced it.
+>
+> 13- By the time I read "Static and Dynamic Dispatch" (3.13) I was
+> hooked on Rust. At this point I'd already played around with rustc to
+> understand the memory ownership concept. The static+dynamic dispatch
+> is just so elegant, I was sold completely and totally at this point.
+> MLton has to do escape analysis to determine which closures it can
+> monomorphize away. That you put this directly under my control and
+> completely side stepped this issue is just so elegant. Wow.
+>
+> 14- I skimmed over the rest of the sections without any problems.
+>
+> I have yet to write serious code in Rust, but the confluence of "Just
+> the Right Ideas" (TM) has pretty much convinced me. The documentation
+> of the 'std' library looks pretty good, a clear upgrade of the
+> Standard ML basis library it is came from. ;-) At the moment I am very
+> hopeful that Rust is the language I've been waiting my entire
+> professional career to learn.
+>
+> Thank you for your work on Rust!
+> I hope my user report can help you improve the experience for the next
+> newbie.
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150406/a9498995/attachment.html>
+
+From wesley at terpstra.ca  Mon Apr  6 13:55:33 2015
+From: wesley at terpstra.ca (Wesley W. Terpstra)
+Date: Mon, 6 Apr 2015 15:55:33 +0200
+Subject: [rust-dev] Newcomer to Rust: my experience
+In-Reply-To: <CAPax79B+gFifbM3bKvNtYiXj+zc7r+p-9wvWW6cMxfnKpR=m8Q@mail.gmail.com>
+References: <CAA-O0XjaJGtZNRdHZ2==rswmXnokdXp4BDXQiYaGpNjyV6a_Lg@mail.gmail.com>
+	<CAPax79B+gFifbM3bKvNtYiXj+zc7r+p-9wvWW6cMxfnKpR=m8Q@mail.gmail.com>
+Message-ID: <CAA-O0XiMy1JVpT-9VcWOvqd_40PMmVvWN9xw6CazftJ77zh4bw@mail.gmail.com>
+
+Yes, I discovered this, thanks.
+I signed up for <http://internals.rust-lang.org/c/documentation> and
+posted it there.
+
+On Mon, Apr 6, 2015 at 3:34 PM, Oleg Eterevsky <oleg at eterevsky.com> wrote:
+> Hi Wesley!
+>
+> That's a very cool analysis. This sounds very much like my thoughts about
+> the tutorial.
+>
+> I think you'd better post it on http://users.rust-lang.org/, since it is the
+> main place for Rust discussions now. The mailing list is almost dead.
+>
+> --
+> Oleg
+>
+> On Mon, Apr 6, 2015 at 4:23 PM Wesley W. Terpstra <wesley at terpstra.ca>
+> wrote:
+>>
+>> Good afternoon and happy easter,
+>>
+>> I am a newcomer to Rust and recently finished working through your
+>> tutorial. Before I get too much further into reading the standard
+>> library, I wanted to share my experience as a complete Rust newbie
+>> starting out only with your documentation, before I forget it. I
+>> regret that I did not start taking notes immediately, but it was not
+>> yet clear to me how much I was going to like Rust, so a lot of this
+>> will be me recalling my experience, without notes.
+>>
+>> First, my background. I've been programming in C++ for 20 years and
+>> used MLton (Standard ML) heavily for about 5 years, 4 years ago. I
+>> have dabbled with Haskell, but not seriously. So, as far as beginners
+>> to Rust go, I suspect I would be the sort of person who should
+>> definitely have been able to go through your tutorial and come out at
+>> the other end with a clear mental model of the language, as I've been
+>> exposed to almost all of the concepts before.
+>>
+>> 1- I had heard about Rust through the odd talk at ML workshops via
+>> youtube, although the last ML workshop I attended in person was ~6
+>> years ago. The main thing that raised Rust to my attention was your
+>> v1.0 release which was mentioned on Slashdot. A few days ago, I saw a
+>> comment posted somewhere that reminded me about it and contained these
+>> two keywords: functional + no-GC. That got me interested enough to
+>> head over to your main page.
+>>
+>> 2- I really liked how on the front page there was a feature list that
+>> summarised what I could expect from the language. I was surprised not
+>> to see a bullet point reaffirming that there was no garbage collector
+>> necessary. I then started reading the Rust tutorial "book" in order.
+>>
+>> 3- Installing Rust on Mavericks worked perfectly and I was happy to
+>> see it supported all three major platforms. I almost made the mistake
+>> of installing the old rust package in macports instead of running the
+>> macports version (0.12.0). From what I've read since, this would have
+>> been a critical mistake since Rust has evolved so quickly in the near
+>> past. Perhaps this package should be either removed or updated.
+>>
+>> 4- I was a bit annoyed that I had to wade through Cargo stuff before
+>> getting to the details of the language, since I was still in the
+>> "evaluating if Rust is interesting" phase and had very little interest
+>> in packaging minutia in the introduction.
+>>
+>> 5- Coming from an ML background, I only needed to skim most of the
+>> "basics", taking note of which features were slightly different.
+>>
+>> 6- The moment I saw "for x in 0..10", I immediately wanted to know if
+>> I would be able to use the ".." notation on my own types.
+>>
+>> 7- I was again annoyed by the crates/modules/testing sections at the
+>> start of Section 3. I had completed reading the "Basics" section and
+>> had yet to see why I should care about Rust. The key Rust feature,
+>> resource management was still nowhere to be seen.
+>>
+>> 8- Finally I reached the "Pointers" section I had been basically
+>> waiting to get to this whole time. Then I had to wade through pointer
+>> problems that any C programmer already knows intimately, before
+>> getting to how Rust does things. These two sections, 3.3 and 3.4, are
+>> probably the MOST important sections in the entire tutorial, but they
+>> come very late and are not well described. I would have expected to
+>> see a top-down approach to explanation. A "here is how Rust deals with
+>> memory" and THEN "here is how this solves these problems". Instead, I
+>> got a "here are problems you already know" and then a "here's how Rust
+>> does stuff". Due to this presentation approach, section 3.3 is very
+>> disjointed and I didn't come away from it with a clear idea of how
+>> this all works. It is also very jarring, because the rest of the
+>> tutorial is pretty Micky-Mouse and then suddenly the main new concept
+>> of Rust is explained with only surface detail in two tiny
+>> sections---completely inadequately.
+>>
+>> 9- I entered the "Ownership" section quite annoyed from the terrible
+>> preceding section. I *still* don't really understand lifetimes, even
+>> after having sorted out the way Rust ownership works. These two
+>> sections are the worst in the tutorial, while also being the most
+>> important!
+>>
+>> At this point, I played around with Rust to try and understand the
+>> calling convention, move, copy, and borrow. I am pretty sure I
+>> understand it now, but I did *NOT* come away from the tutorial with
+>> this understanding. I would have presented the concepts in this order:
+>>
+>> 1. Rust moves objects by default. Include example showing that "let y
+>> = x" makes "x" invalid afterwards. Explain that this ensures that
+>> there is exactly one release to each allocate---something that can
+>> easily be understood even without explaining C pointers. Show that
+>> this applies to function calls as well; let x = Foo; f(x);
+>> println!("{:?}", x); // <-- Bad
+>>
+>> 2. Explain that some types can be copied instead. Mention that this is
+>> indicated by the "Copy+Clone" trait and show that "let y = x" and
+>> "f(x)" leave "x" valid afterwards. Mention that all basic types work
+>> this way, but that it is an opt-in feature.
+>>
+>> 3. Show the "#[derive(Copy,Clone)]" syntax which is AFAICT nowhere
+>> mentioned in the tutorial. You can understand this even without
+>> knowing the details of how traits are actually implemented. This shows
+>> a user that he controls the choice between move/copy semantics.
+>>
+>> 4. Now introduce Box::new(). Explain that it keeps its contents on the
+>> heap, but the pointer on the stack. Trust that programmers already
+>> know what heap/stack are without a bad recap. Demonstrate that move
+>> semantics mean that the heap object is freed exactly once. Perhaps
+>> mention that this is like C++'s unique_ptr.
+>>
+>> 5. Explain that Box needs a destructor to do the free. Introduce the
+>> concept of Drop. Explain Box can never be marked Copy due to needing
+>> Drop. Perhaps mention that Copy+Drop are the only two special traits
+>> in Rust (is this right?).
+>>
+>> 6. Maybe demonstrate another, more expensive, type of resource managed
+>> this way in Rust. Mention this automatic drop is something a GC
+>> language can't give you due to the lazy collection of finalizers.
+>>
+>> 7. Only now introduce borrowing. The existing explanation is fine,
+>> just out-of-sequence.
+>>
+>> 8. Now explain lifetimes as being a way to promise that the borrow is
+>> shorter than the life of the object or the borrow it came from. I am
+>> still unclear about which use of 'a defines the containing lifetime
+>> and which the contained. So, this definitely needs to be explained
+>> better, but I think it is WAY less important to understand the details
+>> of lifetimes than it is to understand the key concepts of: move vs.
+>> copy and RAII.
+>>
+>> This explanation (at least #1-#7) needs to come much sooner.
+>> Definitely still in the Basics sections. Anyway, back to my
+>> first-impression timeline:
+>>
+>> 10- Sections 3.5-3.7 were easy. One and done.
+>>
+>> 11- Associated Types (3.8). Why does this come before Traits (3.12)?
+>>
+>> 12- The closures section was very cool. *After* I understood Traits.
+>> Traits are so important in Rust they need to come first! I was missing
+>> an explanation of what the syntactic sugar of "Fn(int) -> int" is all
+>> about. I only sort-of understood the point about why a closure has
+>> undefined size when returned, but it is fine when used as an argument.
+>> My gut feeling was that it is somehow because you left the scope of
+>> the monomorphized function that produced it.
+>>
+>> 13- By the time I read "Static and Dynamic Dispatch" (3.13) I was
+>> hooked on Rust. At this point I'd already played around with rustc to
+>> understand the memory ownership concept. The static+dynamic dispatch
+>> is just so elegant, I was sold completely and totally at this point.
+>> MLton has to do escape analysis to determine which closures it can
+>> monomorphize away. That you put this directly under my control and
+>> completely side stepped this issue is just so elegant. Wow.
+>>
+>> 14- I skimmed over the rest of the sections without any problems.
+>>
+>> I have yet to write serious code in Rust, but the confluence of "Just
+>> the Right Ideas" (TM) has pretty much convinced me. The documentation
+>> of the 'std' library looks pretty good, a clear upgrade of the
+>> Standard ML basis library it is came from. ;-) At the moment I am very
+>> hopeful that Rust is the language I've been waiting my entire
+>> professional career to learn.
+>>
+>> Thank you for your work on Rust!
+>> I hope my user report can help you improve the experience for the next
+>> newbie.
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+
+From ryan at ryanhiebert.com  Mon Apr  6 14:53:01 2015
+From: ryan at ryanhiebert.com (Ryan Hiebert)
+Date: Mon, 6 Apr 2015 09:53:01 -0500
+Subject: [rust-dev] Newcomer to Rust: my experience
+In-Reply-To: <CAA-O0XiMy1JVpT-9VcWOvqd_40PMmVvWN9xw6CazftJ77zh4bw@mail.gmail.com>
+References: <CAA-O0XjaJGtZNRdHZ2==rswmXnokdXp4BDXQiYaGpNjyV6a_Lg@mail.gmail.com>
+	<CAPax79B+gFifbM3bKvNtYiXj+zc7r+p-9wvWW6cMxfnKpR=m8Q@mail.gmail.com>
+	<CAA-O0XiMy1JVpT-9VcWOvqd_40PMmVvWN9xw6CazftJ77zh4bw@mail.gmail.com>
+Message-ID: <40BC514D-4F74-491F-9774-1384ECF81209@ryanhiebert.com>
+
+Thanks Wesley, for your writeup. I?m still learning Rust, and I think your post here is likely to give me some direction as I learn about some of the unique features of Rust.
+
+
+> On Apr 6, 2015, at 8:55 AM, Wesley W. Terpstra <wesley at terpstra.ca> wrote:
+> 
+> Yes, I discovered this, thanks.
+> I signed up for <http://internals.rust-lang.org/c/documentation> and
+> posted it there.
+> 
+> On Mon, Apr 6, 2015 at 3:34 PM, Oleg Eterevsky <oleg at eterevsky.com> wrote:
+>> Hi Wesley!
+>> 
+>> That's a very cool analysis. This sounds very much like my thoughts about
+>> the tutorial.
+>> 
+>> I think you'd better post it on http://users.rust-lang.org/, since it is the
+>> main place for Rust discussions now. The mailing list is almost dead.
+>> 
+>> --
+>> Oleg
+>> 
+>> On Mon, Apr 6, 2015 at 4:23 PM Wesley W. Terpstra <wesley at terpstra.ca>
+>> wrote:
+>>> 
+>>> Good afternoon and happy easter,
+>>> 
+>>> I am a newcomer to Rust and recently finished working through your
+>>> tutorial. Before I get too much further into reading the standard
+>>> library, I wanted to share my experience as a complete Rust newbie
+>>> starting out only with your documentation, before I forget it. I
+>>> regret that I did not start taking notes immediately, but it was not
+>>> yet clear to me how much I was going to like Rust, so a lot of this
+>>> will be me recalling my experience, without notes.
+>>> 
+>>> First, my background. I've been programming in C++ for 20 years and
+>>> used MLton (Standard ML) heavily for about 5 years, 4 years ago. I
+>>> have dabbled with Haskell, but not seriously. So, as far as beginners
+>>> to Rust go, I suspect I would be the sort of person who should
+>>> definitely have been able to go through your tutorial and come out at
+>>> the other end with a clear mental model of the language, as I've been
+>>> exposed to almost all of the concepts before.
+>>> 
+>>> 1- I had heard about Rust through the odd talk at ML workshops via
+>>> youtube, although the last ML workshop I attended in person was ~6
+>>> years ago. The main thing that raised Rust to my attention was your
+>>> v1.0 release which was mentioned on Slashdot. A few days ago, I saw a
+>>> comment posted somewhere that reminded me about it and contained these
+>>> two keywords: functional + no-GC. That got me interested enough to
+>>> head over to your main page.
+>>> 
+>>> 2- I really liked how on the front page there was a feature list that
+>>> summarised what I could expect from the language. I was surprised not
+>>> to see a bullet point reaffirming that there was no garbage collector
+>>> necessary. I then started reading the Rust tutorial "book" in order.
+>>> 
+>>> 3- Installing Rust on Mavericks worked perfectly and I was happy to
+>>> see it supported all three major platforms. I almost made the mistake
+>>> of installing the old rust package in macports instead of running the
+>>> macports version (0.12.0). From what I've read since, this would have
+>>> been a critical mistake since Rust has evolved so quickly in the near
+>>> past. Perhaps this package should be either removed or updated.
+>>> 
+>>> 4- I was a bit annoyed that I had to wade through Cargo stuff before
+>>> getting to the details of the language, since I was still in the
+>>> "evaluating if Rust is interesting" phase and had very little interest
+>>> in packaging minutia in the introduction.
+>>> 
+>>> 5- Coming from an ML background, I only needed to skim most of the
+>>> "basics", taking note of which features were slightly different.
+>>> 
+>>> 6- The moment I saw "for x in 0..10", I immediately wanted to know if
+>>> I would be able to use the ".." notation on my own types.
+>>> 
+>>> 7- I was again annoyed by the crates/modules/testing sections at the
+>>> start of Section 3. I had completed reading the "Basics" section and
+>>> had yet to see why I should care about Rust. The key Rust feature,
+>>> resource management was still nowhere to be seen.
+>>> 
+>>> 8- Finally I reached the "Pointers" section I had been basically
+>>> waiting to get to this whole time. Then I had to wade through pointer
+>>> problems that any C programmer already knows intimately, before
+>>> getting to how Rust does things. These two sections, 3.3 and 3.4, are
+>>> probably the MOST important sections in the entire tutorial, but they
+>>> come very late and are not well described. I would have expected to
+>>> see a top-down approach to explanation. A "here is how Rust deals with
+>>> memory" and THEN "here is how this solves these problems". Instead, I
+>>> got a "here are problems you already know" and then a "here's how Rust
+>>> does stuff". Due to this presentation approach, section 3.3 is very
+>>> disjointed and I didn't come away from it with a clear idea of how
+>>> this all works. It is also very jarring, because the rest of the
+>>> tutorial is pretty Micky-Mouse and then suddenly the main new concept
+>>> of Rust is explained with only surface detail in two tiny
+>>> sections---completely inadequately.
+>>> 
+>>> 9- I entered the "Ownership" section quite annoyed from the terrible
+>>> preceding section. I *still* don't really understand lifetimes, even
+>>> after having sorted out the way Rust ownership works. These two
+>>> sections are the worst in the tutorial, while also being the most
+>>> important!
+>>> 
+>>> At this point, I played around with Rust to try and understand the
+>>> calling convention, move, copy, and borrow. I am pretty sure I
+>>> understand it now, but I did *NOT* come away from the tutorial with
+>>> this understanding. I would have presented the concepts in this order:
+>>> 
+>>> 1. Rust moves objects by default. Include example showing that "let y
+>>> = x" makes "x" invalid afterwards. Explain that this ensures that
+>>> there is exactly one release to each allocate---something that can
+>>> easily be understood even without explaining C pointers. Show that
+>>> this applies to function calls as well; let x = Foo; f(x);
+>>> println!("{:?}", x); // <-- Bad
+>>> 
+>>> 2. Explain that some types can be copied instead. Mention that this is
+>>> indicated by the "Copy+Clone" trait and show that "let y = x" and
+>>> "f(x)" leave "x" valid afterwards. Mention that all basic types work
+>>> this way, but that it is an opt-in feature.
+>>> 
+>>> 3. Show the "#[derive(Copy,Clone)]" syntax which is AFAICT nowhere
+>>> mentioned in the tutorial. You can understand this even without
+>>> knowing the details of how traits are actually implemented. This shows
+>>> a user that he controls the choice between move/copy semantics.
+>>> 
+>>> 4. Now introduce Box::new(). Explain that it keeps its contents on the
+>>> heap, but the pointer on the stack. Trust that programmers already
+>>> know what heap/stack are without a bad recap. Demonstrate that move
+>>> semantics mean that the heap object is freed exactly once. Perhaps
+>>> mention that this is like C++'s unique_ptr.
+>>> 
+>>> 5. Explain that Box needs a destructor to do the free. Introduce the
+>>> concept of Drop. Explain Box can never be marked Copy due to needing
+>>> Drop. Perhaps mention that Copy+Drop are the only two special traits
+>>> in Rust (is this right?).
+>>> 
+>>> 6. Maybe demonstrate another, more expensive, type of resource managed
+>>> this way in Rust. Mention this automatic drop is something a GC
+>>> language can't give you due to the lazy collection of finalizers.
+>>> 
+>>> 7. Only now introduce borrowing. The existing explanation is fine,
+>>> just out-of-sequence.
+>>> 
+>>> 8. Now explain lifetimes as being a way to promise that the borrow is
+>>> shorter than the life of the object or the borrow it came from. I am
+>>> still unclear about which use of 'a defines the containing lifetime
+>>> and which the contained. So, this definitely needs to be explained
+>>> better, but I think it is WAY less important to understand the details
+>>> of lifetimes than it is to understand the key concepts of: move vs.
+>>> copy and RAII.
+>>> 
+>>> This explanation (at least #1-#7) needs to come much sooner.
+>>> Definitely still in the Basics sections. Anyway, back to my
+>>> first-impression timeline:
+>>> 
+>>> 10- Sections 3.5-3.7 were easy. One and done.
+>>> 
+>>> 11- Associated Types (3.8). Why does this come before Traits (3.12)?
+>>> 
+>>> 12- The closures section was very cool. *After* I understood Traits.
+>>> Traits are so important in Rust they need to come first! I was missing
+>>> an explanation of what the syntactic sugar of "Fn(int) -> int" is all
+>>> about. I only sort-of understood the point about why a closure has
+>>> undefined size when returned, but it is fine when used as an argument.
+>>> My gut feeling was that it is somehow because you left the scope of
+>>> the monomorphized function that produced it.
+>>> 
+>>> 13- By the time I read "Static and Dynamic Dispatch" (3.13) I was
+>>> hooked on Rust. At this point I'd already played around with rustc to
+>>> understand the memory ownership concept. The static+dynamic dispatch
+>>> is just so elegant, I was sold completely and totally at this point.
+>>> MLton has to do escape analysis to determine which closures it can
+>>> monomorphize away. That you put this directly under my control and
+>>> completely side stepped this issue is just so elegant. Wow.
+>>> 
+>>> 14- I skimmed over the rest of the sections without any problems.
+>>> 
+>>> I have yet to write serious code in Rust, but the confluence of "Just
+>>> the Right Ideas" (TM) has pretty much convinced me. The documentation
+>>> of the 'std' library looks pretty good, a clear upgrade of the
+>>> Standard ML basis library it is came from. ;-) At the moment I am very
+>>> hopeful that Rust is the language I've been waiting my entire
+>>> professional career to learn.
+>>> 
+>>> Thank you for your work on Rust!
+>>> I hope my user report can help you improve the experience for the next
+>>> newbie.
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From flavius.as at gmail.com  Fri Apr 17 05:42:33 2015
+From: flavius.as at gmail.com (Flavius Aspra)
+Date: Fri, 17 Apr 2015 07:42:33 +0200
+Subject: [rust-dev] Newcomer to Rust: my experience
+In-Reply-To: <40BC514D-4F74-491F-9774-1384ECF81209@ryanhiebert.com>
+References: <CAA-O0XjaJGtZNRdHZ2==rswmXnokdXp4BDXQiYaGpNjyV6a_Lg@mail.gmail.com>
+	<CAPax79B+gFifbM3bKvNtYiXj+zc7r+p-9wvWW6cMxfnKpR=m8Q@mail.gmail.com>
+	<CAA-O0XiMy1JVpT-9VcWOvqd_40PMmVvWN9xw6CazftJ77zh4bw@mail.gmail.com>
+	<40BC514D-4F74-491F-9774-1384ECF81209@ryanhiebert.com>
+Message-ID: <CAJ0jH2ok_wLNOLrMQDC85+69dwigD8Au5f=yMvj+xfGf_DwqFA@mail.gmail.com>
+
+I agree with the fact that, while the explanations in the tutorial are
+fine, they're way out of order. Even an experienced programmer needs time
+to digest the material in its entirety.
+
+Rust would make a really good first-to-learn-language, unfortunately that
+material is not available yet.
+
+On Mon, Apr 6, 2015 at 4:53 PM, Ryan Hiebert <ryan at ryanhiebert.com> wrote:
+
+> Thanks Wesley, for your writeup. I?m still learning Rust, and I think your
+> post here is likely to give me some direction as I learn about some of the
+> unique features of Rust.
+>
+>
+> > On Apr 6, 2015, at 8:55 AM, Wesley W. Terpstra <wesley at terpstra.ca>
+> wrote:
+> >
+> > Yes, I discovered this, thanks.
+> > I signed up for <http://internals.rust-lang.org/c/documentation> and
+> > posted it there.
+> >
+> > On Mon, Apr 6, 2015 at 3:34 PM, Oleg Eterevsky <oleg at eterevsky.com>
+> wrote:
+> >> Hi Wesley!
+> >>
+> >> That's a very cool analysis. This sounds very much like my thoughts
+> about
+> >> the tutorial.
+> >>
+> >> I think you'd better post it on http://users.rust-lang.org/, since it
+> is the
+> >> main place for Rust discussions now. The mailing list is almost dead.
+> >>
+> >> --
+> >> Oleg
+> >>
+> >> On Mon, Apr 6, 2015 at 4:23 PM Wesley W. Terpstra <wesley at terpstra.ca>
+> >> wrote:
+> >>>
+> >>> Good afternoon and happy easter,
+> >>>
+> >>> I am a newcomer to Rust and recently finished working through your
+> >>> tutorial. Before I get too much further into reading the standard
+> >>> library, I wanted to share my experience as a complete Rust newbie
+> >>> starting out only with your documentation, before I forget it. I
+> >>> regret that I did not start taking notes immediately, but it was not
+> >>> yet clear to me how much I was going to like Rust, so a lot of this
+> >>> will be me recalling my experience, without notes.
+> >>>
+> >>> First, my background. I've been programming in C++ for 20 years and
+> >>> used MLton (Standard ML) heavily for about 5 years, 4 years ago. I
+> >>> have dabbled with Haskell, but not seriously. So, as far as beginners
+> >>> to Rust go, I suspect I would be the sort of person who should
+> >>> definitely have been able to go through your tutorial and come out at
+> >>> the other end with a clear mental model of the language, as I've been
+> >>> exposed to almost all of the concepts before.
+> >>>
+> >>> 1- I had heard about Rust through the odd talk at ML workshops via
+> >>> youtube, although the last ML workshop I attended in person was ~6
+> >>> years ago. The main thing that raised Rust to my attention was your
+> >>> v1.0 release which was mentioned on Slashdot. A few days ago, I saw a
+> >>> comment posted somewhere that reminded me about it and contained these
+> >>> two keywords: functional + no-GC. That got me interested enough to
+> >>> head over to your main page.
+> >>>
+> >>> 2- I really liked how on the front page there was a feature list that
+> >>> summarised what I could expect from the language. I was surprised not
+> >>> to see a bullet point reaffirming that there was no garbage collector
+> >>> necessary. I then started reading the Rust tutorial "book" in order.
+> >>>
+> >>> 3- Installing Rust on Mavericks worked perfectly and I was happy to
+> >>> see it supported all three major platforms. I almost made the mistake
+> >>> of installing the old rust package in macports instead of running the
+> >>> macports version (0.12.0). From what I've read since, this would have
+> >>> been a critical mistake since Rust has evolved so quickly in the near
+> >>> past. Perhaps this package should be either removed or updated.
+> >>>
+> >>> 4- I was a bit annoyed that I had to wade through Cargo stuff before
+> >>> getting to the details of the language, since I was still in the
+> >>> "evaluating if Rust is interesting" phase and had very little interest
+> >>> in packaging minutia in the introduction.
+> >>>
+> >>> 5- Coming from an ML background, I only needed to skim most of the
+> >>> "basics", taking note of which features were slightly different.
+> >>>
+> >>> 6- The moment I saw "for x in 0..10", I immediately wanted to know if
+> >>> I would be able to use the ".." notation on my own types.
+> >>>
+> >>> 7- I was again annoyed by the crates/modules/testing sections at the
+> >>> start of Section 3. I had completed reading the "Basics" section and
+> >>> had yet to see why I should care about Rust. The key Rust feature,
+> >>> resource management was still nowhere to be seen.
+> >>>
+> >>> 8- Finally I reached the "Pointers" section I had been basically
+> >>> waiting to get to this whole time. Then I had to wade through pointer
+> >>> problems that any C programmer already knows intimately, before
+> >>> getting to how Rust does things. These two sections, 3.3 and 3.4, are
+> >>> probably the MOST important sections in the entire tutorial, but they
+> >>> come very late and are not well described. I would have expected to
+> >>> see a top-down approach to explanation. A "here is how Rust deals with
+> >>> memory" and THEN "here is how this solves these problems". Instead, I
+> >>> got a "here are problems you already know" and then a "here's how Rust
+> >>> does stuff". Due to this presentation approach, section 3.3 is very
+> >>> disjointed and I didn't come away from it with a clear idea of how
+> >>> this all works. It is also very jarring, because the rest of the
+> >>> tutorial is pretty Micky-Mouse and then suddenly the main new concept
+> >>> of Rust is explained with only surface detail in two tiny
+> >>> sections---completely inadequately.
+> >>>
+> >>> 9- I entered the "Ownership" section quite annoyed from the terrible
+> >>> preceding section. I *still* don't really understand lifetimes, even
+> >>> after having sorted out the way Rust ownership works. These two
+> >>> sections are the worst in the tutorial, while also being the most
+> >>> important!
+> >>>
+> >>> At this point, I played around with Rust to try and understand the
+> >>> calling convention, move, copy, and borrow. I am pretty sure I
+> >>> understand it now, but I did *NOT* come away from the tutorial with
+> >>> this understanding. I would have presented the concepts in this order:
+> >>>
+> >>> 1. Rust moves objects by default. Include example showing that "let y
+> >>> = x" makes "x" invalid afterwards. Explain that this ensures that
+> >>> there is exactly one release to each allocate---something that can
+> >>> easily be understood even without explaining C pointers. Show that
+> >>> this applies to function calls as well; let x = Foo; f(x);
+> >>> println!("{:?}", x); // <-- Bad
+> >>>
+> >>> 2. Explain that some types can be copied instead. Mention that this is
+> >>> indicated by the "Copy+Clone" trait and show that "let y = x" and
+> >>> "f(x)" leave "x" valid afterwards. Mention that all basic types work
+> >>> this way, but that it is an opt-in feature.
+> >>>
+> >>> 3. Show the "#[derive(Copy,Clone)]" syntax which is AFAICT nowhere
+> >>> mentioned in the tutorial. You can understand this even without
+> >>> knowing the details of how traits are actually implemented. This shows
+> >>> a user that he controls the choice between move/copy semantics.
+> >>>
+> >>> 4. Now introduce Box::new(). Explain that it keeps its contents on the
+> >>> heap, but the pointer on the stack. Trust that programmers already
+> >>> know what heap/stack are without a bad recap. Demonstrate that move
+> >>> semantics mean that the heap object is freed exactly once. Perhaps
+> >>> mention that this is like C++'s unique_ptr.
+> >>>
+> >>> 5. Explain that Box needs a destructor to do the free. Introduce the
+> >>> concept of Drop. Explain Box can never be marked Copy due to needing
+> >>> Drop. Perhaps mention that Copy+Drop are the only two special traits
+> >>> in Rust (is this right?).
+> >>>
+> >>> 6. Maybe demonstrate another, more expensive, type of resource managed
+> >>> this way in Rust. Mention this automatic drop is something a GC
+> >>> language can't give you due to the lazy collection of finalizers.
+> >>>
+> >>> 7. Only now introduce borrowing. The existing explanation is fine,
+> >>> just out-of-sequence.
+> >>>
+> >>> 8. Now explain lifetimes as being a way to promise that the borrow is
+> >>> shorter than the life of the object or the borrow it came from. I am
+> >>> still unclear about which use of 'a defines the containing lifetime
+> >>> and which the contained. So, this definitely needs to be explained
+> >>> better, but I think it is WAY less important to understand the details
+> >>> of lifetimes than it is to understand the key concepts of: move vs.
+> >>> copy and RAII.
+> >>>
+> >>> This explanation (at least #1-#7) needs to come much sooner.
+> >>> Definitely still in the Basics sections. Anyway, back to my
+> >>> first-impression timeline:
+> >>>
+> >>> 10- Sections 3.5-3.7 were easy. One and done.
+> >>>
+> >>> 11- Associated Types (3.8). Why does this come before Traits (3.12)?
+> >>>
+> >>> 12- The closures section was very cool. *After* I understood Traits.
+> >>> Traits are so important in Rust they need to come first! I was missing
+> >>> an explanation of what the syntactic sugar of "Fn(int) -> int" is all
+> >>> about. I only sort-of understood the point about why a closure has
+> >>> undefined size when returned, but it is fine when used as an argument.
+> >>> My gut feeling was that it is somehow because you left the scope of
+> >>> the monomorphized function that produced it.
+> >>>
+> >>> 13- By the time I read "Static and Dynamic Dispatch" (3.13) I was
+> >>> hooked on Rust. At this point I'd already played around with rustc to
+> >>> understand the memory ownership concept. The static+dynamic dispatch
+> >>> is just so elegant, I was sold completely and totally at this point.
+> >>> MLton has to do escape analysis to determine which closures it can
+> >>> monomorphize away. That you put this directly under my control and
+> >>> completely side stepped this issue is just so elegant. Wow.
+> >>>
+> >>> 14- I skimmed over the rest of the sections without any problems.
+> >>>
+> >>> I have yet to write serious code in Rust, but the confluence of "Just
+> >>> the Right Ideas" (TM) has pretty much convinced me. The documentation
+> >>> of the 'std' library looks pretty good, a clear upgrade of the
+> >>> Standard ML basis library it is came from. ;-) At the moment I am very
+> >>> hopeful that Rust is the language I've been waiting my entire
+> >>> professional career to learn.
+> >>>
+> >>> Thank you for your work on Rust!
+> >>> I hope my user report can help you improve the experience for the next
+> >>> newbie.
+> >>> _______________________________________________
+> >>> Rust-dev mailing list
+> >>> Rust-dev at mozilla.org
+> >>> https://mail.mozilla.org/listinfo/rust-dev
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org
+> > https://mail.mozilla.org/listinfo/rust-dev
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150417/f1a7a664/attachment.html>
+
+From dizzyd at dizzyd.com  Fri Apr 17 05:59:56 2015
+From: dizzyd at dizzyd.com (Dave Smith)
+Date: Thu, 16 Apr 2015 22:59:56 -0700
+Subject: [rust-dev] Newcomer to Rust: my experience
+In-Reply-To: <CAJ0jH2ok_wLNOLrMQDC85+69dwigD8Au5f=yMvj+xfGf_DwqFA@mail.gmail.com>
+References: <CAA-O0XjaJGtZNRdHZ2==rswmXnokdXp4BDXQiYaGpNjyV6a_Lg@mail.gmail.com>
+	<CAPax79B+gFifbM3bKvNtYiXj+zc7r+p-9wvWW6cMxfnKpR=m8Q@mail.gmail.com>
+	<CAA-O0XiMy1JVpT-9VcWOvqd_40PMmVvWN9xw6CazftJ77zh4bw@mail.gmail.com>
+	<40BC514D-4F74-491F-9774-1384ECF81209@ryanhiebert.com>
+	<CAJ0jH2ok_wLNOLrMQDC85+69dwigD8Au5f=yMvj+xfGf_DwqFA@mail.gmail.com>
+Message-ID: <CAJ19jJ+trpAh-TFOqhnHdOHnZ5=wn51ts5xB67jS_GsGmeP2MQ@mail.gmail.com>
+
+It's good to see the rust-dev list still alive! ;)
+
+D.
+
+On Thu, Apr 16, 2015 at 10:42 PM, Flavius Aspra <flavius.as at gmail.com> wrote:
+> I agree with the fact that, while the explanations in the tutorial are fine,
+> they're way out of order. Even an experienced programmer needs time to
+> digest the material in its entirety.
+>
+> Rust would make a really good first-to-learn-language, unfortunately that
+> material is not available yet.
+>
+> On Mon, Apr 6, 2015 at 4:53 PM, Ryan Hiebert <ryan at ryanhiebert.com> wrote:
+>>
+>> Thanks Wesley, for your writeup. I?m still learning Rust, and I think your
+>> post here is likely to give me some direction as I learn about some of the
+>> unique features of Rust.
+>>
+>>
+>> > On Apr 6, 2015, at 8:55 AM, Wesley W. Terpstra <wesley at terpstra.ca>
+>> > wrote:
+>> >
+>> > Yes, I discovered this, thanks.
+>> > I signed up for <http://internals.rust-lang.org/c/documentation> and
+>> > posted it there.
+>> >
+>> > On Mon, Apr 6, 2015 at 3:34 PM, Oleg Eterevsky <oleg at eterevsky.com>
+>> > wrote:
+>> >> Hi Wesley!
+>> >>
+>> >> That's a very cool analysis. This sounds very much like my thoughts
+>> >> about
+>> >> the tutorial.
+>> >>
+>> >> I think you'd better post it on http://users.rust-lang.org/, since it
+>> >> is the
+>> >> main place for Rust discussions now. The mailing list is almost dead.
+>> >>
+>> >> --
+>> >> Oleg
+>> >>
+>> >> On Mon, Apr 6, 2015 at 4:23 PM Wesley W. Terpstra <wesley at terpstra.ca>
+>> >> wrote:
+>> >>>
+>> >>> Good afternoon and happy easter,
+>> >>>
+>> >>> I am a newcomer to Rust and recently finished working through your
+>> >>> tutorial. Before I get too much further into reading the standard
+>> >>> library, I wanted to share my experience as a complete Rust newbie
+>> >>> starting out only with your documentation, before I forget it. I
+>> >>> regret that I did not start taking notes immediately, but it was not
+>> >>> yet clear to me how much I was going to like Rust, so a lot of this
+>> >>> will be me recalling my experience, without notes.
+>> >>>
+>> >>> First, my background. I've been programming in C++ for 20 years and
+>> >>> used MLton (Standard ML) heavily for about 5 years, 4 years ago. I
+>> >>> have dabbled with Haskell, but not seriously. So, as far as beginners
+>> >>> to Rust go, I suspect I would be the sort of person who should
+>> >>> definitely have been able to go through your tutorial and come out at
+>> >>> the other end with a clear mental model of the language, as I've been
+>> >>> exposed to almost all of the concepts before.
+>> >>>
+>> >>> 1- I had heard about Rust through the odd talk at ML workshops via
+>> >>> youtube, although the last ML workshop I attended in person was ~6
+>> >>> years ago. The main thing that raised Rust to my attention was your
+>> >>> v1.0 release which was mentioned on Slashdot. A few days ago, I saw a
+>> >>> comment posted somewhere that reminded me about it and contained these
+>> >>> two keywords: functional + no-GC. That got me interested enough to
+>> >>> head over to your main page.
+>> >>>
+>> >>> 2- I really liked how on the front page there was a feature list that
+>> >>> summarised what I could expect from the language. I was surprised not
+>> >>> to see a bullet point reaffirming that there was no garbage collector
+>> >>> necessary. I then started reading the Rust tutorial "book" in order.
+>> >>>
+>> >>> 3- Installing Rust on Mavericks worked perfectly and I was happy to
+>> >>> see it supported all three major platforms. I almost made the mistake
+>> >>> of installing the old rust package in macports instead of running the
+>> >>> macports version (0.12.0). From what I've read since, this would have
+>> >>> been a critical mistake since Rust has evolved so quickly in the near
+>> >>> past. Perhaps this package should be either removed or updated.
+>> >>>
+>> >>> 4- I was a bit annoyed that I had to wade through Cargo stuff before
+>> >>> getting to the details of the language, since I was still in the
+>> >>> "evaluating if Rust is interesting" phase and had very little interest
+>> >>> in packaging minutia in the introduction.
+>> >>>
+>> >>> 5- Coming from an ML background, I only needed to skim most of the
+>> >>> "basics", taking note of which features were slightly different.
+>> >>>
+>> >>> 6- The moment I saw "for x in 0..10", I immediately wanted to know if
+>> >>> I would be able to use the ".." notation on my own types.
+>> >>>
+>> >>> 7- I was again annoyed by the crates/modules/testing sections at the
+>> >>> start of Section 3. I had completed reading the "Basics" section and
+>> >>> had yet to see why I should care about Rust. The key Rust feature,
+>> >>> resource management was still nowhere to be seen.
+>> >>>
+>> >>> 8- Finally I reached the "Pointers" section I had been basically
+>> >>> waiting to get to this whole time. Then I had to wade through pointer
+>> >>> problems that any C programmer already knows intimately, before
+>> >>> getting to how Rust does things. These two sections, 3.3 and 3.4, are
+>> >>> probably the MOST important sections in the entire tutorial, but they
+>> >>> come very late and are not well described. I would have expected to
+>> >>> see a top-down approach to explanation. A "here is how Rust deals with
+>> >>> memory" and THEN "here is how this solves these problems". Instead, I
+>> >>> got a "here are problems you already know" and then a "here's how Rust
+>> >>> does stuff". Due to this presentation approach, section 3.3 is very
+>> >>> disjointed and I didn't come away from it with a clear idea of how
+>> >>> this all works. It is also very jarring, because the rest of the
+>> >>> tutorial is pretty Micky-Mouse and then suddenly the main new concept
+>> >>> of Rust is explained with only surface detail in two tiny
+>> >>> sections---completely inadequately.
+>> >>>
+>> >>> 9- I entered the "Ownership" section quite annoyed from the terrible
+>> >>> preceding section. I *still* don't really understand lifetimes, even
+>> >>> after having sorted out the way Rust ownership works. These two
+>> >>> sections are the worst in the tutorial, while also being the most
+>> >>> important!
+>> >>>
+>> >>> At this point, I played around with Rust to try and understand the
+>> >>> calling convention, move, copy, and borrow. I am pretty sure I
+>> >>> understand it now, but I did *NOT* come away from the tutorial with
+>> >>> this understanding. I would have presented the concepts in this order:
+>> >>>
+>> >>> 1. Rust moves objects by default. Include example showing that "let y
+>> >>> = x" makes "x" invalid afterwards. Explain that this ensures that
+>> >>> there is exactly one release to each allocate---something that can
+>> >>> easily be understood even without explaining C pointers. Show that
+>> >>> this applies to function calls as well; let x = Foo; f(x);
+>> >>> println!("{:?}", x); // <-- Bad
+>> >>>
+>> >>> 2. Explain that some types can be copied instead. Mention that this is
+>> >>> indicated by the "Copy+Clone" trait and show that "let y = x" and
+>> >>> "f(x)" leave "x" valid afterwards. Mention that all basic types work
+>> >>> this way, but that it is an opt-in feature.
+>> >>>
+>> >>> 3. Show the "#[derive(Copy,Clone)]" syntax which is AFAICT nowhere
+>> >>> mentioned in the tutorial. You can understand this even without
+>> >>> knowing the details of how traits are actually implemented. This shows
+>> >>> a user that he controls the choice between move/copy semantics.
+>> >>>
+>> >>> 4. Now introduce Box::new(). Explain that it keeps its contents on the
+>> >>> heap, but the pointer on the stack. Trust that programmers already
+>> >>> know what heap/stack are without a bad recap. Demonstrate that move
+>> >>> semantics mean that the heap object is freed exactly once. Perhaps
+>> >>> mention that this is like C++'s unique_ptr.
+>> >>>
+>> >>> 5. Explain that Box needs a destructor to do the free. Introduce the
+>> >>> concept of Drop. Explain Box can never be marked Copy due to needing
+>> >>> Drop. Perhaps mention that Copy+Drop are the only two special traits
+>> >>> in Rust (is this right?).
+>> >>>
+>> >>> 6. Maybe demonstrate another, more expensive, type of resource managed
+>> >>> this way in Rust. Mention this automatic drop is something a GC
+>> >>> language can't give you due to the lazy collection of finalizers.
+>> >>>
+>> >>> 7. Only now introduce borrowing. The existing explanation is fine,
+>> >>> just out-of-sequence.
+>> >>>
+>> >>> 8. Now explain lifetimes as being a way to promise that the borrow is
+>> >>> shorter than the life of the object or the borrow it came from. I am
+>> >>> still unclear about which use of 'a defines the containing lifetime
+>> >>> and which the contained. So, this definitely needs to be explained
+>> >>> better, but I think it is WAY less important to understand the details
+>> >>> of lifetimes than it is to understand the key concepts of: move vs.
+>> >>> copy and RAII.
+>> >>>
+>> >>> This explanation (at least #1-#7) needs to come much sooner.
+>> >>> Definitely still in the Basics sections. Anyway, back to my
+>> >>> first-impression timeline:
+>> >>>
+>> >>> 10- Sections 3.5-3.7 were easy. One and done.
+>> >>>
+>> >>> 11- Associated Types (3.8). Why does this come before Traits (3.12)?
+>> >>>
+>> >>> 12- The closures section was very cool. *After* I understood Traits.
+>> >>> Traits are so important in Rust they need to come first! I was missing
+>> >>> an explanation of what the syntactic sugar of "Fn(int) -> int" is all
+>> >>> about. I only sort-of understood the point about why a closure has
+>> >>> undefined size when returned, but it is fine when used as an argument.
+>> >>> My gut feeling was that it is somehow because you left the scope of
+>> >>> the monomorphized function that produced it.
+>> >>>
+>> >>> 13- By the time I read "Static and Dynamic Dispatch" (3.13) I was
+>> >>> hooked on Rust. At this point I'd already played around with rustc to
+>> >>> understand the memory ownership concept. The static+dynamic dispatch
+>> >>> is just so elegant, I was sold completely and totally at this point.
+>> >>> MLton has to do escape analysis to determine which closures it can
+>> >>> monomorphize away. That you put this directly under my control and
+>> >>> completely side stepped this issue is just so elegant. Wow.
+>> >>>
+>> >>> 14- I skimmed over the rest of the sections without any problems.
+>> >>>
+>> >>> I have yet to write serious code in Rust, but the confluence of "Just
+>> >>> the Right Ideas" (TM) has pretty much convinced me. The documentation
+>> >>> of the 'std' library looks pretty good, a clear upgrade of the
+>> >>> Standard ML basis library it is came from. ;-) At the moment I am very
+>> >>> hopeful that Rust is the language I've been waiting my entire
+>> >>> professional career to learn.
+>> >>>
+>> >>> Thank you for your work on Rust!
+>> >>> I hope my user report can help you improve the experience for the next
+>> >>> newbie.
+>> >>> _______________________________________________
+>> >>> Rust-dev mailing list
+>> >>> Rust-dev at mozilla.org
+>> >>> https://mail.mozilla.org/listinfo/rust-dev
+>> > _______________________________________________
+>> > Rust-dev mailing list
+>> > Rust-dev at mozilla.org
+>> > https://mail.mozilla.org/listinfo/rust-dev
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+

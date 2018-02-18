@@ -1,0 +1,41 @@
+From halivingston at gmail.com  Wed Sep 30 21:43:14 2015
+From: halivingston at gmail.com (Hayden Livingston)
+Date: Wed, 30 Sep 2015 14:43:14 -0700
+Subject: [rust-dev] Rust compilation times with FastISel?
+Message-ID: <CAMxMwy+z24+jNUUyop85t5VHKfPbmRmB2LkKN+6UEt9mY5s-9Q@mail.gmail.com>
+
+Has anybody tried using FastISel instead of regular ISel provided by LLVM?
+
+I remember that previously we couldn't use FastISel. Maybe that has changed?
+
+What instructions were we using that requires ISel and not FastISel?
+
+From erick.tryzelaar at gmail.com  Wed Sep 30 22:29:37 2015
+From: erick.tryzelaar at gmail.com (Erick Tryzelaar)
+Date: Wed, 30 Sep 2015 15:29:37 -0700
+Subject: [rust-dev] Rust compilation times with FastISel?
+In-Reply-To: <CAMxMwy+z24+jNUUyop85t5VHKfPbmRmB2LkKN+6UEt9mY5s-9Q@mail.gmail.com>
+References: <CAMxMwy+z24+jNUUyop85t5VHKfPbmRmB2LkKN+6UEt9mY5s-9Q@mail.gmail.com>
+Message-ID: <CALdfqQKkSoaxtALJ4hkfGja99JedVPoWdhHEVr4L1e0BFTyKdQ@mail.gmail.com>
+
+I believe this mailing list has been retired. Instead, I'd recommend asking
+this question on https://internals.rust-lang.org.
+
+On Wed, Sep 30, 2015 at 2:43 PM, Hayden Livingston <halivingston at gmail.com>
+wrote:
+
+> Has anybody tried using FastISel instead of regular ISel provided by LLVM?
+>
+> I remember that previously we couldn't use FastISel. Maybe that has
+> changed?
+>
+> What instructions were we using that requires ISel and not FastISel?
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150930/67760167/attachment.html>
+

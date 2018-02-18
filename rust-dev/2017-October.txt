@@ -1,0 +1,97 @@
+From Sebastien.Hinderer at inria.fr  Mon Oct 30 15:34:25 2017
+From: Sebastien.Hinderer at inria.fr (=?utf-8?Q?S=C3=A9bastien?= Hinderer)
+Date: Mon, 30 Oct 2017 16:34:25 +0100
+Subject: [rust-dev] How does Rust's testsuite work?
+Message-ID: <20171030153425.ihdgjy44n76xfmjq@pl-59055.rocqadm.inria.fr>
+
+Dear all,
+
+I am a member of OCaml's developement team. More specifically, I am
+working on a test-driver for the OCaml compiler, which will be part of
+OCaml's 4.06 release.
+
+I am currently writing an article to describe the tool and its
+principles. In this article, I would like to also talk about how other
+compilers' testsuites are driven and loking how things are done in Rust
+seemed natural to me.
+
+In OCaml, our testsuite essentially consist in whole programs that
+we compile and run, checking that the compilation and execution results
+match the expected ones.
+
+I tried to understand how tests are run for the Rust compiler but was
+not able to get an overall picture. It seems there are special comments
+to declare expected errors, for instance, but how do you deal, for
+instance, with conditional tests that should be executed only on one
+platform?
+
+Any comment / hint on this aspect of the test harness' design would be
+really helpful.
+
+Many thanks in advance,
+
+S?bastien.
+
+
+
+
+
+
+From ronuk.raval at gmail.com  Mon Oct 30 15:43:01 2017
+From: ronuk.raval at gmail.com (Ronuk Raval)
+Date: Mon, 30 Oct 2017 11:43:01 -0400
+Subject: [rust-dev] How does Rust's testsuite work?
+In-Reply-To: <20171030153425.ihdgjy44n76xfmjq@pl-59055.rocqadm.inria.fr>
+References: <20171030153425.ihdgjy44n76xfmjq@pl-59055.rocqadm.inria.fr>
+Message-ID: <CAPhHnhpUPQs1Em7K7fc-TBC-tBfyxTWksRN+qR3ohwUsc7sMTQ@mail.gmail.com>
+
+Hey S?bastien,
+
+The rust-dev mailing list has been abandoned since 2015. You'll likely get
+a much better response by posting your question on
+https://internals.rust-lang.org/
+
+On Mon, Oct 30, 2017 at 11:34 AM, S?bastien Hinderer <
+Sebastien.Hinderer at inria.fr> wrote:
+
+> Dear all,
+>
+> I am a member of OCaml's developement team. More specifically, I am
+> working on a test-driver for the OCaml compiler, which will be part of
+> OCaml's 4.06 release.
+>
+> I am currently writing an article to describe the tool and its
+> principles. In this article, I would like to also talk about how other
+> compilers' testsuites are driven and loking how things are done in Rust
+> seemed natural to me.
+>
+> In OCaml, our testsuite essentially consist in whole programs that
+> we compile and run, checking that the compilation and execution results
+> match the expected ones.
+>
+> I tried to understand how tests are run for the Rust compiler but was
+> not able to get an overall picture. It seems there are special comments
+> to declare expected errors, for instance, but how do you deal, for
+> instance, with conditional tests that should be executed only on one
+> platform?
+>
+> Any comment / hint on this aspect of the test harness' design would be
+> really helpful.
+>
+> Many thanks in advance,
+>
+> S?bastien.
+>
+>
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20171030/f342edb5/attachment.html>
+

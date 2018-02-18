@@ -1,0 +1,3378 @@
+From graydon at mozilla.com  Mon Jul  4 13:23:17 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 04 Jul 2011 13:23:17 -0700
+Subject: [rust-dev] syntax reforms, cont'd
+Message-ID: <4E122135.2040807@mozilla.com>
+
+11-05-17 I posted a note here mentioning some syntax churn going on. 
+Some of that has happened in the past month, some required further 
+discussion. We had an all-day intense session in Toronto a couple weeks 
+ago and hashed out a few fine details, which we took notes of but forgot 
+to post publicly. This is the result of that discussion:
+
+   - Type foo<T> in declarations, with foo::<T> only in expression
+     position to disambiguate against binary <. Since it's usually
+     inferred, few programs wind up seeing foo::<T> in practice.
+
+   - tag T = <type>; declares a general nominal type, which can be
+     a record, object, whatever. Reads like "type T = ..." but is
+     constructed by juxtaposing the name T with the constructed
+     value on the RHS.
+
+   - Paren-free change to if, alt, while, for. Braces required for
+     bodies.
+
+   - alt also loses the 'case' word. Full form is:
+
+     alt <val> { <pat> { <block> } <pat> { <block> } ... }
+
+   - rec constructor changes to {label:<expr>, ...}
+
+   - rec type changes to {label:<type>, ...}
+
+   - let changes to let <pat> = <expr> for irrefutable pats.
+
+   - Numerous pattern extensions:
+     - <pat> | <pat> for alternatives
+     - <pat> ... <pat> for *scalar* ranges
+     - {label: <pat>, ...} to match rec constructor and type
+     - ident=<pat> is a value-capture
+     - &ident=<pat> is an alias-capture
+     - ident sugar for ident=_, a capture, no question mark;
+       ambiguity with nullary tags is resolved by requiring
+       a :: somewhere in nullary-tag name. Prefix :: is permitted.
+     - {x, y} sugar for {x: x, y: y} (thus {x:x=_, y:y=_})
+     - {&x, &y} sugar for {x: &x, y: &y}
+     - "..." is permitted in rec patterns, as is matching fields
+       out of order; patterns are typechecked top-down anyways.
+     - <pat>:<ty> to ascribe a type
+       (let x:int is simply a special case of this)
+
+   - tuple to go; use structural records and give fields a name,
+     tags apply to anything so tag-arms are not implicit tuples
+     either.
+
+   - function-calls do not support keywords. yet. but the feature
+     seems like it may drift into focus since some symmetry is
+     present.
+
+Phew. Sorry if any sacred cows died here. Very constrained space, not a 
+lot of wiggle room.
+
+Note that I will be performing these changes en-masse using the pretty 
+printer when I can get it stable enough to lean on permanently this way. 
+I'll announce such flag days a couple days in advance, so people have 
+time to get their WIP patches in.
+
+-Graydon
+
+From graydon at mozilla.com  Mon Jul  4 13:57:27 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 04 Jul 2011 13:57:27 -0700
+Subject: [rust-dev] LLVM bump (Fwd: [graydon/rust] 5c9fb0: Merge pull
+ request #605 from wilsonk/target)
+Message-ID: <4E122937.10007@mozilla.com>
+
+LLVM drifted API again, so we've had to move to keep up. Please update 
+your LLVMs appropriately. I've just upgraded the tinderboxes.
+
+-Graydon
+
+-------- Original Message --------
+Subject: [graydon/rust] 5c9fb0: Merge pull request #605 from wilsonk/target
+Date: Mon, 4 Jul 2011 13:46:01 -0700
+From: rust-commits at mozilla.org
+Reply-To: rust-dev at mozilla.org
+To: rust-commits at mozilla.org
+
+   Branch: refs/heads/master
+   Home:   https://github.com/graydon/rust
+
+   Commit: 5c9fb0bc98dbd744fc82bccd9e09a2d3090b4528
+ 
+https://github.com/graydon/rust/commit/5c9fb0bc98dbd744fc82bccd9e09a2d3090b4528
+   Author: Graydon Hoare <graydon at pobox.com>
+   Date:   2011-07-04 (Mon, 04 Jul 2011)
+
+   Changed paths:
+     M src/rustllvm/RustWrapper.cpp
+
+   Log Message:
+   -----------
+   Merge pull request #605 from wilsonk/target
+
+Update RustWrapper.cpp so that LLVM revision 134231 from June 30, 2011 at
+
+
+_______________________________________________
+Rust-commits mailing list
+Rust-commits at mozilla.org
+https://mail.mozilla.org/listinfo/rust-commits
+
+From marijnh at gmail.com  Tue Jul  5 05:38:14 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 5 Jul 2011 14:38:14 +0200
+Subject: [rust-dev] stageX/rustc should be linked against
+	stageX/lib/libstd.so
+Message-ID: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>
+
+(I think.) The current situation is that stage1/rustc is always
+compiled against stage0/lib/libstd.so , which means that when I add
+something to the standard lib, I can't use it in rustc until after the
+next snapshot. This seems needlessly awkward (and is going to slow
+down stdlib development by discouraging everyone from putting general
+code they write in the stdlib).
+
+There is probably a reason for the current set-up, but I think it
+should be reconsidered.
+
+From respindola at mozilla.com  Tue Jul  5 07:12:44 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Tue, 05 Jul 2011 10:12:44 -0400
+Subject: [rust-dev] stageX/rustc should be linked against
+	stageX/lib/libstd.so
+In-Reply-To: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>
+Message-ID: <4E131BDC.60404@mozilla.com>
+
+On 11-07-05 8:38 AM, Marijn Haverbeke wrote:
+> (I think.) The current situation is that stage1/rustc is always
+> compiled against stage0/lib/libstd.so , which means that when I add
+> something to the standard lib, I can't use it in rustc until after the
+> next snapshot. This seems needlessly awkward (and is going to slow
+> down stdlib development by discouraging everyone from putting general
+> code they write in the stdlib).
+>
+> There is probably a reason for the current set-up, but I think it
+> should be reconsidered.
+
+The reason is that stage1/rustc is a regular rust program produced by 
+stage0/rustc. Every program compiled with stage0/rustc gets linked with 
+its libraries.
+
+A way to think of it: imagine there was another rust compiler (visual 
+rust), if you started the bootstrap of our compiler using it (stage0 is 
+visual rust), stage1 would depend on the runtime libraries of visual rust.
+
+Cheers,
+Rafael
+
+From marijnh at gmail.com  Tue Jul  5 07:29:59 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 5 Jul 2011 16:29:59 +0200
+Subject: [rust-dev] stageX/rustc should be linked against
+	stageX/lib/libstd.so
+In-Reply-To: <4E131BDC.60404@mozilla.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>
+	<4E131BDC.60404@mozilla.com>
+Message-ID: <CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+
+> A way to think of it: imagine there was another rust compiler (visual rust),
+> if you started the bootstrap of our compiler using it (stage0 is visual
+> rust), stage1 would depend on the runtime libraries of visual rust.
+
+Right, and if visual rust used a different dynamic lib format, you'd
+have a problem. Similarly, if we ever want to change our so format in
+an incompatible way, it seems we're in for some seriously complicated
+snapshotting.
+
+What is the problem with using the stage0 compiler to first compile a
+standard lib for stage1, and then a stage1 rustc? Isn't the current
+situation, where (if I understand correctly) stage0/lib/libstd.so is
+used both by stage0/rustc and stage1/rustc kind of asymmetrical and
+weird?
+
+From graydon at mozilla.com  Tue Jul  5 08:25:08 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 05 Jul 2011 08:25:08 -0700
+Subject: [rust-dev] stageX/rustc should be linked
+	against	stageX/lib/libstd.so
+In-Reply-To: <CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>	<4E131BDC.60404@mozilla.com>
+	<CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+Message-ID: <4E132CD4.2020803@mozilla.com>
+
+On 05/07/2011 7:29 AM, Marijn Haverbeke wrote:
+>> A way to think of it: imagine there was another rust compiler (visual rust),
+>> if you started the bootstrap of our compiler using it (stage0 is visual
+>> rust), stage1 would depend on the runtime libraries of visual rust.
+>
+> Right, and if visual rust used a different dynamic lib format, you'd
+> have a problem. Similarly, if we ever want to change our so format in
+> an incompatible way, it seems we're in for some seriously complicated
+> snapshotting.
+>
+> What is the problem with using the stage0 compiler to first compile a
+> standard lib for stage1, and then a stage1 rustc? Isn't the current
+> situation, where (if I understand correctly) stage0/lib/libstd.so is
+> used both by stage0/rustc and stage1/rustc kind of asymmetrical and
+> weird?
+
+We have done it both ways in the past; there's always an asymmetry of 
+some sort because there are always 2 libraries involved, host and target.
+
+You have to be more precise with your term "used by". Stage1/rustc 
+depends on stage0/lib/libstd.so to *run*, but produces binaries that 
+depend on stage1/lib/libstd.so. So in a way, it uses both.
+
+I talked to Rafael a bit more about this last week and the arrangement 
+we agreed we should move to (which, incidentally, works on windows as 
+well, where there's no rpath support) is the following:
+
+   stageN/bin/{rustc,libstd.so,glue.o}   <-- host binaries
+   stageN/lib/<arch>/{glue.o,libstd.so}  <-- target[1] binaries
+
+That is: stageN/bin contains everything needed-to-run stageN/bin, 
+whereas stageN/<arch>/lib contains everything 
+needed-by-programs-produced-by stageN. Then we rpath stageN/bin/rustc to 
+$ORIGIN on machines that have rpath, and on windows this "just works" 
+because it searches the exe directory for dlls. Because it's crazy.
+
+Then we copy stageN/<host-arch>/lib/* to stageN+1/bin while building; no 
+cross-stage dependencies. You can always just tar up a stageN directory 
+and transport it. Self-contained.
+
+I just haven't got around to implementing it yet. Still fighting the 
+windows tinderbox.
+
+-Graydon
+
+[1] This design should work for cross and multi-target configs (which I 
+very much want rustc to support), but it might not work for 
+canadian-cross configs. Or at least it'll take some thinking. Self 
+hosting and canadian-cross configs interact somewhat strongly; we would 
+need to stop after stage1 if we can't run the host binaries! On the 
+other hand, the mingw-cross config shows one simple approach, which is 
+to only support canadian-cross configs where we *can* run the host 
+binaries, just under an emulator or adaptor of some sort (wine, in this 
+case; qemu-user would work in other cases). Anyway, that's a bit of a 
+longer-term concern and I'll carry on fiddling with it, shouldn't affect 
+the stageN / stageN+1 structure.
+
+
+From pwalton at mozilla.com  Tue Jul  5 08:31:36 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Tue, 05 Jul 2011 08:31:36 -0700
+Subject: [rust-dev] stageX/rustc should be linked
+	against	stageX/lib/libstd.so
+In-Reply-To: <4E132CD4.2020803@mozilla.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>	<4E131BDC.60404@mozilla.com>
+	<CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+	<4E132CD4.2020803@mozilla.com>
+Message-ID: <4E132E58.8080808@mozilla.com>
+
+On 7/5/11 8:25 AM, Graydon Hoare wrote:
+> That is: stageN/bin contains everything needed-to-run stageN/bin,
+> whereas stageN/<arch>/lib contains everything
+> needed-by-programs-produced-by stageN. Then we rpath stageN/bin/rustc to
+> $ORIGIN on machines that have rpath, and on windows this "just works"
+> because it searches the exe directory for dlls. Because it's crazy.
+
+I think I read that Windows supports something like rpath with 
+application manifest files. It's more of a pain than rpath, though.
+
+Patrick
+
+From graydon at mozilla.com  Tue Jul  5 09:20:44 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 05 Jul 2011 09:20:44 -0700
+Subject: [rust-dev] stageX/rustc should be linked
+	against	stageX/lib/libstd.so
+In-Reply-To: <4E132E58.8080808@mozilla.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>	<4E131BDC.60404@mozilla.com>
+	<CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+	<4E132CD4.2020803@mozilla.com> <4E132E58.8080808@mozilla.com>
+Message-ID: <4E1339DC.6060105@mozilla.com>
+
+On 05/07/2011 8:31 AM, Patrick Walton wrote:
+> On 7/5/11 8:25 AM, Graydon Hoare wrote:
+>> That is: stageN/bin contains everything needed-to-run stageN/bin,
+>> whereas stageN/<arch>/lib contains everything
+>> needed-by-programs-produced-by stageN. Then we rpath stageN/bin/rustc to
+>> $ORIGIN on machines that have rpath, and on windows this "just works"
+>> because it searches the exe directory for dlls. Because it's crazy.
+>
+> I think I read that Windows supports something like rpath with
+> application manifest files. It's more of a pain than rpath, though.
+
+Yeah. It's semi-possible in some windows configs, but carries its own 
+weird file-naming restrictions, plus the manifest file stuff, plus only 
+works on some versions of windows.
+
+http://msdn.microsoft.com/en-us/library/aa374191%28VS.85%29.aspx
+http://msdn.microsoft.com/en-us/library/aa375674%28v=VS.85%29.aspx
+
+It would be ... difficult and I think somewhat counterproductive to go 
+down that road. It seems microsoft's vc team *themselves* gave up on it 
+(or are semi-deprecating it) in the 2010 toolchain; they're just 
+mangling version numbers into filenames now.
+
+So I'm more-keen on doing that, ourselves :)
+
+-Graydon
+
+From marijnh at gmail.com  Tue Jul  5 11:02:12 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 5 Jul 2011 20:02:12 +0200
+Subject: [rust-dev] stageX/rustc should be linked against
+	stageX/lib/libstd.so
+In-Reply-To: <4E132CD4.2020803@mozilla.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>
+	<4E131BDC.60404@mozilla.com>
+	<CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+	<4E132CD4.2020803@mozilla.com>
+Message-ID: <CAJnHWXtWVGxJsLLfqaAYaQu5kTTQ0FOQRB4Gsut+fN2EP9K1=Q@mail.gmail.com>
+
+Do I understand correctly that this revised approach will still not
+allow me to add a function to the standard lib and use it in rustc
+without snapshotting? I think we should try hard to support that.
+
+From graydon at mozilla.com  Tue Jul  5 11:11:41 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 05 Jul 2011 11:11:41 -0700
+Subject: [rust-dev] stageX/rustc should be linked against
+	stageX/lib/libstd.so
+In-Reply-To: <CAJnHWXtWVGxJsLLfqaAYaQu5kTTQ0FOQRB4Gsut+fN2EP9K1=Q@mail.gmail.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>	<4E131BDC.60404@mozilla.com>	<CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>	<4E132CD4.2020803@mozilla.com>
+	<CAJnHWXtWVGxJsLLfqaAYaQu5kTTQ0FOQRB4Gsut+fN2EP9K1=Q@mail.gmail.com>
+Message-ID: <4E1353DD.1040607@mozilla.com>
+
+On 11-07-05 11:02 AM, Marijn Haverbeke wrote:
+> Do I understand correctly that this revised approach will still not
+> allow me to add a function to the standard lib and use it in rustc
+> without snapshotting? I think we should try hard to support that.
+
+No. That's really not possible: the stage1 build (first compiler built 
+from our sources) is always linking against the snapshot libstd. Because 
+it's produced by the snapshot rustc. That's the only arrangement that 
+makes any sense; and that snapshot libstd does not have your new 
+function, so your first build (thus sources-in-tree) can't use it.
+
+I don't think there's any way to get what you want there, sorry. The 
+whole point is that the snapshot is "what the current sources depend on 
+to build".
+
+-Graydon
+
+From graydon at mozilla.com  Tue Jul  5 11:32:04 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 05 Jul 2011 11:32:04 -0700
+Subject: [rust-dev] LLVM fix
+Message-ID: <4E1358A4.4020607@mozilla.com>
+
+LLVM changed some of their logic for StringRefs and did not notice that 
+this broke parsing PE files. We notice, of course, since we *do* parse 
+PE files :)
+
+Hence, the win32 tinderbox is broken.
+
+This is the fix. I'm landing it on the tinderboxes presently since I'm 
+about to leave and don't have time to get it upstream. Hope someone can 
+do so while I'm gone, I'll update back to LLVM trunk when it lands there.
+
+-Graydon
+
+
+Index: lib/Object/COFFObjectFile.cpp
+===================================================================
+--- lib/Object/COFFObjectFile.cpp       (revision 134402)
++++ lib/Object/COFFObjectFile.cpp       (working copy)
+@@ -309,8 +309,10 @@
+      if (!checkSize(Data, ec, 0x3c + 8)) return;
+      HeaderStart += *reinterpret_cast<const ulittle32_t *>(base() + 0x3c);
+      // Check the PE header. ("PE\0\0")
+-    if (StringRef(reinterpret_cast<const char *>(base() + HeaderStart), 4)
+-        != "PE\0\0") {
++    if ((base() + HeaderStart)[0] != 'P' ||
++        (base() + HeaderStart)[1] != 'E' ||
++        (base() + HeaderStart)[2] != '\0' ||
++        (base() + HeaderStart)[3] != '\0') {
+        ec = object_error::parse_failed;
+        return;
+      }
+
+From echristo at me.com  Tue Jul  5 11:33:47 2011
+From: echristo at me.com (Eric Christopher)
+Date: Tue, 05 Jul 2011 11:33:47 -0700
+Subject: [rust-dev] LLVM fix
+In-Reply-To: <4E1358A4.4020607@mozilla.com>
+References: <4E1358A4.4020607@mozilla.com>
+Message-ID: <D96BA466-52E1-4DC1-94E1-DD48A4BA6511@me.com>
+
+
+On Jul 5, 2011, at 11:32 AM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> This is the fix. I'm landing it on the tinderboxes presently since I'm about to leave and don't have time to get it upstream. Hope someone can do so while I'm gone, I'll update back to LLVM trunk when it lands there.
+
+I'll land it for you. 
+
+Thanks. 
+
+-eric
+
+From respindola at mozilla.com  Tue Jul  5 11:36:10 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Tue, 05 Jul 2011 14:36:10 -0400
+Subject: [rust-dev] LLVM fix
+In-Reply-To: <D96BA466-52E1-4DC1-94E1-DD48A4BA6511@me.com>
+References: <4E1358A4.4020607@mozilla.com>
+	<D96BA466-52E1-4DC1-94E1-DD48A4BA6511@me.com>
+Message-ID: <4E13599A.1030000@mozilla.com>
+
+On 07/05/2011 02:33 PM, Eric Christopher wrote:
+>
+> On Jul 5, 2011, at 11:32 AM, Graydon Hoare<graydon at mozilla.com>  wrote:
+>
+>> This is the fix. I'm landing it on the tinderboxes presently since I'm about to leave and don't have time to get it upstream. Hope someone can do so while I'm gone, I'll update back to LLVM trunk when it lands there.
+>
+> I'll land it for you.
+
+
+I have a better fix, one sec
+> Thanks.
+>
+> -eric
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From echristo at me.com  Tue Jul  5 11:37:11 2011
+From: echristo at me.com (Eric Christopher)
+Date: Tue, 05 Jul 2011 11:37:11 -0700
+Subject: [rust-dev] LLVM fix
+In-Reply-To: <4E13599A.1030000@mozilla.com>
+References: <4E1358A4.4020607@mozilla.com>
+	<D96BA466-52E1-4DC1-94E1-DD48A4BA6511@me.com>
+	<4E13599A.1030000@mozilla.com>
+Message-ID: <89D85106-A73B-4887-A1E7-6116C1C582AE@me.com>
+
+
+
+On Jul 5, 2011, at 11:36 AM, Rafael ?vila de Esp?ndola <respindola at mozilla.com> wrote:
+
+> I have a better fix, one sec
+
+Excellent. 
+
+-eric
+
+From respindola at mozilla.com  Tue Jul  5 12:19:55 2011
+From: respindola at mozilla.com (=?UTF-8?B?UmFmYWVsIMOBdmlsYSBkZSBFc3DDrW5kb2xh?=)
+Date: Tue, 05 Jul 2011 15:19:55 -0400
+Subject: [rust-dev] stageX/rustc should be linked against
+	stageX/lib/libstd.so
+In-Reply-To: <CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>
+	<4E131BDC.60404@mozilla.com>
+	<CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+Message-ID: <4E1363DB.3080701@mozilla.com>
+
+On 07/05/2011 10:29 AM, Marijn Haverbeke wrote:
+>> A way to think of it: imagine there was another rust compiler (visual rust),
+>> if you started the bootstrap of our compiler using it (stage0 is visual
+>> rust), stage1 would depend on the runtime libraries of visual rust.
+>
+> Right, and if visual rust used a different dynamic lib format, you'd
+> have a problem.
+
+No, that is fairly common for bootstrapping C compilers.
+
+Cheers,
+Rafael
+
+
+From marijnh at gmail.com  Wed Jul  6 08:56:08 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 6 Jul 2011 17:56:08 +0200
+Subject: [rust-dev] Do we have an emacs hacker in our midst?
+Message-ID: <CAJnHWXs=19dU9sX2zMwO_yk7BBwpRbD9Zt9H15z_wc47oz-iqg@mail.gmail.com>
+
+The current rust-mode (which is a very thin customization of C mode)
+is somewhat out of date with regards to our keywords, and gets quite
+confused by if or alt used in expression context (indents them wrong).
+Things get even worse when you try to write something using paren-free
+syntax. We might still be able to build on the C mode, but a lot more
+customization seems to be required.
+
+I think it's getting to the point where painful editing is hampering
+productivity. At least four people on the team use emacs, probably
+more. If we have someone who knows about writing emacs modes, could
+they please raise their hand? If not, I'll tackle this myself.
+
+Best,
+Marijn
+
+From marijnh at gmail.com  Wed Jul  6 09:23:21 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 6 Jul 2011 18:23:21 +0200
+Subject: [rust-dev] stageX/rustc should be linked against
+	stageX/lib/libstd.so
+In-Reply-To: <4E132CD4.2020803@mozilla.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>
+	<4E131BDC.60404@mozilla.com>
+	<CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+	<4E132CD4.2020803@mozilla.com>
+Message-ID: <CAJnHWXs8YTZDEm0hMrhqr7Vw3c5zDZvuSNuh1zfRi3D8JFU0gg@mail.gmail.com>
+
+> That is: stageN/bin contains everything needed-to-run stageN/bin, whereas
+> stageN/<arch>/lib contains everything needed-by-programs-produced-by stageN.
+
+So far, so good. What I'm objecting to is using the libstd.so
+*distributed in the snapshot* to link with stage1/rustc. If we do a
+little creative directory shuffling, couldn't we make stage0/rustc
+link against a libstd.so other than stage0/lib/libstd.so, and have the
+make cycle start by building that lib from the current sources? That
+would already be enough to make extending the standard lib
+non-painful. The subject of this thread suggests I care about the
+actual paths, which is actually not what I was trying to get at. I
+just care about not being stuck depending on the stdlib from the last
+snapshot.
+
+From marijnh at gmail.com  Wed Jul  6 09:32:49 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 6 Jul 2011 18:32:49 +0200
+Subject: [rust-dev] stageX/rustc should be linked against
+	stageX/lib/libstd.so
+In-Reply-To: <CAJnHWXs8YTZDEm0hMrhqr7Vw3c5zDZvuSNuh1zfRi3D8JFU0gg@mail.gmail.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>
+	<4E131BDC.60404@mozilla.com>
+	<CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+	<4E132CD4.2020803@mozilla.com>
+	<CAJnHWXs8YTZDEm0hMrhqr7Vw3c5zDZvuSNuh1zfRi3D8JFU0gg@mail.gmail.com>
+Message-ID: <CAJnHWXs-hWq3Yp+DmO791QP3Fsiw6vjp2exxH9TM+9dTsUBvPg@mail.gmail.com>
+
+Also, once we split the compiler into more than one crate, I guess the
+extra crates will be compiled and linked in a way similar to the
+standard lib. Even if you consider having to snapshot after making a
+change to the standard lib acceptable for some masochistic reason, I
+hope you'll still see how having to do snapshot acrobatics when making
+a change that spans multiple of the compiler-related crates is going
+to reduce our productivity by an order of magnitude.
+
+From graydon at mozilla.com  Wed Jul  6 09:47:38 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 06 Jul 2011 09:47:38 -0700
+Subject: [rust-dev] stageX/rustc should be linked against
+	stageX/lib/libstd.so
+In-Reply-To: <CAJnHWXs8YTZDEm0hMrhqr7Vw3c5zDZvuSNuh1zfRi3D8JFU0gg@mail.gmail.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>
+	<4E131BDC.60404@mozilla.com>
+	<CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+	<4E132CD4.2020803@mozilla.com>
+	<CAJnHWXs8YTZDEm0hMrhqr7Vw3c5zDZvuSNuh1zfRi3D8JFU0gg@mail.gmail.com>
+Message-ID: <4E1491AA.20208@mozilla.com>
+
+On 06/07/2011 9:23 AM, Marijn Haverbeke wrote:
+>> That is: stageN/bin contains everything needed-to-run stageN/bin, whereas
+>> stageN/<arch>/lib contains everything needed-by-programs-produced-by stageN.
+>
+> So far, so good. What I'm objecting to is using the libstd.so
+> *distributed in the snapshot* to link with stage1/rustc. If we do a
+> little creative directory shuffling, couldn't we make stage0/rustc
+> link against a libstd.so other than stage0/lib/libstd.so, and have the
+> make cycle start by building that lib from the current sources?
+
+Hmm. I believe this is what I used to have it do, now that you mention 
+it this way, before we changed to the current arrangement. We changed it 
+for the sake of ... trying to reduce cross-directory dependencies. But 
+didn't accomplish that anyways. I remain confused about the correct order.
+
+But yes, it does seem sane that rather than copy 
+stage0/<arch>/lib/libstd.so to stage1/bin, we could 
+recompile-from-source at that step; subsequent steps would obviously 
+make no difference (as stage1/lib/<arch>/libstd.so would be 
+bit-identical to stage2/bin/libstd.so whether we compile from workspace 
+or copy).
+
+That would make stage1 and later able to use code from the working 
+directory without re-snapshotting. I think. I'm at least willing to try 
+that when we reshuffle things.
+
+> would already be enough to make extending the standard lib
+> non-painful. The subject of this thread suggests I care about the
+> actual paths, which is actually not what I was trying to get at. I
+> just care about not being stuck depending on the stdlib from the last
+> snapshot.
+
+I realize that. Nobody wants more snapshots than necessary: I pay a bill 
+every month for s3 storage of them, after all :)
+
+I am trying to arrive at a structure that simultaneously accommodates:
+
+   - The library path rules of 3 platforms' linkers and loaders
+   - Self-modification from snapshots
+   - Cross compilation to multiple targets
+   - Minimal numbers of snapshots for compatible changes
+   - Support for incompatible changes via "half-way" snapshots
+   - Arrival at a fixpoint in a single directory we can tar up
+
+Balancing all these is a bit of careful work. I appreciate the ongoing 
+pressure to "get it right", but I'm absolutely on your side. I just ... 
+find that every strategy looks very similar and it's easy to go around 
+in circles. We've changed the structure a couple times already. I want 
+to arrive at a structure that works long-term.
+
+ > Also, once we split the compiler into more than one crate, I guess the
+ > extra crates will be compiled and linked in a way similar to the
+ > standard lib. Even if you consider having to snapshot after making a
+ > change to the standard lib acceptable for some masochistic reason, I
+ > hope you'll still see how having to do snapshot acrobatics when making
+ > a change that spans multiple of the compiler-related crates is going
+ > to reduce our productivity by an order of magnitude.
+
+There's no need to use language like this; I'm not *intentionally* 
+trying to defeat productivity or inflict extra pain on the development 
+process. Quite the opposite: I now spend *all day* working on various 
+attempts at productivity-enhancement for the group; you may have noticed 
+I'm not writing much code lately. It's all fussy infrastructure work, 
+because I know how important it is to remove productivity barriers.
+
+I didn't think what you were asking for was possible. But you raise a 
+valid point that it may well be if compilation order changes. I'm happy 
+to try that and see. So far we ... seem to keep getting surprised about 
+some detail of self-hosting that we didn't anticipate in the previous 
+arrangement. So we'll try again.
+
+-Graydon
+
+From graydon at mozilla.com  Wed Jul  6 10:01:12 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 06 Jul 2011 10:01:12 -0700
+Subject: [rust-dev] stageX/rustc should be linked against
+	stageX/lib/libstd.so
+In-Reply-To: <4E1491AA.20208@mozilla.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>
+	<4E131BDC.60404@mozilla.com>
+	<CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+	<4E132CD4.2020803@mozilla.com>
+	<CAJnHWXs8YTZDEm0hMrhqr7Vw3c5zDZvuSNuh1zfRi3D8JFU0gg@mail.gmail.com>
+	<4E1491AA.20208@mozilla.com>
+Message-ID: <4E1494D8.9040005@mozilla.com>
+
+On 06/07/2011 9:47 AM, Graydon Hoare wrote:
+
+> But yes, it does seem sane that rather than copy
+> stage0/<arch>/lib/libstd.so to stage1/bin, we could
+> recompile-from-source at that step; subsequent steps would obviously
+> make no difference (as stage1/lib/<arch>/libstd.so would be
+> bit-identical to stage2/bin/libstd.so whether we compile from workspace
+> or copy).
+
+Hm. Thinking further .. I think it's more a matter of stage0 recompiling 
+its own stage0/lib/<arch>/* files before it makes another move, as the 
+very first step. A sort of "upgrade stage0 to the current libstd" 
+pre-compiler-building step. We can probably accommodate that without 
+many other changes; we can still copy that *upgraded* stage0/lib/arch/* 
+to stage1/bin/ the same way we would do any other N -> N+1 target 
+library copy.
+
+Ok. Sorta seeing how this fits together. Will it make half-snapshots 
+(stage1, incompatible) harder to make? I don't see how, but I've been 
+surprised before...
+
+-Graydon
+
+From marijnh at gmail.com  Wed Jul  6 10:32:19 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 6 Jul 2011 19:32:19 +0200
+Subject: [rust-dev] stageX/rustc should be linked against
+	stageX/lib/libstd.so
+In-Reply-To: <4E1494D8.9040005@mozilla.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>
+	<4E131BDC.60404@mozilla.com>
+	<CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+	<4E132CD4.2020803@mozilla.com>
+	<CAJnHWXs8YTZDEm0hMrhqr7Vw3c5zDZvuSNuh1zfRi3D8JFU0gg@mail.gmail.com>
+	<4E1491AA.20208@mozilla.com> <4E1494D8.9040005@mozilla.com>
+Message-ID: <CAJnHWXstJZ_fycx8nqQQQvvCxenhmhrW6+2pHEWQkWpGGKL3uQ@mail.gmail.com>
+
+> I think it's more a matter of stage0 recompiling its
+> own stage0/lib/<arch>/* files before it makes another move, as the very
+> first step
+
+That sounds like it would cause trouble in case something is removed
+or incompatibly changed in the stdlib though. The snapshot binary will
+not be compatible with the updated lib. Is it hard to keep a
+snapshot-specific libstd.so that only stage0/rustc links again
+somewhere? (Say stage0/snap/libstd.so.)
+
+From graydon at mozilla.com  Wed Jul  6 10:44:01 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 06 Jul 2011 10:44:01 -0700
+Subject: [rust-dev] stageX/rustc should be linked against
+	stageX/lib/libstd.so
+In-Reply-To: <CAJnHWXstJZ_fycx8nqQQQvvCxenhmhrW6+2pHEWQkWpGGKL3uQ@mail.gmail.com>
+References: <CAJnHWXttKhCK-WzviJDRDLiVvjYduo-bKsd=V-HkTi+h4Syskw@mail.gmail.com>
+	<4E131BDC.60404@mozilla.com>
+	<CAJnHWXtcEq2ONANGC07ZC4whJDXxgnt+TaucBywatEYvoa6fzA@mail.gmail.com>
+	<4E132CD4.2020803@mozilla.com>
+	<CAJnHWXs8YTZDEm0hMrhqr7Vw3c5zDZvuSNuh1zfRi3D8JFU0gg@mail.gmail.com>
+	<4E1491AA.20208@mozilla.com> <4E1494D8.9040005@mozilla.com>
+	<CAJnHWXstJZ_fycx8nqQQQvvCxenhmhrW6+2pHEWQkWpGGKL3uQ@mail.gmail.com>
+Message-ID: <4E149EE1.20305@mozilla.com>
+
+On 06/07/2011 10:32 AM, Marijn Haverbeke wrote:
+>> I think it's more a matter of stage0 recompiling its
+>> own stage0/lib/<arch>/* files before it makes another move, as the very
+>> first step
+>
+> That sounds like it would cause trouble in case something is removed
+> or incompatibly changed in the stdlib though. The snapshot binary will
+> not be compatible with the updated lib. Is it hard to keep a
+> snapshot-specific libstd.so that only stage0/rustc links again
+> somewhere? (Say stage0/snap/libstd.so.)
+
+That would be stage0/bin/libstd.so. The "stuff stage0 needs to run" 
+directory. Two dirs in each stage: stuff-needed-to-run-self, 
+stuff-target-binaries-link-against.
+
+-Graydon
+
+From marijnh at gmail.com  Thu Jul  7 07:03:38 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Thu, 7 Jul 2011 16:03:38 +0200
+Subject: [rust-dev] Move-by-default for temporaries?
+Message-ID: <CAJnHWXsfEk-z53CQhgW0CFfgjWBVpvD82zs8wRB_VWFX7QNKHg@mail.gmail.com>
+
+When storing a temporary value (something that's not a variable or
+part of a data structure, for example function return values or the
+result of operators) somewhere, it is usually not necessary to copy it
+-- a temporary is only accessible in a single place, so there is no
+risk of other code using it later. I submitted a patch today that uses
+this fact to avoid a lot of taking and dropping [1], shaving a
+megabyte off of the size of stage2/rustc.
+
+[1]: https://github.com/graydon/rust/commit/3bdbf74d4703771571fdee1733b7b3d919b5ede8
+
+One of the effects this patch has is that if you now do @foo(x), the
+result of foo will be moved into the box, rather than copied. If foo
+is a resource constructor, that expression used to cause an error (you
+can't copy a resource). With my change, it works. That's nice, in this
+case. But it's a semantic difference coming out of an optimization,
+which is usually a Bad Thing.
+
+Shall we specify that temporary values, when put into a data
+structure, are moved, rather than copied? For non-temporary values,
+this usually not what you want, so we should provide an explicit
+operator to specify that we want to move those.
+
+Furthermore, it seems we can do the same for by-value function
+arguments. I didn't implement that yet (since the argument passing
+logic is somewhat hairy), but it seems like a sane optimization.
+
+Thoughts?
+
+From rafael.espindola at gmail.com  Thu Jul  7 08:33:17 2011
+From: rafael.espindola at gmail.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Thu, 07 Jul 2011 11:33:17 -0400
+Subject: [rust-dev] Fwd: [LLVMdev] type-system-rewrite branch near landing
+In-Reply-To: <86B5A60F-76FB-4F5F-B49D-62989F3ADDCC@apple.com>
+References: <86B5A60F-76FB-4F5F-B49D-62989F3ADDCC@apple.com>
+Message-ID: <4E15D1BD.5040305@gmail.com>
+
+
+
+-------- Original Message --------
+Subject: [LLVMdev] type-system-rewrite branch near landing
+Date: Thu, 07 Jul 2011 00:05:50 -0700
+From: Chris Lattner <clattner at apple.com>
+To: LLVM Developers Mailing List <llvmdev at cs.uiuc.edu>
+
+An update on the type-system-rewrite branch 
+(http://llvm.org/viewvc/llvm-project/llvm/branches/type-system-rewrite/):
+
+It's now to the point where it passes all regression tests all of single 
+source (and most of externals/multisource) when using an LLVM 2.9 
+version of clang to compile programs to a rbc file.  I have what looks 
+like one more subtle type mapping bug to track down, which will 
+hopefully resolve the remaining linker failures on 
+multisource/externals.  Then I'll update the branch to ToT LLVM again.
+
+Once I'm done with that, I'm getting eager to land the branch on 
+mainline.  To do this, I need to update the various projects with 
+buildbots that are going to break, specifically:
+
+1. Clang - Jay, do you have a patch for this?  Can you create a branch 
+of the clang repo or send an updated version of the patch to the list?
+
+2. llvm-gcc - While I'd like for it to be dead, :) I've been asked to 
+prolong its life a little longer.  I'll look into this.
+
+3. dragonegg - I don't have any way to build or test this, so I can't 
+update it.  Is anyone willing to tackle this?  The updates should be 
+relatively straight-forward and I'm happy to help answer any questions.
+
+I'd really like get this done and landed by this weekend.  I have a very 
+large collection of follow-on cleanups that can also happen once the 
+main branch lands.
+
+-Chris
+_______________________________________________
+LLVM Developers mailing list
+LLVMdev at cs.uiuc.edu         http://llvm.cs.uiuc.edu
+http://lists.cs.uiuc.edu/mailman/listinfo/llvmdev
+
+From pwalton at mozilla.com  Thu Jul  7 08:49:53 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 07 Jul 2011 08:49:53 -0700
+Subject: [rust-dev] Move-by-default for temporaries?
+In-Reply-To: <CAJnHWXsfEk-z53CQhgW0CFfgjWBVpvD82zs8wRB_VWFX7QNKHg@mail.gmail.com>
+References: <CAJnHWXsfEk-z53CQhgW0CFfgjWBVpvD82zs8wRB_VWFX7QNKHg@mail.gmail.com>
+Message-ID: <4E15D5A1.4000109@mozilla.com>
+
+On 7/7/11 7:03 AM, Marijn Haverbeke wrote:
+> Shall we specify that temporary values, when put into a data
+> structure, are moved, rather than copied? For non-temporary values,
+> this usually not what you want, so we should provide an explicit
+> operator to specify that we want to move those.
+
+I was going to implement copy constructor elision for this purpose. 
+There is a bug on this IIRC. The right thing to do is to neither move 
+nor copy, but actually write *directly* into the slot where the 
+temporary is going. The generated assembly code for typeck::check_expr, 
+for example, sorely needs this optimization.
+
+Note that this is needed for resources to be at all usable:
+
+     auto x = my_resource();
+
+would generate an error without some sort of copy constructor elision, 
+because the resource would be copied into a temporary for the return 
+value and then copied into "x", violating the noncopyability restriction.
+
+Patrick
+
+From marijnh at gmail.com  Thu Jul  7 09:11:39 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Thu, 7 Jul 2011 18:11:39 +0200
+Subject: [rust-dev] Move-by-default for temporaries?
+In-Reply-To: <4E15D5A1.4000109@mozilla.com>
+References: <CAJnHWXsfEk-z53CQhgW0CFfgjWBVpvD82zs8wRB_VWFX7QNKHg@mail.gmail.com>
+	<4E15D5A1.4000109@mozilla.com>
+Message-ID: <CAJnHWXt1LS5pw1_v+m=fKPyG5nUUVLFOPmoJx5T4HXOC=tH=7g@mail.gmail.com>
+
+> Note that this is needed for resources to be at all usable:
+>
+> ? ?auto x = my_resource();
+
+Currently you can do
+
+    auto x <- my_resource();
+
+... which is okay. But, as I mentioned, not being able to box them was not okay.
+
+From lkuper at mozilla.com  Thu Jul  7 10:17:25 2011
+From: lkuper at mozilla.com (Lindsey Kuper)
+Date: Thu, 7 Jul 2011 10:17:25 -0700 (PDT)
+Subject: [rust-dev] trans refactor
+In-Reply-To: <CAJnHWXvv1_UVNmy6sVxM6_B6D_cdb6vwEKAeJ=1wSf14bvxrsQ@mail.gmail.com>
+Message-ID: <1538801479.451080.1310059045207.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+The translation-to-LLVM pass in rustc, affectionately known as 'trans', has grown to over 9000 lines and is overdue for a refactor.  A few days ago, I volunteered to take this on, and we've been discussing how and when to go about it.
+
+It's been suggested that we start by splitting trans into two pieces.  The first would be, more or less, all the trans_X() functions where 'X' is recognizably something in the AST, and the second would be everything else: support functions, glue, LLVM type constructors, and such.  Eventually, the second piece could be split further, if we want.
+
+Marijn has pointed out that when we do this, we'll encounter a lot of repeated code in the first piece that could be abstracted out into common utility stuff that can go into the second.  That's one reason why we're doing this: to make opportunities for that kind of abstraction more obvious.  Right now, it's hard to see them because trans is so big.  Eventually, I could see the second piece evolving into the "LLVM combinator library" that we've often wished we had.
+
+It's also been suggested that it would be be nice to come up with a better abstraction for block contexts and other kinds of contexts that right now have to be threaded through most of the functions in trans.  I'm open to suggestions for what to do about that.
+
+I think that sums up the current thinking on 'how'.  Comments, questions, concerns?
+
+As for the 'when' part, since a lot of people work on trans, we'll need to pick a flag day by which work-in-progress should be in.  Suggestions?
+
+Lindsey
+
+From pwalton at mozilla.com  Thu Jul  7 17:24:59 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 07 Jul 2011 17:24:59 -0700
+Subject: [rust-dev] Function types
+Message-ID: <4E164E5B.2040107@mozilla.com>
+
+Hi everyone,
+
+Dave and I just whiteboarded ideas for function types, in light of the 
+issues that Andrew was seeing. We came to these tentative conclusions:
+
+* Functions being noncopyable doesn't seem to work, because it breaks 
+"bind". "bind" must copy the environment of the function bound to.
+
+* Blocks (unnamed lambdas) and named functions have different 
+properties. The former can capture stack locals, while the latter has 
+dynamic lifetime and can capture only shared state. Also, blocks have 
+extra control flow options (break, continue, outer return) while named 
+functions don't have this ability.
+
+* Interior semantics aren't enough to guarantee that unnamed lambdas 
+can't escape their defined scope. It'd be possible to swap an interior 
+"fn" with another interior "fn" (in some data structure, say) and have 
+it escape its scope.
+
+* We would like to be able to declare functions that take as one (or 
+more) of their arguments either a named function or a block, without 
+having to duplicate the function. For example, we should be able to say 
+map([ 1, 2, 3 ], { |x| x * x }) or map([ 1, 2, 3 ], square).
+
+To deal with these issues, here's a conservative proposal as a starting 
+point:
+
+(1) The general "fn" type represents a block. It can only appear as the 
+type of an alias parameter to a function.
+
+(2) All named functions have type "@fn". They are reference counted. 
+They can close over outer variables, but only those on the heap (i.e. 
+only over boxes).
+
+(3) As a corollary to point (1), blocks can only be constructed with the 
+{ |x| ... } syntax when calling functions. They are able to use "break", 
+"continue", and "return" with the semantics that we discussed previously.
+
+(4) "bind" stays around, but only works on values of type @fn.
+
+(5) Named functions (@fn) can be converted to type "fn" when calling a 
+function using the dereference operator "*". In the example above, we 
+could call "map" using map([ 1, 2, 3 ], *square). Under the hood, an 
+extra function will be generated; this is required because blocks need a 
+different signature than named functions in order to handle "break" and 
+"return".
+
+Drawbacks:
+
+* "fn" and "@fn" are now different types; there is no compositionality, 
+although the dereference operator lessens the pain of this somewhat.
+
+* Functions can't be sent over channels.
+
+We could potentially extend this later to remove some of the 
+limitations, but I think this works as a starting point. Andrew, I'm 
+particularly curious as to whether this helps solve some of the issues 
+you were encountering. To the rest of the team, I'm interested to hear 
+your feedback.
+
+Patrick
+
+From marijnh at gmail.com  Fri Jul  8 00:52:48 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 8 Jul 2011 09:52:48 +0200
+Subject: [rust-dev] Function types
+In-Reply-To: <4E164E5B.2040107@mozilla.com>
+References: <4E164E5B.2040107@mozilla.com>
+Message-ID: <CAJnHWXvc_zXuKojUHUCdjoG9Y3xoB2YX-kP3C1JUbf7XAZ_hyQ@mail.gmail.com>
+
+> (2) All named functions have type "@fn". They are reference counted. They
+> can close over outer variables, but only those on the heap (i.e. only over
+> boxes).
+
+Would it be a problem to also allow them to close over copyable
+locals, and simply copy them? That seems like it'd be very convenient.
+(Though the difference between closing by-value and by-reference will
+occasionally confuse a newcomer.)
+
+From dherman at mozilla.com  Fri Jul  8 07:38:57 2011
+From: dherman at mozilla.com (David Herman)
+Date: Fri, 8 Jul 2011 07:38:57 -0700
+Subject: [rust-dev] Function types
+In-Reply-To: <CAJnHWXvc_zXuKojUHUCdjoG9Y3xoB2YX-kP3C1JUbf7XAZ_hyQ@mail.gmail.com>
+References: <4E164E5B.2040107@mozilla.com>
+	<CAJnHWXvc_zXuKojUHUCdjoG9Y3xoB2YX-kP3C1JUbf7XAZ_hyQ@mail.gmail.com>
+Message-ID: <8377101D-E898-4B0A-B0A8-049FF21E6278@mozilla.com>
+
+Patrick Walton wrote:
+
+>> (2) All named functions have type "@fn". They are reference counted. They
+>> can close over outer variables, but only those on the heap (i.e. only over
+>> boxes).
+
+Note that there are a few ways this could be achieved.
+
+a) C++0x-style capture clauses:
+
+    {
+        let x = @99;
+        let f = @fn() [x] { ret *x + 1; };
+        x = @666;
+        log f(); // 100
+    }
+
+b) Manual closure-conversion with bind:
+
+    {
+        let x = @99;
+        let f = bind @fn(x) { ret *x + 1; }(x);
+        x = @666;
+        log f(); // 100
+    }
+
+c) Implicit copying:
+
+    {
+        let x = @99;
+        let f = @fn() { ret *x + 1; };
+        x = @666;
+        log f(); // 100
+    }
+
+d) Explicit Java-style const restriction:
+
+    {
+        const x = @99;
+        let f = @fn() { ret *x + 1; };
+        x = @666; // ***TYPE ERROR: x is const***
+        log f();
+    }
+
+e) Implicit Java-style const restriction:
+
+    {
+        let x = @99;
+        let f = @fn() { ret *x + 1; };
+        x = @666; // ***TYPE ERROR: x is closed over and must be const***
+        log f();
+    }
+
+Marijn Haverbeke wrote:
+
+> Would it be a problem to also allow them to close over copyable
+> locals, and simply copy them? That seems like it'd be very convenient.
+> (Though the difference between closing by-value and by-reference will
+> occasionally confuse a newcomer.)
+
+
+I'm a little nervous about the implicit copying ideas, whether for interior stack data or stack-local pointers to heap data. We've tried to avoid surprising copies. C++0x is clunky but at least it makes copying an explicit operation. Also, having upvars evaluated (dereferenced) at the time the function is created, rather than when it's called, seems strange to me, but maybe that's just because of my Lispy background.
+
+Dave
+
+
+From msullivan at mozilla.com  Fri Jul  8 14:22:46 2011
+From: msullivan at mozilla.com (Michael Sullivan)
+Date: Fri, 8 Jul 2011 14:22:46 -0700 (PDT)
+Subject: [rust-dev] Function types
+In-Reply-To: <4E164E5B.2040107@mozilla.com>
+Message-ID: <651011840.466399.1310160166078.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+> Hi everyone,
+> 
+> Dave and I just whiteboarded ideas for function types, in light of the
+> issues that Andrew was seeing. We came to these tentative conclusions:
+> 
+> * Functions being noncopyable doesn't seem to work, because it breaks
+> "bind". "bind" must copy the environment of the function bound to.
+
+That wasn't quite the problem I ran into with bind. Right now the rustc doesn't support rebinding functions anyways, so we can only bind functions with no environment anyways. So it is a problem, but it is overshadowed by another bug right now.
+The very similar problem that was causing me some grief is that when we bind alias parameters to functions, we copy the value into the environment. Functions being non-copyable prevents you from doing useful things like "bind map(*some_boxed_bound_fn, _)". (This particular issue was causing me grief. When, as a work-around, I tried to write a version of map that took a boxed function, I ran into some bind bugs that prevented that from working. I've got a pull request in for fixes to those.)
+
+> * Blocks (unnamed lambdas) and named functions have different
+> properties. The former can capture stack locals, while the latter has
+> dynamic lifetime and can capture only shared state. Also, blocks have
+> extra control flow options (break, continue, outer return) while named
+> functions don't have this ability.
+> 
+*nod*
+
+> * Interior semantics aren't enough to guarantee that unnamed lambdas
+> can't escape their defined scope. It'd be possible to swap an interior
+> "fn" with another interior "fn" (in some data structure, say) and have
+> it escape its scope.
+> 
+*nod*
+
+> * We would like to be able to declare functions that take as one (or
+> more) of their arguments either a named function or a block, without
+> having to duplicate the function. For example, we should be able to
+> say
+> map([ 1, 2, 3 ], { |x| x * x }) or map([ 1, 2, 3 ], square).
+> 
+This is the issue that has been probably worrying me the most.
+
+As it stands right now (if you can't pass bare functions), when writing a higher order function you need to make a choice between taking a box or taking an alias.
+If you choose to take an @fn, then you just can't take blocks, but you can do whatever you want to with the function.
+If you choose to take an &fn, then you can take either blocks or "regular functions", but callers can't bind a value for that function argument. Furthermore, you are restricted in what you can do with the function. Importantly, you can't pass it to any higher order function that takes an @fn. Also, to pass it a @fn, you need to dereference it, which is a little ugly.
+
+
+> To deal with these issues, here's a conservative proposal as a
+> starting
+> point:
+> 
+> (1) The general "fn" type represents a block. It can only appear as
+> the
+> type of an alias parameter to a function.
+> 
+And the fn type would still need to be non-copyable, right?
+
+> (2) All named functions have type "@fn". They are reference counted.
+> They can close over outer variables, but only those on the heap (i.e.
+> only over boxes).
+> 
+Is "@fn" intended to be "the @ type constructor applied to a fn type" or is it intended to be a distinct type?
+
+>From a practical implementation perspective, how do we make sure that LLVM can avoid indirect calls to known functions if it is getting them out of the heap?
+
+I think I like having a distinction between the type of "blocks" and the type of "normal functions".
+
+> (3) As a corollary to point (1), blocks can only be constructed with
+> the
+> { |x| ... } syntax when calling functions. They are able to use
+> "break",
+> "continue", and "return" with the semantics that we discussed
+> previously.
+> 
+*nod*.
+I think that I would then like anonymous function syntax (fn(...) -> ... { ... }) to stay around but be normal functions and not blocks.
+
+> (4) "bind" stays around, but only works on values of type @fn.
+> 
+And always produces an @fn, presumably? Although in some circumstances we could produce a stack allocated bound function...
+
+I think this just solves half of the problem with bind, though, since you still can't bind to an alias function argument.
+Although, see below for an idea that might work?
+
+> (5) Named functions (@fn) can be converted to type "fn" when calling a
+> function using the dereference operator "*". In the example above, we
+> could call "map" using map([ 1, 2, 3 ], *square). Under the hood, an
+> extra function will be generated; this is required because blocks need
+> a
+> different signature than named functions in order to handle "break"
+> and
+> "return".
+
+The different calling conventions worry me. I wonder if there is a way around that. I'll ponder that.
+What exactly is the current planned scheme for how to handle blocks returning? I seem to recall it involves returning a value and testing it when calling the block? Will this need to be explicit in the calling code?
+
+> 
+> Drawbacks:
+> 
+> * "fn" and "@fn" are now different types; there is no
+> compositionality,
+> although the dereference operator lessens the pain of this somewhat.
+> 
+> * Functions can't be sent over channels.
+> 
+> We could potentially extend this later to remove some of the
+> limitations, but I think this works as a starting point. Andrew, I'm
+> particularly curious as to whether this helps solve some of the issues
+> you were encountering. To the rest of the team, I'm interested to hear
+> your feedback.
+> 
+
+I think these changes mostly leave me in the same place with the problems I've been running into. I think it doesn't really change too much about the difficulty in making interface decisions about whether to take an @fn or an &fn. Making all named functions @fns will clean up some syntactic noise (by not requiring you to box them when handing them to something that wants a @fn) and will introduce some more (by requiring you to deref when passing to something that takes an &fn).
+
+Part of how nicely things work out depends on what conventions we adopt for when to use what.
+If we decide "we want to be able to support blocks in any cases where it isn't impossible, so we should always endeavor to take &fn", then it will be clunky. The common case will be that we are passing @fn to things that take &fn and we'll need to deref (and generate a wrapper function).
+If we decide "make it an @fn unless it is clearly something that we want to be a block", then it will be less clunky, but we won't be able to use blocks as often.
+
+One idea to make the first choice more pleasant:
+We might be able to pull off a trick where you can bind an @tau to an argument of type &tau by storing a pointer to the box in the environment.
+And then if we added autoderef when passing an @tau to something that takes a &tau... Hm.
+
+-"Andrew"?
+
+From respindola at mozilla.com  Tue Jul 12 20:53:53 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Tue, 12 Jul 2011 23:53:53 -0400
+Subject: [rust-dev] problems in converting rust to the new llvm type system
+Message-ID: <4E1D16D1.4090505@mozilla.com>
+
+First, what we currently have:
+
+When we compile
+
+obj test1() {
+    fn m1() { log "hi!"; }
+}
+obj test2() {
+    fn m1() { log "hi!"; }
+}
+fn test(test2 a) {
+}
+fn main() {
+     auto a = test1();
+     test(a)
+}
+
+We end up with
+
+@_ZN5test16method2m1E(i1* %arg, %task* %arg1, %1 %arg2)
+@_ZN5test26method2m1E(i1* %arg, %task* %arg1, %1 %arg2)
+
+where %1 is the object type:
+
+%1 = type { %2*, %3* }
+%2 = type { i8*, void (i1*, %task*, %1)* }
+
+Note that it is recursive.
+
+The call "test(a)" looks like
+
+call fastcc void %tmp8(i1* %tmp4, %task* %arg1, %6* %tmp9, %1 %tmp12)
+
+Note that we depend on test1 and test2 mapping to the same type. In 
+summary, we depend on llvm unifying recursive types. The bad news is: 
+that is gone since Saturday.
+
+Now, do we still want to support:
+
+obj test1() {
+    fn m1() { log "hi!"; }
+    fn m2() { log "bar"; }
+}
+obj test2() {
+    fn m1() { log "hi!"; }
+}
+fn test(test2 a) {
+}
+fn main() {
+     auto a = test1();
+     test(a)
+}
+
+If so, we need to do something better anyway, since the old llvm would 
+not unify those types.
+
+What I would proposed is to introduce a object type
+
+%object = type { {}*, {}*}
+
+and use that for every object, introducing casts as necessary. Would
+that be reasonable?
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Wed Jul 13 07:30:23 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Wed, 13 Jul 2011 10:30:23 -0400
+Subject: [rust-dev] problems in converting rust to the new llvm type
+	system
+In-Reply-To: <4E1D16D1.4090505@mozilla.com>
+References: <4E1D16D1.4090505@mozilla.com>
+Message-ID: <4E1DABFF.9050306@mozilla.com>
+
+On 11-07-12 11:53 PM, Rafael ?vila de Esp?ndola wrote:
+> First, what we currently have:
+>
+> When we compile
+>
+> obj test1() {
+> fn m1() { log "hi!"; }
+> }
+> obj test2() {
+> fn m1() { log "hi!"; }
+> }
+> fn test(test2 a) {
+> }
+> fn main() {
+> auto a = test1();
+> test(a)
+> }
+
+I got this testcase working in
+
+https://github.com/espindola/rust/tree/wip
+
+if you are interested.
+
+> We end up with
+>
+> @_ZN5test16method2m1E(i1* %arg, %task* %arg1, %1 %arg2)
+> @_ZN5test26method2m1E(i1* %arg, %task* %arg1, %1 %arg2)
+>
+> where %1 is the object type:
+>
+> %1 = type { %2*, %3* }
+> %2 = type { i8*, void (i1*, %task*, %1)* }
+>
+> Note that it is recursive.
+>
+> The call "test(a)" looks like
+>
+> call fastcc void %tmp8(i1* %tmp4, %task* %arg1, %6* %tmp9, %1 %tmp12)
+>
+> Note that we depend on test1 and test2 mapping to the same type. In
+> summary, we depend on llvm unifying recursive types. The bad news is:
+> that is gone since Saturday.
+>
+> Now, do we still want to support:
+>
+> obj test1() {
+> fn m1() { log "hi!"; }
+> fn m2() { log "bar"; }
+> }
+> obj test2() {
+> fn m1() { log "hi!"; }
+> }
+> fn test(test2 a) {
+> }
+> fn main() {
+> auto a = test1();
+> test(a)
+> }
+>
+> If so, we need to do something better anyway, since the old llvm would
+> not unify those types.
+>
+> What I would proposed is to introduce a object type
+>
+> %object = type { {}*, {}*}
+>
+> and use that for every object, introducing casts as necessary. Would
+> that be reasonable?
+>
+> Cheers,
+> Rafael
+
+
+From msullivan at mozilla.com  Wed Jul 13 14:12:44 2011
+From: msullivan at mozilla.com (Michael Sullivan)
+Date: Wed, 13 Jul 2011 14:12:44 -0700 (PDT)
+Subject: [rust-dev] Thoughts about blocks-as-iterator-bodies and control flow
+In-Reply-To: <1251803491.502327.1310576127449.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+Message-ID: <56874963.507364.1310591564575.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+There are approximately 549839483286534 interrelated sub-issues currently complicating figuring out how we want to treat functions/closures/blocks.
+
+Patrick, Graydon, and I spent some time yesterday tackling the sub-issue of dealing with blocks that can affect control flow, for use in iterator functions.
+
+Originally the plan was that all lambda-blocks could trigger break/continue. The downside of this is that it means we need to support a block causing a break or continue whenever we call one. It also means that blocks would have a different calling convention, so to pass a "normal" function to something that can also take a block, it needs to be converted. Furthermore, there are a lot of places that should be able to take blocks where it doesn't really make sense to break and continue (map, for instance: what does map return if the block returns early?).
+
+The proposal we discussed looked something like:
+Make the flow-controlling return value of an iterator-body-block explicit by introducing a new type "flow_control" that represents the flow-controlling implicit return value of the iterator-body-block. Then, the type of a vec_for_each function would be something like "fn[T](&fn(&T) -> flow_control, &T[])".
+And then we require that you can call only a function that returns flow_control from within a loop. (We could also reify flow_control even more, so that you can actually get and create and inspect flow_control values, and then have some explicit operation to apply the result of a flow_control value.)
+
+A little trickier is if we want to allow a iterator-body-block to force a return of the function that called the iterator. This is useful but a little terrifying. It requires that the flow_control value be passed through the iterator function and then interpreted by the calling function. If we want to be able to force the return of some value, then we would probably need to make flow_control parameterized, giving flow_control[T]. Furthermore, you want the iterator function to propagate the return flow_control but you just want the calling function to return without forcing /its/ caller to return... You could do something where you inspect the return types of the function and use that to figure out what to do, but. I think trying to do that while keeping handling of the flow_control value completely implicit gets pretty hairy pretty fast.
+
+Also note that one downside of making explicit the flow_control type is that you can no longer directly pass 
+
+----------------------------------------------------------------
+I have an extension to that scheme that I think fixes up some of these issues. My idea is to take the idea of reifying flow_control to its extreme, getting rid of most of the special cases.
+
+We could make flow_control an ordinary tag type and then have convenience macros that return the tags as well as a macro that interprets a flow_control value and applies it. (All of the things I say are macros could also just be language features.)
+
+so we could do something like:
+tag flow_control[T] {
+    f_normal;
+    f_break;
+    f_continue;
+    f_return(T);
+}
+
+And then we have some simple macros to return the different flow_control values, so that #return means "ret f_return" (or don't bother and do it explicitly).
+
+The actual control flow would be handled by some macros (I'm not sure what our macro syntax will be like, so I'm making things up):
+The #call_body macro, which is for calling the body of an iterator. "#call_body e" would expand to:
+alt (e) {
+  f_normal { }
+  f_break { break; }
+  f_continue { continue; }
+  f_return(?x) { return f_return(x); } // propagate the return to the caller
+}
+And the #iter macro, which is for calling an iterator function if you want to allow the block to trigger a return. "#iter e" would expand to:
+alt (e) {
+  f_normal { }
+  f_break { break; }
+  f_continue { continue; }
+  f_return(?x) { return x; }
+}
+
+A full example of this scheme in action:
+fn for_each[T,S](&T[] v, &fn(&T) -> flow_control[S] f) -> flow_control[S] {
+    for each (x in v) {
+        #call_body f(x);
+    }
+    ret f_normal;
+}
+
+fn contains[T](&T[] v, &T x) -> bool {
+    #iter for_each(v, {|y|
+        if (x == y) { #return true; }
+        ret f_normal;
+    });
+    ret false;
+}
+
+I think this is mostly very clean and unburdensome, except for the "ret f_normal"s that are required at the end of all bodies, which is an enormous burden. I have two possibilities to solve that:
+1) The "more principled" solution is to introduce a macro #body such that #body {|x1|...|xn| code} becomes {|x1|...|xn| { code } ret f_normal;}. contains then becomes:
+fn contains[T](&T[] v, &T x) -> bool {
+    #iter for_each(v, #body {|y|
+        if (x == y) { #return true; }
+    });
+    ret false;
+}
+
+2) Alternately, we could make it so that there is an implicit "ret f_normal" at the end of every function that returns flow_control, in the same way that (notionally) there is an implicit "ret ()" at the end of every function that returns ().
+
+I like this solution because I think it effectively captures a really handy use of blocks without needing add much "magic" or special cases. In particular, I think that making it explicit gives us a good method for forcing the return of a value from an iterator body block whereas I don't think we had a good way to do that when keeping the control flow handling implicit. It also has the advantage that the flow_control value can be inspected and handled in custom ways (perhaps there is some cleanup that needs to be done before returning).
+
+------------------------------------------------------------------
+
+What are people's thoughts?
+
+-sully
+
+From eholk at mozilla.com  Wed Jul 13 16:50:42 2011
+From: eholk at mozilla.com (Eric Holk)
+Date: Wed, 13 Jul 2011 16:50:42 -0700 (PDT)
+Subject: [rust-dev] Move Mode for Function Arguments
+In-Reply-To: <1249347611.509361.1310600455493.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+Message-ID: <1323920314.509446.1310601042022.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+Hi All,
+
+I've decided to go ahead and take a stab at implemented move semantics for function arguments. The main reason is that we need move semantics for channel operations, but we're planning to move these into a library, so we might as well go ahead and do move semantics now and move channel operations to the library.
+
+I'm proposing that we leave the default as copy arguments, since this is what programmers have used for the last 40+ years. For now I'll just add a move annotation on function signatures. In the future we might add a general move operator, like C++ has.
+
+We can bikeshed about the best syntax, but for now I'm going to go with the following:
+
+fn foo(move int x) {
+
+}
+
+
+I imagine for the most part everything stays the same. Typestate, however, will recognize that these values are deinitialized after passing to a move-mode function. The other main issue is moving which function is responsible for cleanups. Basically, the caller will have to remove the cleanup for any values passed in as a move-mode argument.
+
+Anyway, I just wanted to let everyone know, and see if anyone has any issues that need addressed with this.
+
+-Eric
+
+From marijnh at gmail.com  Thu Jul 14 03:08:11 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Thu, 14 Jul 2011 12:08:11 +0200
+Subject: [rust-dev] We *could* allow locals to be aliases
+Message-ID: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+
+First, a relatively non-controversial case:
+
+auto &ccx = cx.fcx.lcx.ccx;   // Look ma, no refcounting bumps!
+
+This case is very similar to alt/for blocks, and the alias checker
+could check it with a relatively simple extension.
+
+Next, of couse, I'm going to argue that 'accessing things through
+blocks', for example the proposed hash table accessor approach (where
+you pass a block to the accessor in which you'll have access to the
+value) is an abomination, and we should allow functions to return
+aliases to the content of their arguments. To the alias checker, this
+isn't any more complicated than the alias-in-a-block case, and it is
+certainly more pleasant on the programmer.
+
+Thoughts?
+
+From respindola at mozilla.com  Thu Jul 14 07:17:17 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Thu, 14 Jul 2011 10:17:17 -0400
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+Message-ID: <4E1EFA6D.3020805@mozilla.com>
+
+On 11-07-14 6:08 AM, Marijn Haverbeke wrote:
+> First, a relatively non-controversial case:
+>
+> auto&ccx = cx.fcx.lcx.ccx;   // Look ma, no refcounting bumps!
+>
+> This case is very similar to alt/for blocks, and the alias checker
+> could check it with a relatively simple extension.
+>
+> Next, of couse, I'm going to argue that 'accessing things through
+> blocks', for example the proposed hash table accessor approach (where
+> you pass a block to the accessor in which you'll have access to the
+> value) is an abomination, and we should allow functions to return
+> aliases to the content of their arguments. To the alias checker, this
+> isn't any more complicated than the alias-in-a-block case, and it is
+> certainly more pleasant on the programmer.
+
+I like this part a lot. One of my pet peeves with rust has been the
+impossibility of implementing something like
+
+http://llvm.org/docs/doxygen/html/StringMap_8h_source.html
+
+Where the strings are owned by the map. There a copy overhead when
+first creating the map, but then the map is the only thing that needs
+to be tracked/refcounted.
+
+> Thoughts?
+
+Cheers,
+Rafael
+
+From pwalton at mozilla.com  Thu Jul 14 10:34:52 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 14 Jul 2011 10:34:52 -0700
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+Message-ID: <4E1F28BC.4080500@mozilla.com>
+
+On 7/14/11 3:08 AM, Marijn Haverbeke wrote:
+> First, a relatively non-controversial case:
+>
+> auto&ccx = cx.fcx.lcx.ccx;   // Look ma, no refcounting bumps!
+>
+> This case is very similar to alt/for blocks, and the alias checker
+> could check it with a relatively simple extension.
+>
+> Next, of couse, I'm going to argue that 'accessing things through
+> blocks', for example the proposed hash table accessor approach (where
+> you pass a block to the accessor in which you'll have access to the
+> value) is an abomination, and we should allow functions to return
+> aliases to the content of their arguments. To the alias checker, this
+> isn't any more complicated than the alias-in-a-block case, and it is
+> certainly more pleasant on the programmer.
+
+After the conversation among Dave, Dan Grossman, and me yesterday, I 
+actually think that we don't want "accessing things through blocks" at 
+all. I believe it's impossible to make memory-safe. Consider:
+
+let h1 = @hashmap::mk();
+let h2 = id(h1);    // identity fn; compiler can't see through this
+hashmap::insert(*h1, "foo", "bar");
+hashmap::get(*h1, "foo", { |&val|
+     hashmap::delete(h2, "foo");
+     print val;      // crash
+});
+
+I think we *have* to copy the values. (Note that we are already copying 
+the values to please the alias checker in the hashmap implementation, so 
+this adds no more overhead than what we have!) This gives get() a more 
+natural return value, making the "accessing things through blocks" 
+pattern pointless. So the problem goes away.
+
+Patrick
+
+From msullivan at mozilla.com  Thu Jul 14 11:11:01 2011
+From: msullivan at mozilla.com (Michael Sullivan)
+Date: Thu, 14 Jul 2011 11:11:01 -0700 (PDT)
+Subject: [rust-dev] Thoughts about blocks-as-iterator-bodies and control
+ flow
+In-Reply-To: <56874963.507364.1310591564575.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+Message-ID: <1049689786.516641.1310667061638.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+Made a mistake with #iter. It should be:
+alt (e) {
+  f_normal { }
+  f_break | f_continue { fail; }
+  f_return(?x) { return x; }
+}
+
+----- Original Message -----
+> There are approximately 549839483286534 interrelated sub-issues
+> currently complicating figuring out how we want to treat
+> functions/closures/blocks.
+> 
+> Patrick, Graydon, and I spent some time yesterday tackling the
+> sub-issue of dealing with blocks that can affect control flow, for use
+> in iterator functions.
+> 
+> Originally the plan was that all lambda-blocks could trigger
+> break/continue. The downside of this is that it means we need to
+> support a block causing a break or continue whenever we call one. It
+> also means that blocks would have a different calling convention, so
+> to pass a "normal" function to something that can also take a block,
+> it needs to be converted. Furthermore, there are a lot of places that
+> should be able to take blocks where it doesn't really make sense to
+> break and continue (map, for instance: what does map return if the
+> block returns early?).
+> 
+> The proposal we discussed looked something like:
+> Make the flow-controlling return value of an iterator-body-block
+> explicit by introducing a new type "flow_control" that represents the
+> flow-controlling implicit return value of the iterator-body-block.
+> Then, the type of a vec_for_each function would be something like
+> "fn[T](&fn(&T) -> flow_control, &T[])".
+> And then we require that you can call only a function that returns
+> flow_control from within a loop. (We could also reify flow_control
+> even more, so that you can actually get and create and inspect
+> flow_control values, and then have some explicit operation to apply
+> the result of a flow_control value.)
+> 
+> A little trickier is if we want to allow a iterator-body-block to
+> force a return of the function that called the iterator. This is
+> useful but a little terrifying. It requires that the flow_control
+> value be passed through the iterator function and then interpreted by
+> the calling function. If we want to be able to force the return of
+> some value, then we would probably need to make flow_control
+> parameterized, giving flow_control[T]. Furthermore, you want the
+> iterator function to propagate the return flow_control but you just
+> want the calling function to return without forcing /its/ caller to
+> return... You could do something where you inspect the return types of
+> the function and use that to figure out what to do, but. I think
+> trying to do that while keeping handling of the flow_control value
+> completely implicit gets pretty hairy pretty fast.
+> 
+> Also note that one downside of making explicit the flow_control type
+> is that you can no longer directly pass
+> 
+> ----------------------------------------------------------------
+> I have an extension to that scheme that I think fixes up some of these
+> issues. My idea is to take the idea of reifying flow_control to its
+> extreme, getting rid of most of the special cases.
+> 
+> We could make flow_control an ordinary tag type and then have
+> convenience macros that return the tags as well as a macro that
+> interprets a flow_control value and applies it. (All of the things I
+> say are macros could also just be language features.)
+> 
+> so we could do something like:
+> tag flow_control[T] {
+> f_normal;
+> f_break;
+> f_continue;
+> f_return(T);
+> }
+> 
+> And then we have some simple macros to return the different
+> flow_control values, so that #return means "ret f_return" (or don't
+> bother and do it explicitly).
+> 
+> The actual control flow would be handled by some macros (I'm not sure
+> what our macro syntax will be like, so I'm making things up):
+> The #call_body macro, which is for calling the body of an iterator.
+> "#call_body e" would expand to:
+> alt (e) {
+> f_normal { }
+> f_break { break; }
+> f_continue { continue; }
+> f_return(?x) { return f_return(x); } // propagate the return to the
+> caller
+> }
+> And the #iter macro, which is for calling an iterator function if you
+> want to allow the block to trigger a return. "#iter e" would expand
+> to:
+> alt (e) {
+> f_normal { }
+> f_break { break; }
+> f_continue { continue; }
+> f_return(?x) { return x; }
+> }
+> 
+> A full example of this scheme in action:
+> fn for_each[T,S](&T[] v, &fn(&T) -> flow_control[S] f) ->
+> flow_control[S] {
+> for each (x in v) {
+> #call_body f(x);
+> }
+> ret f_normal;
+> }
+> 
+> fn contains[T](&T[] v, &T x) -> bool {
+> #iter for_each(v, {|y|
+> if (x == y) { #return true; }
+> ret f_normal;
+> });
+> ret false;
+> }
+> 
+> I think this is mostly very clean and unburdensome, except for the
+> "ret f_normal"s that are required at the end of all bodies, which is
+> an enormous burden. I have two possibilities to solve that:
+> 1) The "more principled" solution is to introduce a macro #body such
+> that #body {|x1|...|xn| code} becomes {|x1|...|xn| { code } ret
+> f_normal;}. contains then becomes:
+> fn contains[T](&T[] v, &T x) -> bool {
+> #iter for_each(v, #body {|y|
+> if (x == y) { #return true; }
+> });
+> ret false;
+> }
+> 
+> 2) Alternately, we could make it so that there is an implicit "ret
+> f_normal" at the end of every function that returns flow_control, in
+> the same way that (notionally) there is an implicit "ret ()" at the
+> end of every function that returns ().
+> 
+> I like this solution because I think it effectively captures a really
+> handy use of blocks without needing add much "magic" or special cases.
+> In particular, I think that making it explicit gives us a good method
+> for forcing the return of a value from an iterator body block whereas
+> I don't think we had a good way to do that when keeping the control
+> flow handling implicit. It also has the advantage that the
+> flow_control value can be inspected and handled in custom ways
+> (perhaps there is some cleanup that needs to be done before
+> returning).
+> 
+> ------------------------------------------------------------------
+> 
+> What are people's thoughts?
+> 
+> -sully
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+From graydon at mozilla.com  Thu Jul 14 12:09:44 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 14 Jul 2011 12:09:44 -0700
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+Message-ID: <4E1F3EF8.30502@mozilla.com>
+
+On 11-07-14 03:08 AM, Marijn Haverbeke wrote:
+> First, a relatively non-controversial case:
+>
+> auto&ccx = cx.fcx.lcx.ccx;   // Look ma, no refcounting bumps!
+>
+> This case is very similar to alt/for blocks, and the alias checker
+> could check it with a relatively simple extension.
+>
+> Next, of couse, I'm going to argue that 'accessing things through
+> blocks', for example the proposed hash table accessor approach (where
+> you pass a block to the accessor in which you'll have access to the
+> value) is an abomination, and we should allow functions to return
+> aliases to the content of their arguments. To the alias checker, this
+> isn't any more complicated than the alias-in-a-block case, and it is
+> certainly more pleasant on the programmer.
+>
+> Thoughts?
+
+I don't understand how the alias checker figures into it. It's a 
+lifetime thing. How do you ensure the aliased value remains live as long 
+as the alias does?
+
+-Graydon
+
+From graydon at mozilla.com  Thu Jul 14 12:11:09 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 14 Jul 2011 12:11:09 -0700
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <4E1F28BC.4080500@mozilla.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+	<4E1F28BC.4080500@mozilla.com>
+Message-ID: <4E1F3F4D.6070507@mozilla.com>
+
+On 11-07-14 10:34 AM, Patrick Walton wrote:
+
+> After the conversation among Dave, Dan Grossman, and me yesterday, I
+> actually think that we don't want "accessing things through blocks" at
+> all. I believe it's impossible to make memory-safe. Consider:
+>
+> let h1 = @hashmap::mk();
+> let h2 = id(h1); // identity fn; compiler can't see through this
+> hashmap::insert(*h1, "foo", "bar");
+> hashmap::get(*h1, "foo", { |&val|
+> hashmap::delete(h2, "foo");
+> print val; // crash
+> });
+>
+> I think we *have* to copy the values. (Note that we are already copying
+> the values to please the alias checker in the hashmap implementation, so
+> this adds no more overhead than what we have!) This gives get() a more
+> natural return value, making the "accessing things through blocks"
+> pattern pointless. So the problem goes away.
+
+I disagree. The delete is the prohibited bit (by type-based interference 
+with *h1; best the compiler can do due to the id() call it can't see 
+through). Accessing &val in a read-only sense should be safe.
+
+-Graydon
+
+
+From graydon at mozilla.com  Thu Jul 14 12:17:50 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 14 Jul 2011 12:17:50 -0700
+Subject: [rust-dev] trans refactor
+In-Reply-To: <1538801479.451080.1310059045207.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+References: <1538801479.451080.1310059045207.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+Message-ID: <4E1F40DE.8010907@mozilla.com>
+
+On 11-07-07 10:17 AM, Lindsey Kuper wrote:
+
+> It's been suggested that we start by splitting trans into two pieces.  The first would be, more or less, all the trans_X() functions where 'X' is recognizably something in the AST, and the second would be everything else: support functions, glue, LLVM type constructors, and such.  Eventually, the second piece could be split further, if we want.
+
+Sounds good. It's definitely overgrown.
+
+> Marijn has pointed out that when we do this, we'll encounter a lot of repeated code in the first piece that could be abstracted out into common utility stuff that can go into the second.  That's one reason why we're doing this: to make opportunities for that kind of abstraction more obvious.  Right now, it's hard to see them because trans is so big.  Eventually, I could see the second piece evolving into the "LLVM combinator library" that we've often wished we had.
+
+Factoring as we see opportunities to do so is always appropriate. 
+Setting out to come up with a "combinator library" is a nice idea, but 
+it's not immediately obvious to me what it *means* beyond "factoring as 
+we see opportunities". I don't *ignore* opportunities for factoring, 
+typically!
+
+> It's also been suggested that it would be be nice to come up with a better abstraction for block contexts and other kinds of contexts that right now have to be threaded through most of the functions in trans.  I'm open to suggestions for what to do about that.
+
+I don't think there's an easy way here. If it's some kind of implicit 
+state in the translation module (or object), you wind up in the world of 
+pain we were in in rustboot, where functions that generate little 
+snippets of code *alter* "the implicit block", and you're left trying to 
+figure out what on earth happened when it goes wrong.
+
+I think some kind of manual threading is the best we can do. It's much 
+more functional style (despite modifying buffers-of-LLVM-instructions; 
+at least those buffers have independent value-identities).
+
+We could do a better job with obj-ifying the various contexts though, 
+and factoring helper functions to methods on them.
+
+> I think that sums up the current thinking on 'how'.  Comments, questions, concerns?
+>
+> As for the 'when' part, since a lot of people work on trans, we'll need to pick a flag day by which work-in-progress should be in.  Suggestions?
+
+I don't think a flag day is necessary. Introduce a new file for support 
+routines and start moving functions, one at a time. When you see 
+redundancy, try to factor it :)
+
+-Graydon
+
+From marijnh at gmail.com  Thu Jul 14 12:40:33 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Thu, 14 Jul 2011 21:40:33 +0200
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <4E1F28BC.4080500@mozilla.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+	<4E1F28BC.4080500@mozilla.com>
+Message-ID: <CAJnHWXtCCLXNd3N-K=b0wF9jJj-F4-1XcOd8LX7qSnEPtOOpwg@mail.gmail.com>
+
+> let h1 = @hashmap::mk();
+> let h2 = id(h1); ? ?// identity fn; compiler can't see through this
+> hashmap::insert(*h1, "foo", "bar");
+> hashmap::get(*h1, "foo", { |&val|
+> ? ?hashmap::delete(h2, "foo");
+> ? ?print val; ? ? ?// crash
+> });
+
+The alias checker would yell at you for the hashmap::delete line,
+since you're accessing the h2 value, which might alias h1, whereas the
+val alias is still live (is used in the next line).
+
+(It would, in its current state, even yell at you if h2 was created
+through a new call to hasmap::mk, since it doesn't yet do proper alias
+analysis, just type-based. This is something I hope to improve in the
+future.)
+
+From marijnh at gmail.com  Thu Jul 14 12:44:27 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Thu, 14 Jul 2011 21:44:27 +0200
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <4E1F3EF8.30502@mozilla.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+	<4E1F3EF8.30502@mozilla.com>
+Message-ID: <CAJnHWXswg+3PAtz08B23k6FJ=v-ZTh6d4dLB2mzJ47LOfH8xyw@mail.gmail.com>
+
+> I don't understand how the alias checker figures into it. It's a lifetime
+> thing. How do you ensure the aliased value remains live as long as the alias
+> does?
+
+Right, I was too vague on that. You can only return aliases that are
+'rooted' (by the rules I explained in the previous alias-checking
+discussion) in arguments to the current function that were passed by
+alias. This ensures that the alias is still live when returned. (It
+might in some situations be difficult to prove this rooting, I haven't
+thought too deeply about that yet.)
+
+On the callee side, the alias checker knows that the returned alias is
+rooted in one of the arguments passed to the call that created it.
+Sometimes it can pinpoint the exact argument using type analysis (an
+int won't root a str, and only stuff passed by alias must be
+considered). It then disallows 'displacement' (overwriting, moving out
+of, or for mutable containers, taking the value of) of these roots
+until the last use of the returned alias.
+
+From graydon at mozilla.com  Thu Jul 14 12:47:53 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 14 Jul 2011 12:47:53 -0700
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <CAJnHWXswg+3PAtz08B23k6FJ=v-ZTh6d4dLB2mzJ47LOfH8xyw@mail.gmail.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>	<4E1F3EF8.30502@mozilla.com>
+	<CAJnHWXswg+3PAtz08B23k6FJ=v-ZTh6d4dLB2mzJ47LOfH8xyw@mail.gmail.com>
+Message-ID: <4E1F47E9.1090808@mozilla.com>
+
+On 11-07-14 12:44 PM, Marijn Haverbeke wrote:
+>> I don't understand how the alias checker figures into it. It's a lifetime
+>> thing. How do you ensure the aliased value remains live as long as the alias
+>> does?
+>
+> Right, I was too vague on that. You can only return aliases that are
+> 'rooted' (by the rules I explained in the previous alias-checking
+> discussion) in arguments to the current function that were passed by
+> alias. This ensures that the alias is still live when returned. (It
+> might in some situations be difficult to prove this rooting, I haven't
+> thought too deeply about that yet.)
+
+Ok. Slightly more plausible...
+
+> On the callee side, the alias checker knows that the returned alias is
+> rooted in one of the arguments passed to the call that created it.
+> Sometimes it can pinpoint the exact argument using type analysis (an
+> int won't root a str, and only stuff passed by alias must be
+> considered). It then disallows 'displacement' (overwriting, moving out
+> of, or for mutable containers, taking the value of) of these roots
+> until the last use of the returned alias.
+
+Disallows ... on the *caller* side as well? How far out can the alias go?
+
+-Graydaon
+
+From marijnh at gmail.com  Thu Jul 14 12:59:28 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Thu, 14 Jul 2011 21:59:28 +0200
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <4E1F47E9.1090808@mozilla.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+	<4E1F3EF8.30502@mozilla.com>
+	<CAJnHWXswg+3PAtz08B23k6FJ=v-ZTh6d4dLB2mzJ47LOfH8xyw@mail.gmail.com>
+	<4E1F47E9.1090808@mozilla.com>
+Message-ID: <CAJnHWXvayFsAYRwxk8gG2tPMWP0z81JxrtcKB9Hq-b-rdKBSdw@mail.gmail.com>
+
+> Disallows ... on the *caller* side as well?
+
+Of course -- otherwise it would be unsafe.you could call a function
+that gave you an alias to the internals of a local, and then trash
+that local and keep on using the alias.
+
+> How far out can the alias go?
+
+I guess you mean returning through multiple functions? My current
+proposed scheme would only allow that if each of the intermediate
+functions (returning an alias, but not creating it themselves) could
+pinpoint the root of the alias precisely (either because the
+alias-returning functions they call take only one alias argument, or
+because of type-based analysis) and this pinpointed root is an alias
+parameter to the function. I expect this'll be workable.
+
+From graydon at mozilla.com  Thu Jul 14 13:06:04 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 14 Jul 2011 13:06:04 -0700
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <CAJnHWXvayFsAYRwxk8gG2tPMWP0z81JxrtcKB9Hq-b-rdKBSdw@mail.gmail.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>	<4E1F3EF8.30502@mozilla.com>	<CAJnHWXswg+3PAtz08B23k6FJ=v-ZTh6d4dLB2mzJ47LOfH8xyw@mail.gmail.com>	<4E1F47E9.1090808@mozilla.com>
+	<CAJnHWXvayFsAYRwxk8gG2tPMWP0z81JxrtcKB9Hq-b-rdKBSdw@mail.gmail.com>
+Message-ID: <4E1F4C2C.7070405@mozilla.com>
+
+On 11-07-14 12:59 PM, Marijn Haverbeke wrote:
+>> Disallows ... on the *caller* side as well?
+>
+> Of course -- otherwise it would be unsafe.you could call a function
+> that gave you an alias to the internals of a local, and then trash
+> that local and keep on using the alias.
+
+Yeah. That's sorta my concern: seems like most examples I can think of 
+(hashtable access, say?) woul be returning aliases to types that are 
+likely to collide with other locals, with under type-based rules, and 
+since the callee is opaque there might not be much else to go on.
+
+But I guess that's just my hand-waving imagination, not a real argument. 
+Might as well try and see if any interesting cases are legal, if you're 
+interested :)
+
+>> How far out can the alias go?
+>
+> I guess you mean returning through multiple functions? My current
+> proposed scheme would only allow that if each of the intermediate
+> functions (returning an alias, but not creating it themselves) could
+> pinpoint the root of the alias precisely (either because the
+> alias-returning functions they call take only one alias argument, or
+> because of type-based analysis) and this pinpointed root is an alias
+> parameter to the function. I expect this'll be workable.
+
+Ok. Certainly not opposed if you can formalize it enough to convince 
+yourself it's safe.
+
+-Graydon
+
+
+From graydon at mozilla.com  Thu Jul 14 13:08:12 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 14 Jul 2011 13:08:12 -0700
+Subject: [rust-dev] LLVM version bump
+Message-ID: <4E1F4CAC.5030905@mozilla.com>
+
+We've just bumped LLVM version again. You'll all want to upgrade. This 
+is the "new LLVM type system" which I think is the cornerstone of LLVM 3.0.
+
+Upgrade to 135178 or later.
+
+(Hopefully we'll be able to pin to, say, 3.0 for some time, once it's 
+released. Hope hope.)
+
+-Graydon
+
+From pwalton at mozilla.com  Thu Jul 14 13:49:59 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 14 Jul 2011 13:49:59 -0700
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <4E1F3F4D.6070507@mozilla.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+	<4E1F28BC.4080500@mozilla.com> <4E1F3F4D.6070507@mozilla.com>
+Message-ID: <4E1F5677.2050403@mozilla.com>
+
+On 7/14/11 12:11 PM, Graydon Hoare wrote:
+> I disagree. The delete is the prohibited bit (by type-based interference
+> with *h1; best the compiler can do due to the id() call it can't see
+> through). Accessing &val in a read-only sense should be safe.
+
+Okay, I see what you mean. I'm a bit concerned about function calls 
+wildly trashing aliases due to the compiler being unable to see through 
+them; makes me wonder if it's worth the complexity of aliasing into 
+patterns as opposed to having pattern matching bindings simply copy 
+(which would dramatically decrease alias usage, I think).
+
+Patrick
+
+From msullivan at mozilla.com  Thu Jul 14 14:27:27 2011
+From: msullivan at mozilla.com (Michael Sullivan)
+Date: Thu, 14 Jul 2011 14:27:27 -0700 (PDT)
+Subject: [rust-dev] Thoughts about blocks-as-iterator-bodies and control
+ flow
+In-Reply-To: <1049689786.516641.1310667061638.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+Message-ID: <1121315958.519918.1310678847282.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+I have the following code working (if you disable typestate) in my half-working lambdas branch (https://github.com/msullivan/rust/tree/incur-capture):
+
+
+// I think that this is actually pretty workable as a scheme for using
+// blocks to affect control flow. It is a little syntactically heavyweight
+// right now, but a lot of that can be fixed. A more lightweight notation
+// for blocks will go a long way. The other big problem is the excess of
+// closing parens and braces, but that can mostly be fixed with some tweaks
+// to the macros that are used to invoke iterators so that we could write
+// something like:
+// #iter (for_each(v), fn (&T y) -> flow[bool] { ... });
+
+tag flow[T] {
+    f_normal;
+    f_break;
+    f_continue;
+    f_return(T);
+}
+
+// Right now we the parser doesn't allow macros to be defined at top level.
+// However, they don't obey scope and so we can just stick them in a
+// function and it will work out right...
+fn bullshit_hack() {
+#macro([#call_body(body),
+        alt (body) {
+            f_normal { }
+            f_break { break; }
+            f_continue { cont; }
+            f_return(?x) { ret f_return(x); }
+        }]);
+#macro([#iter(e),
+        alt (e) {
+            f_normal { }
+            f_break | f_continue { fail; }
+            f_return(?x) { ret x; }
+        }]);
+#macro([#ret(e), {ret f_return(e);}]);
+#macro([#cont(e), {ret f_continue;}]);
+#macro([#break(e), {ret f_break;}]);
+#macro([#body(body), {{body} ret f_normal;}]);
+}
+
+fn for_each[T,S](&T[] v, &fn (&T) -> flow[S] f) -> flow[S] {
+    for (T x in v) {
+        #call_body (f(x));
+    }
+    ret f_normal;
+}
+
+fn contains[T](&T[] v, &T x) -> bool {
+    #iter (for_each(v, fn (&T y) -> flow[bool] { #body({
+        if (x == y) { #ret (true); }
+    })}));
+    ret false;
+}
+
+fn map[T,S](&T[] v, &fn (&T) -> S f) -> S[] {
+    auto w = ~[];
+    // We don't invoke the #iter macro because we can't force a return.
+    for_each(v, fn (&T x) -> flow[()] { #body({
+        w += ~[f(x)];
+    })});
+    ret w;
+}
+    
+fn log_int_vec(&int[] v) {
+    for_each(v, fn (&int i) -> flow[()] { #body({
+        log_err i;
+    })});
+}
+
+fn main() {
+    auto v = ~[1,2,3,4,5,6,7];
+    assert(contains(v, 7) == true);
+    assert(contains(v, 2) == true);
+    assert(contains(v, 0) == false);
+    auto w = map(v, fn(&int i) -> int { ret i*i; });
+    assert(contains(w, 36) == true);
+    assert(contains(w, 5) == false);
+    log_int_vec(w);
+}
+
+----- Original Message -----
+> Made a mistake with #iter. It should be:
+> alt (e) {
+> f_normal { }
+> f_break | f_continue { fail; }
+> f_return(?x) { return x; }
+> }
+> 
+> ----- Original Message -----
+> > There are approximately 549839483286534 interrelated sub-issues
+> > currently complicating figuring out how we want to treat
+> > functions/closures/blocks.
+> >
+> > Patrick, Graydon, and I spent some time yesterday tackling the
+> > sub-issue of dealing with blocks that can affect control flow, for
+> > use
+> > in iterator functions.
+> >
+> > Originally the plan was that all lambda-blocks could trigger
+> > break/continue. The downside of this is that it means we need to
+> > support a block causing a break or continue whenever we call one. It
+> > also means that blocks would have a different calling convention, so
+> > to pass a "normal" function to something that can also take a block,
+> > it needs to be converted. Furthermore, there are a lot of places
+> > that
+> > should be able to take blocks where it doesn't really make sense to
+> > break and continue (map, for instance: what does map return if the
+> > block returns early?).
+> >
+> > The proposal we discussed looked something like:
+> > Make the flow-controlling return value of an iterator-body-block
+> > explicit by introducing a new type "flow_control" that represents
+> > the
+> > flow-controlling implicit return value of the iterator-body-block.
+> > Then, the type of a vec_for_each function would be something like
+> > "fn[T](&fn(&T) -> flow_control, &T[])".
+> > And then we require that you can call only a function that returns
+> > flow_control from within a loop. (We could also reify flow_control
+> > even more, so that you can actually get and create and inspect
+> > flow_control values, and then have some explicit operation to apply
+> > the result of a flow_control value.)
+> >
+> > A little trickier is if we want to allow a iterator-body-block to
+> > force a return of the function that called the iterator. This is
+> > useful but a little terrifying. It requires that the flow_control
+> > value be passed through the iterator function and then interpreted
+> > by
+> > the calling function. If we want to be able to force the return of
+> > some value, then we would probably need to make flow_control
+> > parameterized, giving flow_control[T]. Furthermore, you want the
+> > iterator function to propagate the return flow_control but you just
+> > want the calling function to return without forcing /its/ caller to
+> > return... You could do something where you inspect the return types
+> > of
+> > the function and use that to figure out what to do, but. I think
+> > trying to do that while keeping handling of the flow_control value
+> > completely implicit gets pretty hairy pretty fast.
+> >
+> > Also note that one downside of making explicit the flow_control type
+> > is that you can no longer directly pass
+> >
+> > ----------------------------------------------------------------
+> > I have an extension to that scheme that I think fixes up some of
+> > these
+> > issues. My idea is to take the idea of reifying flow_control to its
+> > extreme, getting rid of most of the special cases.
+> >
+> > We could make flow_control an ordinary tag type and then have
+> > convenience macros that return the tags as well as a macro that
+> > interprets a flow_control value and applies it. (All of the things I
+> > say are macros could also just be language features.)
+> >
+> > so we could do something like:
+> > tag flow_control[T] {
+> > f_normal;
+> > f_break;
+> > f_continue;
+> > f_return(T);
+> > }
+> >
+> > And then we have some simple macros to return the different
+> > flow_control values, so that #return means "ret f_return" (or don't
+> > bother and do it explicitly).
+> >
+> > The actual control flow would be handled by some macros (I'm not
+> > sure
+> > what our macro syntax will be like, so I'm making things up):
+> > The #call_body macro, which is for calling the body of an iterator.
+> > "#call_body e" would expand to:
+> > alt (e) {
+> > f_normal { }
+> > f_break { break; }
+> > f_continue { continue; }
+> > f_return(?x) { return f_return(x); } // propagate the return to the
+> > caller
+> > }
+> > And the #iter macro, which is for calling an iterator function if
+> > you
+> > want to allow the block to trigger a return. "#iter e" would expand
+> > to:
+> > alt (e) {
+> > f_normal { }
+> > f_break { break; }
+> > f_continue { continue; }
+> > f_return(?x) { return x; }
+> > }
+> >
+> > A full example of this scheme in action:
+> > fn for_each[T,S](&T[] v, &fn(&T) -> flow_control[S] f) ->
+> > flow_control[S] {
+> > for each (x in v) {
+> > #call_body f(x);
+> > }
+> > ret f_normal;
+> > }
+> >
+> > fn contains[T](&T[] v, &T x) -> bool {
+> > #iter for_each(v, {|y|
+> > if (x == y) { #return true; }
+> > ret f_normal;
+> > });
+> > ret false;
+> > }
+> >
+> > I think this is mostly very clean and unburdensome, except for the
+> > "ret f_normal"s that are required at the end of all bodies, which is
+> > an enormous burden. I have two possibilities to solve that:
+> > 1) The "more principled" solution is to introduce a macro #body such
+> > that #body {|x1|...|xn| code} becomes {|x1|...|xn| { code } ret
+> > f_normal;}. contains then becomes:
+> > fn contains[T](&T[] v, &T x) -> bool {
+> > #iter for_each(v, #body {|y|
+> > if (x == y) { #return true; }
+> > });
+> > ret false;
+> > }
+> >
+> > 2) Alternately, we could make it so that there is an implicit "ret
+> > f_normal" at the end of every function that returns flow_control, in
+> > the same way that (notionally) there is an implicit "ret ()" at the
+> > end of every function that returns ().
+> >
+> > I like this solution because I think it effectively captures a
+> > really
+> > handy use of blocks without needing add much "magic" or special
+> > cases.
+> > In particular, I think that making it explicit gives us a good
+> > method
+> > for forcing the return of a value from an iterator body block
+> > whereas
+> > I don't think we had a good way to do that when keeping the control
+> > flow handling implicit. It also has the advantage that the
+> > flow_control value can be inspected and handled in custom ways
+> > (perhaps there is some cleanup that needs to be done before
+> > returning).
+> >
+> > ------------------------------------------------------------------
+> >
+> > What are people's thoughts?
+> >
+> > -sully
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org
+> > https://mail.mozilla.org/listinfo/rust-dev
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+From graydon at mozilla.com  Thu Jul 14 15:41:11 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 14 Jul 2011 15:41:11 -0700
+Subject: [rust-dev] Thoughts about blocks-as-iterator-bodies and control
+ flow
+In-Reply-To: <56874963.507364.1310591564575.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+References: <56874963.507364.1310591564575.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+Message-ID: <4E1F7087.4090807@mozilla.com>
+
+On 11-07-13 02:12 PM, Michael Sullivan wrote:
+
+> I like this solution because I think it effectively captures a really handy use of blocks without needing add much "magic" or special cases. In particular, I think that making it explicit gives us a good method for forcing the return of a value from an iterator body block whereas I don't think we had a good way to do that when keeping the control flow handling implicit. It also has the advantage that the flow_control value can be inspected and handled in custom ways (perhaps there is some cleanup that needs to be done before returning).
+
+Resources should handle cleanup-before-return and such. But I agree that 
+a way to reify the flow values might well prove valuable to someone 
+building a sufficiently exotic iterator.
+
+My concern is not that your design here is *wrong*, merely too 
+cumbersome to be the common case. I think it's a faithful encoding of 
+what we discussed, and am happy to have seen it written out as such. 
+Nice that you got it running!
+
+I'm curious though if there's a "minimal set of special cases" (in the 
+parser, triggered by the keywords 'for' and 'iter', say) that can 
+capture the most common few idioms with less chatter, retaining the 
+fully reified version as a sort of "under the covers" mode you can 
+access if you've hit the limit of the conveniences. I realize this is a 
+bit of hand-waving but it's the direction I'd like to see it go. Life 
+isn't *that* miserable with 'iter' being its own type; maybe we can 
+permit casts to and from the reified-as-fn form?
+
+I'm quite willing to add special cases "for the sake of iterating". Of 
+course minimalism is always preferable to complexity, but iterating is 
+what computers spend most of their time doing, and one form or another 
+of iterator code makes up great many APIs and libraries.
+
+(You could even view this as a sort of "imperative corollary" for 
+Hughes' observations about the greater compositionality of lazy 
+functions, via the analogy between iterators and infinite data structures..)
+
+-Graydon
+
+From marijnh at gmail.com  Thu Jul 14 20:23:01 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 15 Jul 2011 05:23:01 +0200
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <4E1F5677.2050403@mozilla.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+	<4E1F28BC.4080500@mozilla.com> <4E1F3F4D.6070507@mozilla.com>
+	<4E1F5677.2050403@mozilla.com>
+Message-ID: <CAJnHWXtUQd+AfT8fD_FXncM5MJqRYhApdB1=cwUQO=Oq4_n33g@mail.gmail.com>
+
+> makes
+> me wonder if it's worth the complexity of aliasing into patterns as opposed
+> to having pattern matching bindings simply copy
+
+Copying is expensive for a lot of types, sometimes even illegal. I'm
+not opposed to having a syntax for copying alt matches, but I think
+aliasing should remain the default.
+
+From pwalton at mozilla.com  Thu Jul 14 21:31:53 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 14 Jul 2011 21:31:53 -0700
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <CAJnHWXtUQd+AfT8fD_FXncM5MJqRYhApdB1=cwUQO=Oq4_n33g@mail.gmail.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+	<4E1F28BC.4080500@mozilla.com> <4E1F3F4D.6070507@mozilla.com>
+	<4E1F5677.2050403@mozilla.com>
+	<CAJnHWXtUQd+AfT8fD_FXncM5MJqRYhApdB1=cwUQO=Oq4_n33g@mail.gmail.com>
+Message-ID: <4E1FC2B9.4010605@mozilla.com>
+
+On 7/14/11 8:23 PM, Marijn Haverbeke wrote:
+>> makes
+>> me wonder if it's worth the complexity of aliasing into patterns as opposed
+>> to having pattern matching bindings simply copy
+>
+> Copying is expensive for a lot of types, sometimes even illegal. I'm
+> not opposed to having a syntax for copying alt matches, but I think
+> aliasing should remain the default.
+
+I understand the concern about performance. I'm still concerned about 
+the complexity though, both in terms of convincing ourselves it's sound 
+and allowing errors to be understandable. I'm definitely not opposed to 
+keeping the alias pass in as it stands, but I think we should continue 
+to think about ways we can simplify it.
+
+Patrick
+
+From graydon at mozilla.com  Sat Jul 16 01:01:54 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 16 Jul 2011 01:01:54 -0700
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <4E1F4C2C.7070405@mozilla.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>	<4E1F3EF8.30502@mozilla.com>	<CAJnHWXswg+3PAtz08B23k6FJ=v-ZTh6d4dLB2mzJ47LOfH8xyw@mail.gmail.com>	<4E1F47E9.1090808@mozilla.com>
+	<CAJnHWXvayFsAYRwxk8gG2tPMWP0z81JxrtcKB9Hq-b-rdKBSdw@mail.gmail.com>
+	<4E1F4C2C.7070405@mozilla.com>
+Message-ID: <4E214572.1070409@mozilla.com>
+
+On 14/07/2011 1:06 PM, Graydon Hoare wrote:
+
+> Ok. Certainly not opposed if you can formalize it enough to convince
+> yourself it's safe.
+
+Thought about this some more -- what's the analysis like when trying to 
+return an alias from a first class function or obj? Seems like it'd get bad.
+
+-Graydon
+
+
+From marijnh at gmail.com  Sat Jul 16 14:57:28 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 16 Jul 2011 23:57:28 +0200
+Subject: [rust-dev] We *could* allow locals to be aliases
+In-Reply-To: <4E214572.1070409@mozilla.com>
+References: <CAJnHWXvyy61GUj8mgH5zKOhhFRxc6+fSQab3DgVsDjOzQug4jg@mail.gmail.com>
+	<4E1F3EF8.30502@mozilla.com>
+	<CAJnHWXswg+3PAtz08B23k6FJ=v-ZTh6d4dLB2mzJ47LOfH8xyw@mail.gmail.com>
+	<4E1F47E9.1090808@mozilla.com>
+	<CAJnHWXvayFsAYRwxk8gG2tPMWP0z81JxrtcKB9Hq-b-rdKBSdw@mail.gmail.com>
+	<4E1F4C2C.7070405@mozilla.com> <4E214572.1070409@mozilla.com>
+Message-ID: <CAJnHWXtLGUCoiVV+GunD03r_nMNhdmsoDAYCpEJqQzTqPE9mpA@mail.gmail.com>
+
+> Thought about this some more -- what's the analysis like when trying to
+> return an alias from a first class function or obj? Seems like it'd get bad.
+
+If we disallow functions to return anything that's not rooted in an
+aliased argument, we'd have to disallow binding alias arguments to
+functions that return an alias.
+
+This is getting obscure. But the current alias system is already
+plenty obscure, and the increate in power seems worth it.
+
+From noelgrandin at gmail.com  Tue Jul 19 06:50:19 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Tue, 19 Jul 2011 15:50:19 +0200
+Subject: [rust-dev] namespace operator (bikeshed)
+Message-ID: <4E258B9B.6040206@gmail.com>
+
+Hi
+
+Just a suggestion.
+
+For something that we want programmers to use a lot, the existing namespace operator is longer than it could be, viz. "::".
+
+Surely Java has showed that it was possible to use a dot "." as the operator for both member field and namespace selection?
+
+But maybe that's just my bias showing.
+
+Regards, Noel.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110719/1fd6c1e9/attachment.html>
+
+From marijnh at gmail.com  Tue Jul 19 06:58:01 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 19 Jul 2011 15:58:01 +0200
+Subject: [rust-dev] namespace operator (bikeshed)
+In-Reply-To: <4E258B9B.6040206@gmail.com>
+References: <4E258B9B.6040206@gmail.com>
+Message-ID: <CAJnHWXspR8vLh0qcO3t_a3BnCy2Mr5dy0dY7G+dEsof155_Wcg@mail.gmail.com>
+
+Rust used to work like this (dots as package name separators) a few
+months ago. We switches because we wanted to have different namespaces
+for module names, types, and values. When doing that, a different
+syntax is needed for field access and module access, or you get
+ambiguities.
+
+From noelgrandin at gmail.com  Tue Jul 19 07:09:36 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Tue, 19 Jul 2011 16:09:36 +0200
+Subject: [rust-dev] namespace operator (bikeshed)
+In-Reply-To: <CAJnHWXspR8vLh0qcO3t_a3BnCy2Mr5dy0dY7G+dEsof155_Wcg@mail.gmail.com>
+References: <4E258B9B.6040206@gmail.com>
+	<CAJnHWXspR8vLh0qcO3t_a3BnCy2Mr5dy0dY7G+dEsof155_Wcg@mail.gmail.com>
+Message-ID: <4E259020.4080706@gmail.com>
+
+Java has the same problem. The compiler just errors out when it can't resolve an ambiguity.
+
+A trade-off I guess, between syntax tersity and the occasional "cannot resolve ambiguity" error message.
+
+Marijn Haverbeke wrote:
+> Rust used to work like this (dots as package name separators) a few
+> months ago. We switches because we wanted to have different namespaces
+> for module names, types, and values. When doing that, a different
+> syntax is needed for field access and module access, or you get
+> ambiguities.
+
+
+From marijnh at gmail.com  Thu Jul 21 06:56:40 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Thu, 21 Jul 2011 15:56:40 +0200
+Subject: [rust-dev] A new emacs rust-mode
+Message-ID: <CAJnHWXttZvdTB-Jj8fmT=fW1KSwsTs6PtxJi7FXpSkr0x0sXtg@mail.gmail.com>
+
+See https://github.com/marijnh/rust-mode . This is the first emacs
+mode I wrote, it has only been used for a day, and only with my usage
+patterns, so there are probably issues. Please report any problems on
+github.
+
+It should handle paren-free code well (whereas the c-mode based mode
+completely screwed up indentation for paren-free code), so let's start
+using that too.
+
+Best,
+Marijn
+
+From banderson at mozilla.com  Thu Jul 21 12:52:57 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Thu, 21 Jul 2011 12:52:57 -0700
+Subject: [rust-dev] A new emacs rust-mode
+In-Reply-To: <CAJnHWXttZvdTB-Jj8fmT=fW1KSwsTs6PtxJi7FXpSkr0x0sXtg@mail.gmail.com>
+References: <CAJnHWXttZvdTB-Jj8fmT=fW1KSwsTs6PtxJi7FXpSkr0x0sXtg@mail.gmail.com>
+Message-ID: <4E288399.3090100@mozilla.com>
+
+On 07/21/2011 06:56 AM, Marijn Haverbeke wrote:
+> See https://github.com/marijnh/rust-mode . This is the first emacs
+> mode I wrote, it has only been used for a day, and only with my usage
+> patterns, so there are probably issues. Please report any problems on
+> github.
+I've been running it this morning and it's already quite usable. Nice work.
+
+From marijnh at gmail.com  Fri Jul 22 01:10:34 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 22 Jul 2011 10:10:34 +0200
+Subject: [rust-dev] Tinderbox cycle times?
+Message-ID: <CAJnHWXv_DG1SRA1MG+a54cy8Err5xe+DvqfJkU4RQW94TaXyzg@mail.gmail.com>
+
+A week ago they were around 15 minutes. Then over the past days they
+climbed to half an hour. Now they seem to be ~1 hour. Do we know why?
+
+From marijnh at gmail.com  Fri Jul 22 02:00:38 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 22 Jul 2011 11:00:38 +0200
+Subject: [rust-dev] Unexplainable tinderbox failure
+Message-ID: <CAJnHWXsBFB3PZkZi59_djL7RgnEFTL+QdequSuuuPHmMoN72fw@mail.gmail.com>
+
+The failure at [1] seems to be non-deterministic -- the patch I
+applied didn't touch anything low-level enough to cause a segfault,
+and the next patch I pushed 'fixed' it, although it didn't revert the
+first patch or even touch anything remotely related (it changed a
+test, not the one that was failing). Any ideas what this might be?
+
+[1] http://tinderbox.mozilla.org/showlog.cgi?log=Rust/1311320260.1311322154.18578.gz&fulltext=1
+
+From respindola at mozilla.com  Fri Jul 22 06:32:26 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Fri, 22 Jul 2011 09:32:26 -0400
+Subject: [rust-dev] Unexplainable tinderbox failure
+In-Reply-To: <CAJnHWXsBFB3PZkZi59_djL7RgnEFTL+QdequSuuuPHmMoN72fw@mail.gmail.com>
+References: <CAJnHWXsBFB3PZkZi59_djL7RgnEFTL+QdequSuuuPHmMoN72fw@mail.gmail.com>
+Message-ID: <4E297BEA.9000908@mozilla.com>
+
+On 11-07-22 5:00 AM, Marijn Haverbeke wrote:
+> The failure at [1] seems to be non-deterministic -- the patch I
+> applied didn't touch anything low-level enough to cause a segfault,
+> and the next patch I pushed 'fixed' it, although it didn't revert the
+> first patch or even touch anything remotely related (it changed a
+> test, not the one that was failing). Any ideas what this might be?
+
+No, but I have seen similar issues, both on the Linux and Windows bots.
+  Does anyone knows if the linux bots runs only the tests on valgrind? Maybe
+we could build stage3 with it too...
+> [1] http://tinderbox.mozilla.org/showlog.cgi?log=Rust/1311320260.1311322154.18578.gz&fulltext=1
+> _______________________________________________
+>
+
+Cheers,
+Rafael
+
+
+From marijnh at gmail.com  Fri Jul 22 06:46:06 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 22 Jul 2011 15:46:06 +0200
+Subject: [rust-dev] Half-indent for case blocks looks terrible
+Message-ID: <CAJnHWXtwn-2QbvweP0iBCm2D5c+2OoQQpysfCi1BsXuOH9VHdg@mail.gmail.com>
+
+Having some braces four spaces apart and others only two makes for a
+very jarring visual effect. We could probably get used to it, but if
+somebody has a better idea, I think we should consider it.
+
+(I guess significant whitespace is still a no ;)
+
+From brendan at mozilla.org  Fri Jul 22 07:52:10 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Fri, 22 Jul 2011 07:52:10 -0700
+Subject: [rust-dev] Half-indent for case blocks looks terrible
+In-Reply-To: <CAJnHWXtwn-2QbvweP0iBCm2D5c+2OoQQpysfCi1BsXuOH9VHdg@mail.gmail.com>
+References: <CAJnHWXtwn-2QbvweP0iBCm2D5c+2OoQQpysfCi1BsXuOH9VHdg@mail.gmail.com>
+Message-ID: <C37F72EB-2F38-4A55-9735-F6AA6C67107F@mozilla.org>
+
+On Jul 22, 2011, at 6:46 AM, Marijn Haverbeke wrote:
+
+> Having some braces four spaces apart and others only two makes for a
+> very jarring visual effect. We could probably get used to it, but if
+> somebody has a better idea, I think we should consider it.
+
+I'm probably to blame for this style meme (although I got it from Kipp Hickman, my old SGI / Netscape colleague), I do it i in C code for labels (goto and switch-case). But C does not require braces around case statements, of course, so you don't get the half-indented closing braces, as in:
+
+    switch (foo) {
+      case BAR1: {
+        ...
+      }
+      case BAR2: {
+        ... // don't forget to break!
+      }
+      default: {
+         ...
+      }
+    }
+
+which I agree are a bit disconcerting and unaesthetic.
+
+The motivation is that labels are not statements. They should not indent four spaces, and then their labeled statements indent four more. That tends to over-indent too much, and the labels have no control flow nesting property that needs any more indentation than their labeled statements.
+
+K&R and old Unix ken&dmr style simply does not indent labels, so one can always fall back on that.
+
+A lot of Mozilla code, C++ and JS, uses two-space c-basic-offset and does indent case labels a full two spaces, then two more for the labeled statements (I don't think goto labels get the same treatment, but this is C++ code so gotos are less common; JS break/continue-to-label is also rare).
+
+Two-space c-basic-offset works a bit better with multiline if conditions:
+
+  if (very_long_conjunct_goes_here() &&
+      another_whopper_here()) {
+    consequent_at_distinct_indentation_level();
+    ...
+  }
+
+With four-space indentation units, the condition's overflow line and the consequent block kids start at the same indentation, and are that much harder to distinguish at a glance. This has led to a SpiderMonkey style variation where the { in such a situation moves to its own line, in the same column as the }.
+
+Style, yay.
+
+/be
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110722/1eb8610c/attachment.html>
+
+From graydon at mozilla.com  Fri Jul 22 09:04:59 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 22 Jul 2011 09:04:59 -0700
+Subject: [rust-dev] Unexplainable tinderbox failure
+In-Reply-To: <4E297BEA.9000908@mozilla.com>
+References: <CAJnHWXsBFB3PZkZi59_djL7RgnEFTL+QdequSuuuPHmMoN72fw@mail.gmail.com>
+	<4E297BEA.9000908@mozilla.com>
+Message-ID: <4E299FAB.3020705@mozilla.com>
+
+On 22/07/2011 6:32 AM, Rafael ?vila de Esp?ndola wrote:
+> On 11-07-22 5:00 AM, Marijn Haverbeke wrote:
+>> The failure at [1] seems to be non-deterministic -- the patch I
+>> applied didn't touch anything low-level enough to cause a segfault,
+>> and the next patch I pushed 'fixed' it, although it didn't revert the
+>> first patch or even touch anything remotely related (it changed a
+>> test, not the one that was failing). Any ideas what this might be?
+>
+> No, but I have seen similar issues, both on the Linux and Windows bots.
+> Does anyone knows if the linux bots runs only the tests on valgrind? Maybe
+> we could build stage3 with it too...
+
+Linux does the tests only under valgrind, not the compiler. We can 
+modify it.
+
+My guess is the failure was a timeout, as cycle time was 2h3m. As to why 
+it spun for 2h, I do not know. It's running in a crappy VM shared with 
+the linux box. It's possible the machine just got swappy or such. We use 
+an *awful* lot of memory building these days. I'll take a closer look at 
+cycle time when I'm in the office. Something's off.
+
+I continue to await updates on our more-official tinderboxes.
+
+-Graydon
+
+
+
+From banderson at mozilla.com  Fri Jul 22 10:22:41 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Fri, 22 Jul 2011 10:22:41 -0700
+Subject: [rust-dev] Unexplainable tinderbox failure
+In-Reply-To: <4E299FAB.3020705@mozilla.com>
+References: <CAJnHWXsBFB3PZkZi59_djL7RgnEFTL+QdequSuuuPHmMoN72fw@mail.gmail.com>	<4E297BEA.9000908@mozilla.com>
+	<4E299FAB.3020705@mozilla.com>
+Message-ID: <4E29B1E1.8070607@mozilla.com>
+
+On 07/22/2011 09:04 AM, Graydon Hoare wrote:
+> On 22/07/2011 6:32 AM, Rafael ?vila de Esp?ndola wrote:
+>> On 11-07-22 5:00 AM, Marijn Haverbeke wrote:
+>>> The failure at [1] seems to be non-deterministic -- the patch I
+>>> applied didn't touch anything low-level enough to cause a segfault,
+>>> and the next patch I pushed 'fixed' it, although it didn't revert the
+>>> first patch or even touch anything remotely related (it changed a
+>>> test, not the one that was failing). Any ideas what this might be?
+>>
+>> No, but I have seen similar issues, both on the Linux and Windows bots.
+>> Does anyone knows if the linux bots runs only the tests on valgrind? 
+>> Maybe
+>> we could build stage3 with it too...
+>
+> Linux does the tests only under valgrind, not the compiler. We can 
+> modify it.
+
+rustc is not currently valgrind clean. There are a few invalid memory 
+accesses that Patrick has patches for, but beyond that there are leaks 
+as well.
+
+
+From lkuper at mozilla.com  Fri Jul 22 12:03:36 2011
+From: lkuper at mozilla.com (Lindsey Kuper)
+Date: Fri, 22 Jul 2011 12:03:36 -0700 (PDT)
+Subject: [rust-dev] A new emacs rust-mode
+In-Reply-To: <4E288399.3090100@mozilla.com>
+Message-ID: <776982422.613123.1311361416373.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+"Brian Anderson" <banderson at mozilla.com> wrote:
+> On 07/21/2011 06:56 AM, Marijn Haverbeke wrote:
+> > See https://github.com/marijnh/rust-mode . This is the first emacs
+> > mode I wrote, it has only been used for a day, and only with my
+> > usage
+> > patterns, so there are probably issues. Please report any problems
+> > on
+> > github.
+> I've been running it this morning and it's already quite usable. Nice
+> work.
+
+Agreed.  I'm trying it out now.  Thanks, Marijn!
+
+It takes a good 30 seconds to highlight trans, although (in my emacs, anyway) you don't have to wait for it to finish that to start editing, so it's not an inconvenience.
+
+Lindsey
+
+From marijnh at gmail.com  Fri Jul 22 12:06:24 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 22 Jul 2011 21:06:24 +0200
+Subject: [rust-dev] A new emacs rust-mode
+In-Reply-To: <776982422.613123.1311361416373.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+References: <4E288399.3090100@mozilla.com>
+	<776982422.613123.1311361416373.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+Message-ID: <CAJnHWXs7Ov_qKJrd+rGgEQP8avLoVv=so6bm4VAnLKNmxVD-+A@mail.gmail.com>
+
+> It takes a good 30 seconds to highlight trans, although (in my emacs, anyway) you don't have to wait for it to finish that to start editing, so it's not an inconvenience.
+
+Right, it backs off when you start typing. 30 seconds is way too long
+though. Did you forget to byte-compile the code?
+
+From lkuper at mozilla.com  Fri Jul 22 12:13:30 2011
+From: lkuper at mozilla.com (Lindsey Kuper)
+Date: Fri, 22 Jul 2011 12:13:30 -0700 (PDT)
+Subject: [rust-dev] A new emacs rust-mode
+In-Reply-To: <CAJnHWXs7Ov_qKJrd+rGgEQP8avLoVv=so6bm4VAnLKNmxVD-+A@mail.gmail.com>
+Message-ID: <1322006957.613230.1311362010254.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+"Marijn Haverbeke" <marijnh at gmail.com> wrote:
+> Right, it backs off when you start typing. 30 seconds is way too long
+> though. Did you forget to byte-compile the code?
+
+Oops.  Yeah, with that it only takes 4 or 5 seconds for trans.
+
+Lindsey
+
+From banderson at mozilla.com  Sun Jul 24 16:42:56 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Sun, 24 Jul 2011 16:42:56 -0700
+Subject: [rust-dev] Big changes to the test suite
+Message-ID: <4E2CAE00.6090003@mozilla.com>
+
+Greetings,
+
+Rust has its own small unit testing framework now, and to celebrate I've 
+converted the entire Rust test suite to use it. The run-pass, run-fail, 
+compile-fail, and bench tests are still written the same way, but now 
+there is an additional test crate for tests of the standard library, and 
+unit tests may be included directly in rustc itself to test compiler 
+internals. The build rule to run the tests is still 'make check', but 
+the details of how to run specific tests have changed.
+
+The commit message has an overview:
+
+https://github.com/graydon/rust/commit/2573fe7026eb696841acbba8f3d1c09e2224acf0
+
+There is a new wiki page about unit testing in Rust:
+
+https://github.com/graydon/rust/wiki/Unit-testing
+
+And finally, there is a new wiki page describing various details of how 
+to work with the Rust test suite:
+
+https://github.com/graydon/rust/wiki/The-Rust-test-suite
+
+Hopefully this transition will go pretty smoothly. Please log any issues 
+you find.
+
+Regards,
+Brian
+
+From graydon at mozilla.com  Mon Jul 25 11:19:23 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 25 Jul 2011 11:19:23 -0700
+Subject: [rust-dev] Big changes to the test suite
+In-Reply-To: <4E2CAE00.6090003@mozilla.com>
+References: <4E2CAE00.6090003@mozilla.com>
+Message-ID: <4E2DB3AB.8000603@mozilla.com>
+
+On 11-07-24 04:42 PM, Brian Anderson wrote:
+
+> Hopefully this transition will go pretty smoothly. Please log any issues
+> you find.
+
+This is fantastic work, thanks. I'm excited to have this level of 
+testing support built in to the tools :)
+
+Only wish I'd written it that way from the get-go.
+
+-Graydon
+
+From marijnh at gmail.com  Tue Jul 26 01:32:55 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 26 Jul 2011 10:32:55 +0200
+Subject: [rust-dev] Alt exhaustiveness checking
+Message-ID: <CAJnHWXvingb-T6nj=7EXbomU1e0P6PKFCeU7qsnxNCNQWTZe2Q@mail.gmail.com>
+
+I'd like to implement this soon. Should non-exhaustive alts be errors
+or warnings? I guess, if we are to have warnings at all, these are
+fine as warnings.
+
+To be able to control these warnings, I'd like to add support for
+forms like these:
+
+// I know this is non-exhaustive, fail on non-match
+alt fail (foo) {
+   1 {...}
+   2 {...}
+}
+
+// I know this is non-exhaustive, fall-through without failing on non-match
+alt cont (foo) {
+   1 {...}
+   2 {...}
+}
+
+I think this is more elegant and explicit than requiring people to say
+'_ {}' or '_ {fail;}' again and again.
+
+From noelgrandin at gmail.com  Tue Jul 26 05:44:42 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Tue, 26 Jul 2011 14:44:42 +0200
+Subject: [rust-dev] macro-by-example syntax
+Message-ID: <4E2EB6BA.1060803@gmail.com>
+
+Hi
+
+Nice work on the macro-by-example stuff, I really like the concept.
+
+However, maybe the syntax could be improved?
+
+For example, with this one:
+
+  #macro([#zip_or_unzip([[x, ...], [y, ...]]), [[x, y], ...]],
+              [#zip_or_unzip([[xx, yy], ...]), [[xx, ...], [yy, ...]]]);
+
+I'm thinking it could look more like this:
+
+  #macro(zip_or_unzip) alt {
+    case ([[x, ...], [y, ...]]) { [[x, y], ...]]}
+    case ([[xx, yy], ...])     { [[xx, ...], [yy, ...]] }  
+  }
+
+I know, it's more verbose, but (a) it doesn't repeat itself, (b) it re-uses an existing construct rather than create a
+new one.
+
+Just my 2c.
+
+Regards, Noel Grandin
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110726/eec393c7/attachment.html>
+
+From marijnh at gmail.com  Tue Jul 26 06:25:50 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 26 Jul 2011 15:25:50 +0200
+Subject: [rust-dev] There are no tuples
+Message-ID: <CAJnHWXsnODQTFC1Z10a038siQOSLR7xE4Pjm0dM07mcon1nnMQ@mail.gmail.com>
+
+I just pushed a bunch of commits that remove uses of tuples from our
+code, and drop tuple support from the compiler. Some of you may be
+saddened by this. The good news is that you can still say rec(_0=10,
+_1=20) (soon to be {_0: 10, _1: 20}) if you really want to, which is
+equivalent to our old tuples in just about every way.
+
+From paul.stansifer at gmail.com  Tue Jul 26 10:19:37 2011
+From: paul.stansifer at gmail.com (Paul Stansifer)
+Date: Tue, 26 Jul 2011 10:19:37 -0700
+Subject: [rust-dev] macro-by-example syntax
+In-Reply-To: <4E2EB6BA.1060803@gmail.com>
+References: <4E2EB6BA.1060803@gmail.com>
+Message-ID: <CA+VxxZfS2UsOwDdBi4080BvfS++d1-ZKM1Ex-yYzuXbi-=v8Zg@mail.gmail.com>
+
+Thanks!
+
+> ? #macro(zip_or_unzip) alt {
+> ??? case ([[x, ...], [y, ...]]) { [[x, y], ...]] }
+> ??? case ([[xx, yy], ...])???? { [[xx, ...], [yy, ...]] }
+> ? }
+>
+> I know, it's more verbose, but (a) it doesn't repeat itself, (b) it re-uses
+> an existing construct rather than create a new one.
+
+I think I prefer the current syntax because punning on `alt` would
+confuse syntax and ordinary values. (also, the current syntax doesn't
+create any new constructs; macros just overload the array literal
+syntax) However, I have to admit that the presence of `{}` makes the
+`alt` version easier to read. Hm...
+
+Paul
+
+From catamorphism at gmail.com  Tue Jul 26 12:05:51 2011
+From: catamorphism at gmail.com (Tim Chevalier)
+Date: Tue, 26 Jul 2011 12:05:51 -0700
+Subject: [rust-dev] Alt exhaustiveness checking
+In-Reply-To: <CAJnHWXvingb-T6nj=7EXbomU1e0P6PKFCeU7qsnxNCNQWTZe2Q@mail.gmail.com>
+References: <CAJnHWXvingb-T6nj=7EXbomU1e0P6PKFCeU7qsnxNCNQWTZe2Q@mail.gmail.com>
+Message-ID: <CADcg8=k=7E7Hq+5rGxC7sEw-jd+VxnpN1NetsTrf6E5rDpu4oA@mail.gmail.com>
+
+On Tue, Jul 26, 2011 at 1:32 AM, Marijn Haverbeke <marijnh at gmail.com> wrote:
+> I'd like to implement this soon. Should non-exhaustive alts be errors
+> or warnings? I guess, if we are to have warnings at all, these are
+> fine as warnings.
+>
+
+IMHO, a non-exhaustive alt is always an error. If some cases are
+"impossible", a static requirement for the programmer to declare their
+intentions explicitly by inserting a fail (hopefully with an
+informative error message) can save a lot of time later.
+
+> To be able to control these warnings, I'd like to add support for
+> forms like these:
+>
+> // I know this is non-exhaustive, fail on non-match
+> alt fail (foo) {
+> ? 1 {...}
+> ? 2 {...}
+> }
+>
+> // I know this is non-exhaustive, fall-through without failing on non-match
+> alt cont (foo) {
+> ? 1 {...}
+> ? 2 {...}
+> }
+>
+> I think this is more elegant and explicit than requiring people to say
+> '_ {}' or '_ {fail;}' again and again.
+
+This seems pretty reasonable; if you add support for this, I think my
+first comment holds even more so :-)
+
+Cheers,
+Tim
+
+
+
+-- 
+Tim Chevalier * http://cs.pdx.edu/~tjc/ * Often in error, never in doubt
+?I cannot hide my anger to spare you guilt, nor hurt feelings, nor
+answering anger; for to do so insults and trivializes all our efforts.
+Guilt is not a response to anger; it is a response to one?s own
+actions or lack of action.? -- Audre Lorde
+
+From pwalton at mozilla.com  Tue Jul 26 12:11:45 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Tue, 26 Jul 2011 12:11:45 -0700
+Subject: [rust-dev] Alt exhaustiveness checking
+In-Reply-To: <CADcg8=k=7E7Hq+5rGxC7sEw-jd+VxnpN1NetsTrf6E5rDpu4oA@mail.gmail.com>
+References: <CAJnHWXvingb-T6nj=7EXbomU1e0P6PKFCeU7qsnxNCNQWTZe2Q@mail.gmail.com>
+	<CADcg8=k=7E7Hq+5rGxC7sEw-jd+VxnpN1NetsTrf6E5rDpu4oA@mail.gmail.com>
+Message-ID: <4E2F1171.6050407@mozilla.com>
+
+On 7/26/11 12:05 PM, Tim Chevalier wrote:
+> IMHO, a non-exhaustive alt is always an error. If some cases are
+> "impossible", a static requirement for the programmer to declare their
+> intentions explicitly by inserting a fail (hopefully with an
+> informative error message) can save a lot of time later.
+
+I prefer warnings, in the interests of quick-and-dirty hacks.
+
+Patrick
+
+
+
+From erick.tryzelaar at gmail.com  Tue Jul 26 12:13:46 2011
+From: erick.tryzelaar at gmail.com (Erick Tryzelaar)
+Date: Tue, 26 Jul 2011 12:13:46 -0700
+Subject: [rust-dev] Alt exhaustiveness checking
+In-Reply-To: <CAJnHWXvingb-T6nj=7EXbomU1e0P6PKFCeU7qsnxNCNQWTZe2Q@mail.gmail.com>
+References: <CAJnHWXvingb-T6nj=7EXbomU1e0P6PKFCeU7qsnxNCNQWTZe2Q@mail.gmail.com>
+Message-ID: <CALdfqQ+9X5k7T8QLbJ7-KyBfWPYYwX=szf-Crf8W9ahC-znosA@mail.gmail.com>
+
+On Tue, Jul 26, 2011 at 1:32 AM, Marijn Haverbeke <marijnh at gmail.com> wrote:
+>
+> To be able to control these warnings, I'd like to add support for
+> forms like these:
+>
+> // I know this is non-exhaustive, fail on non-match
+> alt fail (foo) {
+> ? 1 {...}
+> ? 2 {...}
+> }
+>
+> // I know this is non-exhaustive, fall-through without failing on non-match
+> alt cont (foo) {
+> ? 1 {...}
+> ? 2 {...}
+> }
+>
+> I think this is more elegant and explicit than requiring people to say
+> '_ {}' or '_ {fail;}' again and again.
+
+Could there be any confusion with parenthesis free notation?  I
+haven't been paying attention to the recent syntax changes, but I
+thought you could write:
+
+alt foo {
+  1 {...}
+  2 {...}
+}
+
+With this change, would you be allowed to write this?
+
+alt fail foo {
+  1 {...}
+  2 {...}
+}
+
+From erick.tryzelaar at gmail.com  Tue Jul 26 12:16:15 2011
+From: erick.tryzelaar at gmail.com (Erick Tryzelaar)
+Date: Tue, 26 Jul 2011 12:16:15 -0700
+Subject: [rust-dev] Alt exhaustiveness checking
+In-Reply-To: <4E2F1171.6050407@mozilla.com>
+References: <CAJnHWXvingb-T6nj=7EXbomU1e0P6PKFCeU7qsnxNCNQWTZe2Q@mail.gmail.com>
+	<CADcg8=k=7E7Hq+5rGxC7sEw-jd+VxnpN1NetsTrf6E5rDpu4oA@mail.gmail.com>
+	<4E2F1171.6050407@mozilla.com>
+Message-ID: <CALdfqQJZ_YGhUOSORNWe+Jh0BX8KhfH_NO2muT0G7SKVr8mBSg@mail.gmail.com>
+
+On Tue, Jul 26, 2011 at 12:11 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+> On 7/26/11 12:05 PM, Tim Chevalier wrote:
+>>
+>> IMHO, a non-exhaustive alt is always an error. If some cases are
+>> "impossible", a static requirement for the programmer to declare their
+>> intentions explicitly by inserting a fail (hopefully with an
+>> informative error message) can save a lot of time later.
+>
+> I prefer warnings, in the interests of quick-and-dirty hacks.
+
+Or a compiler flag that toggles the behavior? In all of my ocaml
+projects, I always have the "treat non-exhaustive pattern checks as
+errors" and I'd want to do the same for rust, but I can understand not
+requiring it for quick-and-dirty hacks.
+
+From marijnh at gmail.com  Tue Jul 26 14:03:30 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 26 Jul 2011 23:03:30 +0200
+Subject: [rust-dev] Alt exhaustiveness checking
+In-Reply-To: <CALdfqQ+9X5k7T8QLbJ7-KyBfWPYYwX=szf-Crf8W9ahC-znosA@mail.gmail.com>
+References: <CAJnHWXvingb-T6nj=7EXbomU1e0P6PKFCeU7qsnxNCNQWTZe2Q@mail.gmail.com>
+	<CALdfqQ+9X5k7T8QLbJ7-KyBfWPYYwX=szf-Crf8W9ahC-znosA@mail.gmail.com>
+Message-ID: <CAJnHWXvZNS3j+w=QnWZm8ed1ihzQsQ+tpBgXjCc=3AjJK_O_xg@mail.gmail.com>
+
+> With this change, would you be allowed to write this?
+>
+> alt fail foo {
+> ?1 {...}
+> ?2 {...}
+> }
+
+We'll have to rig the parser to not go screwy on 'alt fail { ... }' by
+checking whether there is a non-brace token following the fail/cont
+and only interpreting it as an alt modifier when there is, but yes,
+you'll be able to write this.
+
+From marijnh at gmail.com  Wed Jul 27 07:48:34 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 27 Jul 2011 16:48:34 +0200
+Subject: [rust-dev] Pretty-printing happened
+Message-ID: <CAJnHWXukeiBZh-rrt8=K+tnE00M5goz1fQbBs_csc8zSFwhEoQ@mail.gmail.com>
+
+Some damage was done again, though less than last time (from what I've
+seen so far). We're now getting pretty close to our planned syntax.
+This means
+
+ - 'case' before an alt arm is no longer allowed
+ - in variable, loop binding, and func argument decls, the syntax is
+now 'name: type', not 'type name'. The ': type' part is optional for
+locals and loop vars.
+ - in patterns, you no longer need to put a '?' in front of bindings.
+instead, you need to put a '.' after nullary tags to distinguish them
+
+I'm still fighting the tinderboxes and snapshot mechanism, but it
+should be safe again to push to master.
+
+From marijnh at gmail.com  Fri Jul 29 05:12:13 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 29 Jul 2011 14:12:13 +0200
+Subject: [rust-dev] No more obj { drop {} } -- use resources!
+Message-ID: <CAJnHWXsL1ki30DqFVy_T-2G0PQU1Bz9psyptywrQ4CLdKqckOA@mail.gmail.com>
+
+As was decided when resources were introduced (I hope most of you were
+informed), we wanted to drop support for object destructors. Resources
+are now mostly useable -- though if you want to store or pass them
+somewhere, you have to box them immediately on creation until we get
+our move semantics worked out, or you'll get weird errors about
+copying noncopyable types?or even code that silently does the wrong
+thing!
+
+resource my_cleanup(x: my_pointer_type) {
+    my_free(x);
+}
+
+fn test() {
+    // This is safe, cleans up the pointer at end of block
+    {
+        let x = my_cleanup(my_mk_pointer());
+        do_stuff(*x); // Pass raw pointer
+    }
+
+    // This is safe, will clean up when refcount hits zero
+    sink(@my_cleanup(my_mk_pointer()));
+
+    // Don't do this (yet)
+    sink_2(my_cleanup(my_mk_pointer()));
+}
+
+From pwalton at mozilla.com  Sat Jul 30 13:58:52 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 30 Jul 2011 13:58:52 -0700
+Subject: [rust-dev] Proposal: Eliminate "let" hoisting
+Message-ID: <4E34708C.7000405@mozilla.com>
+
+Currently, in Rust variables hoist, just as in JavaScript. I would like 
+to propose removing this feature, and having each "let" introduce a new 
+scope.
+
+Here is a use case, in trans:
+
+fn trans_foo(&bcx : @block_ctxt) -> @block_ctxt {
+     ... do something with bcx ...
+
+     let new_bcx = new_sub_block_ctxt(bcx);
+     bcx.build.Br(new_bcx);
+     let bcx = new_bcx;
+
+     ... use bcx ...
+}
+
+The reason for this is to prevent any usage of the old "bcx" after 
+building the branch instruction via shadowing. This helps prevent 
+errors, because once a basic block is terminated it is an error to build 
+any more instructions in it.
+
+It is not possible to do this in Rust at the moment:
+
+* The "bcx" variable declaration hoists to the top of the block, making 
+it impossible to refer to the parameter at all. Typestate will catch any 
+use of "bcx" before it's initialized, but the error message is still 
+surprising, and worse, it makes it impossible to do what I want here.
+
+* I can't just mutate "bcx", because it's an immutable alias.
+
+* I could simply refer to "new_bcx" exclusively and avoid the shadowing 
+declaration, but then I lose the safety guarantee that I wanted: it's 
+possible (and anyone who has hacked on trans knows that it's a very 
+common error) to accidentally build instructions on "bcx" instead of 
+"new_bcx".
+
+To me, this is not only an issue of avoiding surprises by doing what 
+every other language but JavaScript does, but also an issue of safety. 
+Shadowing can be a useful tool to enforce safety guarantees in the small.
+
+Other, weaker but still compelling arguments in my mind:
+
+This code compiles but is awfully confusing:
+
+fn main() {
+   x = 3;
+   log_err x;
+   let int x;
+}
+
+This code gives a typestate error instead of working as intended:
+
+fn f(int x) {
+     log_err x;
+     auto x = 3;
+}
+
+Opinions?
+
+Patrick
+
+From marijnh at gmail.com  Sun Jul 31 01:35:34 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sun, 31 Jul 2011 10:35:34 +0200
+Subject: [rust-dev] Proposal: Eliminate "let" hoisting
+In-Reply-To: <4E34708C.7000405@mozilla.com>
+References: <4E34708C.7000405@mozilla.com>
+Message-ID: <CAJnHWXvO9FF7QrQVe5x4EhotF8yqcn_4Kjt3r0mGWApoSrsC6Q@mail.gmail.com>
+
+What I've been doing in these situation is just not passing bcx by
+alias. Then you have a regular, mutable local.
+
+As an unrepentant Lisper, I wouldn't be opposed to let introducing a
+new scope (that is, in fact, how Hob works), but I don't think it fits
+really well in the c heritage that we're building on.
+
+From pwalton at mozilla.com  Sun Jul 31 08:01:57 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sun, 31 Jul 2011 08:01:57 -0700
+Subject: [rust-dev] Proposal: Eliminate "let" hoisting
+In-Reply-To: <CAJnHWXvO9FF7QrQVe5x4EhotF8yqcn_4Kjt3r0mGWApoSrsC6Q@mail.gmail.com>
+References: <4E34708C.7000405@mozilla.com>
+	<CAJnHWXvO9FF7QrQVe5x4EhotF8yqcn_4Kjt3r0mGWApoSrsC6Q@mail.gmail.com>
+Message-ID: <4E356E65.3000504@mozilla.com>
+
+On 7/31/11 1:35 AM, Marijn Haverbeke wrote:
+> What I've been doing in these situation is just not passing bcx by
+> alias. Then you have a regular, mutable local.
+>
+> As an unrepentant Lisper, I wouldn't be opposed to let introducing a
+> new scope (that is, in fact, how Hob works), but I don't think it fits
+> really well in the c heritage that we're building on.
+
+But C doesn't hoist.
+
+Patrick
+
+From brendan at mozilla.org  Sun Jul 31 09:11:26 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Sun, 31 Jul 2011 09:11:26 -0700
+Subject: [rust-dev] Proposal: Eliminate "let" hoisting
+In-Reply-To: <4E34708C.7000405@mozilla.com>
+References: <4E34708C.7000405@mozilla.com>
+Message-ID: <40685B01-9C6D-4FB1-91F7-6E38374E72DB@mozilla.org>
+
+On Jul 30, 2011, at 1:58 PM, Patrick Walton wrote:
+
+> Currently, in Rust variables hoist, just as in JavaScript. I would like to propose removing this feature, and having each "let" introduce a new scope.
+
+This matches C++, so that's a plus for anyone coming to Rust from the main Mozilla "systems" language.
+
+
+> Other, weaker but still compelling arguments in my mind:
+> 
+> This code compiles but is awfully confusing:
+> 
+> fn main() {
+>  x = 3;
+>  log_err x;
+>  let int x;
+> }
+
+FYI, and not bearing on Rust at all IMHO (so feel free to skip), we on Ecma TC39 just renewed our agreement, with better joint understanding of the rationale, for let and const (and function-in-braced-block) hoisting to start of block *and* for use before initialization (the "temporal dead zone") to be an error in JS.next (ES6).
+
+JS already has function hoisting, which wins for programming in top-down style, maintaining source without having to topologically sort functions, etc. I made functions hoist to top of program or outer function body to mimic letrec, way back in the day. Given this precedent, we believe function-declaration-in-block, which binds a block-local (as let does), should hoist to top of block and be initialized on entry to block.
+
+Last fall, we tried to make let (and const) open C++-style implicit scope at declaration site, till end of explicit block. But this does not work with function hoisting:
+
+  const k = 0;
+  function outer(x, y) {
+    if (x) {
+      inner();
+      const k = y;
+      function inner() { print(k); }
+      inner();
+    }
+  }
+  outer(42);
+
+The first inner() call cannot see k under the let* or C++-based scope rule. If this inner call should print 0 then function inner has dynamic scope. If it should throw an error then the scope rule is equivalent to hoisting k to top of its containing block. Likewise for let.
+
+The reason the dead zone in which use of k before it has been initialized is a temporal or dynamic zone, not a lexical or static zone, is shown above: inner's declaration is dominated by k's definition, so a lexical dead zone would allow it. But then for this approach to differ from temporal dead zone, the first call to inner either must get undefined from k (two values for one const), or get the outer k (dynamic scope).
+
+Hence hoisting for all binding forms, with a read and write barrier for use before set (write barrier for let; const must be initialized in its declaration and it's a static error to assign anywhere else). The barriers are potentially significant performance penalties for upvars (any directly-in-block, not in-nested-function, use cases are probably bugs; we're still arguing about whether to make those static errors). We shall see.
+
+If Rust hoists nothing, in particular Rust does not hoist nested fns, then it does not face the same predicament.
+
+/be
+
+From pwalton at mozilla.com  Sun Jul 31 09:23:56 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sun, 31 Jul 2011 09:23:56 -0700
+Subject: [rust-dev] Proposal: Eliminate "let" hoisting
+In-Reply-To: <40685B01-9C6D-4FB1-91F7-6E38374E72DB@mozilla.org>
+References: <4E34708C.7000405@mozilla.com>
+	<40685B01-9C6D-4FB1-91F7-6E38374E72DB@mozilla.org>
+Message-ID: <4E35819C.8020302@mozilla.com>
+
+On 7/31/11 9:11 AM, Brendan Eich wrote:
+
+> JS already has function hoisting, which wins for programming in top-down style, maintaining source without having to topologically sort functions, etc. I made functions hoist to top of program or outer function body to mimic letrec, way back in the day. Given this precedent, we believe function-declaration-in-block, which binds a block-local (as let does), should hoist to top of block and be initialized on entry to block.
+
+Rust always hoists function items (named functions), even nested ones. I 
+think that's a great feature for the reasons you describe -- it gets rid 
+of having to think about the function dependency DAG, which is a big 
+pain in C and C++, and even worse in Standard ML and OCaml, where there 
+aren't even prototypes. Hoisting for named functions is fine because 
+they're always completely defined before execution begins -- in 
+particular, they can't close over any values, so there's no question as 
+to which bindings they capture (uncertainty over this is why I assume ML 
+functions don't hoist).
+
+So I should have been more clear -- in this scheme local variables would 
+be the only non-hoisted bindings. It's rare that local variables need to 
+be mutually recursive; the only time is when you want mutually recursive 
+capturing lambdas, and in that case I don't think manually hoisting is 
+too bad. Absent mutual recursion, I don't see any benefit to hoisting 
+local variables, other than (a) consistency between items and locals and 
+(b) simplifying the compiler implementation a bit (but note that we 
+actually get this wrong at the moment -- we initialize local variables 
+at the time we see the "let", which can cause segfaults).
+
+Patrick
+
+From brendan at mozilla.org  Sun Jul 31 09:35:14 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Sun, 31 Jul 2011 09:35:14 -0700
+Subject: [rust-dev] Proposal: Eliminate "let" hoisting
+In-Reply-To: <4E35819C.8020302@mozilla.com>
+References: <4E34708C.7000405@mozilla.com>
+	<40685B01-9C6D-4FB1-91F7-6E38374E72DB@mozilla.org>
+	<4E35819C.8020302@mozilla.com>
+Message-ID: <AC901822-8794-46DB-9470-2B5301C09B9F@mozilla.org>
+
+On Jul 31, 2011, at 9:23 AM, Patrick Walton wrote:
+
+> Rust always hoists function items (named functions), even nested ones. I think that's a great feature for the reasons you describe -- it gets rid of having to think about the function dependency DAG, which is a big pain in C and C++, and even worse in Standard ML and OCaml, where there aren't even prototypes. Hoisting for named functions is fine because they're always completely defined before execution begins -- in particular, they can't close over any values, so there's no question as to which bindings they capture (uncertainty over this is why I assume ML functions don't hoist).
+
+Right (and sorry for forgetting Rust's hoisting of named fns).
+
+
+> So I should have been more clear -- in this scheme local variables would be the only non-hoisted bindings. It's rare that local variables need to be mutually recursive; the only time is when you want mutually recursive capturing lambdas, and in that case I don't think manually hoisting is too bad.
+
+That was exactly our conclusion for JS when we were entertaining the C++-based scope rule. You can't make:
+
+  {
+    let a = b;
+    let b = a;
+    ...
+  }
+
+work in either the temporal-dead-zone let-hoisting regime, or in the C++-like regime. But the interesting case is of course not this nonsense-case, it is something more like this:
+
+  {
+    let a = function(){return b};
+    let b = function(){return a};
+    ...
+  }
+
+and here, hoisting with temporal dead zone wins since the above "just works" -- you do not have to refactor to:
+
+  {
+    let a, b;
+    a = function(){return b};
+    b = function(){return a};
+    ...
+  }
+
+as you would with the C++-based rule.
+
+
+> Absent mutual recursion, I don't see any benefit to hoisting local variables, other than (a) consistency between items and locals and (b) simplifying the compiler implementation a bit (but note that we actually get this wrong at the moment -- we initialize local variables at the time we see the "let", which can cause segfaults).
+
+The crucial requirement is that Rust doesn't allow local variables to be captured by hoisted (i.e., named) fns -- right?
+
+/be
+
+From marijnh at gmail.com  Sun Jul 31 13:55:13 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sun, 31 Jul 2011 22:55:13 +0200
+Subject: [rust-dev] Are tail calls dispensable?
+Message-ID: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+
+I've been throwing around some ideas about a simpler way to 'alias'
+(non-owning reference) things with Patrick, and am in the process of
+working out some ideas. A bunch of the possible directions, and the
+ones that seem most promising to me at the moment, work poorly with
+tail calls. Having the ownership management (take/drop) of parameters
+happen entirely on the caller side means that the caller can optimize
+them away in some situations. Supporting tail calls means that the
+take must happen in the caller, but the drop in the callee. These two
+things are at odds, and I'm currently leaning in the direction of
+giving up tail calls.
+
+I'm coming from a functional background and am very aware of the
+awesome elegance of tail calls. However, in actual rust code, they
+seem to be used rarely. I think the reason for this is that, in Rust,
+scope and memory management are very closely intertwined, which
+prevents most elegant recursive patterns from being efficient. If you
+have GC, you can skip in and out of scopes with very little penalty.
+In Rust's memory model, you tend to pay a hefty price in allocation
+and complexity for this jumping, and the loop-based way to write
+something is usually simpler anyway.
+
+This is not to say that tail calls are useless. They work well in a
+few specific situations (simple forwarding functions, recursive things
+that don't build a data structure). What I want to say is that they
+might not be worth the cost, and that we can do some very promising
+things if we lose them. I am also not at a point where I know for sure
+that my sketch of the new aliasing system will be viable. I just want
+to know whether I should feel free to explore this option. Who feels
+strongly that tail calls should be preserved?
+

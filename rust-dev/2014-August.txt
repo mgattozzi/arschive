@@ -1,0 +1,4571 @@
+From corey at octayn.net  Fri Aug  1 00:28:52 2014
+From: corey at octayn.net (Corey Richardson)
+Date: Fri, 1 Aug 2014 00:28:52 -0700
+Subject: [rust-dev] Please help me test flexible target specification!
+Message-ID: <CA++BO6QOb_-OCr88xmt_dJ4tFeRNKpt-x=idVQippsZuryEOfw@mail.gmail.com>
+
+Patch here: https://github.com/rust-lang/rust/pull/16156
+
+If you cross compile, or can test on perhaps-lesser-used setups, I
+would very much appreciate a `make check`. This is touching all the
+fiddly bits of linking, so it's not very easy to test.
+
+Thanks!
+
+-- 
+http://octayn.net/
+
+From simon.sapin at exyr.org  Fri Aug  1 02:04:30 2014
+From: simon.sapin at exyr.org (Simon Sapin)
+Date: Fri, 01 Aug 2014 10:04:30 +0100
+Subject: [rust-dev] [ANN] rust-url
+In-Reply-To: <CAEjdZ99ij-daA7CAf++WL-cf9M01X_C4uMXL=Rw6XwrD+iz6PA@mail.gmail.com>
+References: <53DA5C0C.3070106@exyr.org>	<53DAC577.9080202@mozilla.com>
+	<CAEjdZ99ij-daA7CAf++WL-cf9M01X_C4uMXL=Rw6XwrD+iz6PA@mail.gmail.com>
+Message-ID: <53DB581E.7080303@exyr.org>
+
+On 01/08/14 00:08, Daniel Fath wrote:
+> Is rust-url compatible with rust-uri? And if not are there any plans to
+> support URI specification with it?
+
+Is there a project called rust-uri? I can?t find it.
+
+rust-url supports URIs because they?re really the same thing as URLs. It 
+implements the URL standard, which uses the term for both:
+
+http://url.spec.whatwg.org/#goals :
+> * Standardize on the term URL. URI and IRI are just confusing. In
+> practice a single algorithm is used for both so keeping them distinct
+> is not helping anyone.
+
+
+For example:
+
+```
+extern crate url;
+use url::Url;
+
+let isbn_url = Url::parse("urn:isbn:0-486-27557-4#chapter6").unwrap();
+assert(isbn_url.scheme == "urn".to_sting());
+assert(isbn_url.non_relative_scheme_data()
+        == Some("isbn:0-486-27557-4"));
+assert(isbn_url.query == None);
+assert(isbn_url.fragment == Some("chapter6".to_sting()));
+```
+
+The only interesting thing here is that "urn" is a "non-relative" 
+scheme: Other than the scheme, query string, and fragment identifier, 
+URLs in that scheme (as in data, mailto, and others) only have a "scheme 
+data" string.
+
+For URLs in a "relative" scheme like http, instead of a single string 
+the scheme data is a username, password, host, port number, and path. 
+(Some of which are optional or can be empty.)
+
+-- 
+Simon Sapin
+
+From steve at steveklabnik.com  Fri Aug  1 09:51:05 2014
+From: steve at steveklabnik.com (Steve Klabnik)
+Date: Fri, 1 Aug 2014 12:51:05 -0400
+Subject: [rust-dev] Place for discussions
+In-Reply-To: <CAPhDKbEb4475AsDRevKLiyPbdqvpO3L_aGo30m5O5RRAFy+QYw@mail.gmail.com>
+References: <927038759428461094.055756troplin-bluewin.ch@news.gmane.org>
+	<53DAC005.50603@mozilla.com>
+	<CAJY4u8GgbODkHFXV4xuhE22-is2i1tf3rrWapuEyUVPOVVaxNw@mail.gmail.com>
+	<CAPhDKbEb4475AsDRevKLiyPbdqvpO3L_aGo30m5O5RRAFy+QYw@mail.gmail.com>
+Message-ID: <CABL+ZB6F3j=UZ1qDFPsZyEcacasCkmWU7xzGg6L6JW2UXiYtRg@mail.gmail.com>
+
+I actually find mailing lists to have a perfectly serviceable UI, but
+I recognize that others don't.
+
+I'm just really an old man at heart...
+
+From me at kevincantu.org  Fri Aug  1 10:50:11 2014
+From: me at kevincantu.org (Kevin Cantu)
+Date: Fri, 1 Aug 2014 10:50:11 -0700
+Subject: [rust-dev] Place for discussions
+In-Reply-To: <CABL+ZB6F3j=UZ1qDFPsZyEcacasCkmWU7xzGg6L6JW2UXiYtRg@mail.gmail.com>
+References: <927038759428461094.055756troplin-bluewin.ch@news.gmane.org>
+	<53DAC005.50603@mozilla.com>
+	<CAJY4u8GgbODkHFXV4xuhE22-is2i1tf3rrWapuEyUVPOVVaxNw@mail.gmail.com>
+	<CAPhDKbEb4475AsDRevKLiyPbdqvpO3L_aGo30m5O5RRAFy+QYw@mail.gmail.com>
+	<CABL+ZB6F3j=UZ1qDFPsZyEcacasCkmWU7xzGg6L6JW2UXiYtRg@mail.gmail.com>
+Message-ID: <CABq6+aeWcVdZ3hB+yW8xJWkLVpjeXNXvwMaRO4K0pzLP9MAgZw@mail.gmail.com>
+
+Ditto.
+
+/me scratches neck beard
+
+
+Kevin
+
+
+
+
+
+On Fri, Aug 1, 2014 at 9:51 AM, Steve Klabnik <steve at steveklabnik.com>
+wrote:
+
+> I actually find mailing lists to have a perfectly serviceable UI, but
+> I recognize that others don't.
+>
+> I'm just really an old man at heart...
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140801/0a526c97/attachment.html>
+
+From blainepace at gmail.com  Fri Aug  1 13:27:18 2014
+From: blainepace at gmail.com (Blaine Pace)
+Date: Fri, 1 Aug 2014 13:27:18 -0700
+Subject: [rust-dev] Place for discussions
+In-Reply-To: <CABq6+aeWcVdZ3hB+yW8xJWkLVpjeXNXvwMaRO4K0pzLP9MAgZw@mail.gmail.com>
+References: <927038759428461094.055756troplin-bluewin.ch@news.gmane.org>
+	<53DAC005.50603@mozilla.com>
+	<CAJY4u8GgbODkHFXV4xuhE22-is2i1tf3rrWapuEyUVPOVVaxNw@mail.gmail.com>
+	<CAPhDKbEb4475AsDRevKLiyPbdqvpO3L_aGo30m5O5RRAFy+QYw@mail.gmail.com>
+	<CABL+ZB6F3j=UZ1qDFPsZyEcacasCkmWU7xzGg6L6JW2UXiYtRg@mail.gmail.com>
+	<CABq6+aeWcVdZ3hB+yW8xJWkLVpjeXNXvwMaRO4K0pzLP9MAgZw@mail.gmail.com>
+Message-ID: <CANuX03M2uT-_g48tcvxSZKSfVzNOZ8tyRdpcx+N+fG7F6OtetQ@mail.gmail.com>
+
+Not to get the "+1!" ball rolling too far, but I find the mailing list the
+most convenient for keeping up with Rust development as well.
+
+
+On Fri, Aug 1, 2014 at 10:50 AM, Kevin Cantu <me at kevincantu.org> wrote:
+
+> Ditto.
+>
+> /me scratches neck beard
+>
+>
+> Kevin
+>
+>
+>
+>
+>
+> On Fri, Aug 1, 2014 at 9:51 AM, Steve Klabnik <steve at steveklabnik.com>
+> wrote:
+>
+>> I actually find mailing lists to have a perfectly serviceable UI, but
+>> I recognize that others don't.
+>>
+>> I'm just really an old man at heart...
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+
+
+-- 
+Blaine Pace
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140801/fc5840d9/attachment.html>
+
+From eg1290 at gmail.com  Fri Aug  1 13:32:04 2014
+From: eg1290 at gmail.com (Evan G)
+Date: Fri, 1 Aug 2014 15:32:04 -0500
+Subject: [rust-dev] Place for discussions
+In-Reply-To: <CANuX03M2uT-_g48tcvxSZKSfVzNOZ8tyRdpcx+N+fG7F6OtetQ@mail.gmail.com>
+References: <927038759428461094.055756troplin-bluewin.ch@news.gmane.org>
+	<53DAC005.50603@mozilla.com>
+	<CAJY4u8GgbODkHFXV4xuhE22-is2i1tf3rrWapuEyUVPOVVaxNw@mail.gmail.com>
+	<CAPhDKbEb4475AsDRevKLiyPbdqvpO3L_aGo30m5O5RRAFy+QYw@mail.gmail.com>
+	<CABL+ZB6F3j=UZ1qDFPsZyEcacasCkmWU7xzGg6L6JW2UXiYtRg@mail.gmail.com>
+	<CABq6+aeWcVdZ3hB+yW8xJWkLVpjeXNXvwMaRO4K0pzLP9MAgZw@mail.gmail.com>
+	<CANuX03M2uT-_g48tcvxSZKSfVzNOZ8tyRdpcx+N+fG7F6OtetQ@mail.gmail.com>
+Message-ID: <CAJY4u8GY9-NU=W0T5j_JzibDi+ahJqaruKCuW3tnsmovteqpLA@mail.gmail.com>
+
+Has anyone here tried using the Discourse instance in a mailing-list like
+setup? I know this is one of the target audiences for Discourse installs,
+there has been some work put in to make this happen, and some communities
+have started migrating mailman lists to discourse.
+
+
+On Fri, Aug 1, 2014 at 3:27 PM, Blaine Pace <blainepace at gmail.com> wrote:
+
+> Not to get the "+1!" ball rolling too far, but I find the mailing list the
+> most convenient for keeping up with Rust development as well.
+>
+>
+> On Fri, Aug 1, 2014 at 10:50 AM, Kevin Cantu <me at kevincantu.org> wrote:
+>
+>> Ditto.
+>>
+>> /me scratches neck beard
+>>
+>>
+>> Kevin
+>>
+>>
+>>
+>>
+>>
+>> On Fri, Aug 1, 2014 at 9:51 AM, Steve Klabnik <steve at steveklabnik.com>
+>> wrote:
+>>
+>>> I actually find mailing lists to have a perfectly serviceable UI, but
+>>> I recognize that others don't.
+>>>
+>>> I'm just really an old man at heart...
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+>
+> --
+> Blaine Pace
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140801/8454e45d/attachment.html>
+
+From smcarthur at mozilla.com  Fri Aug  1 16:58:47 2014
+From: smcarthur at mozilla.com (Sean McArthur)
+Date: Fri, 1 Aug 2014 16:58:47 -0700
+Subject: [rust-dev] Place for discussions
+In-Reply-To: <CAJY4u8GY9-NU=W0T5j_JzibDi+ahJqaruKCuW3tnsmovteqpLA@mail.gmail.com>
+References: <927038759428461094.055756troplin-bluewin.ch@news.gmane.org>
+	<53DAC005.50603@mozilla.com>
+	<CAJY4u8GgbODkHFXV4xuhE22-is2i1tf3rrWapuEyUVPOVVaxNw@mail.gmail.com>
+	<CAPhDKbEb4475AsDRevKLiyPbdqvpO3L_aGo30m5O5RRAFy+QYw@mail.gmail.com>
+	<CABL+ZB6F3j=UZ1qDFPsZyEcacasCkmWU7xzGg6L6JW2UXiYtRg@mail.gmail.com>
+	<CABq6+aeWcVdZ3hB+yW8xJWkLVpjeXNXvwMaRO4K0pzLP9MAgZw@mail.gmail.com>
+	<CANuX03M2uT-_g48tcvxSZKSfVzNOZ8tyRdpcx+N+fG7F6OtetQ@mail.gmail.com>
+	<CAJY4u8GY9-NU=W0T5j_JzibDi+ahJqaruKCuW3tnsmovteqpLA@mail.gmail.com>
+Message-ID: <CAHrH6bPLXV8g7zX-wXj=r5+9shXDbQ_1LYNc6SyUR_mD7w8RpQ@mail.gmail.com>
+
+I went into my account settings for the Rust Discourse, and fiddled with
+the email notifications such that I get emails for all topics, and replying
+to the emails works just as with a mailing list. I quite like the HTML
+emails that are sent also, as it makes code and links and such much easier
+to grok.
+
+
+On Fri, Aug 1, 2014 at 1:32 PM, Evan G <eg1290 at gmail.com> wrote:
+
+> Has anyone here tried using the Discourse instance in a mailing-list like
+> setup? I know this is one of the target audiences for Discourse installs,
+> there has been some work put in to make this happen, and some communities
+> have started migrating mailman lists to discourse.
+>
+>
+> On Fri, Aug 1, 2014 at 3:27 PM, Blaine Pace <blainepace at gmail.com> wrote:
+>
+>> Not to get the "+1!" ball rolling too far, but I find the mailing list
+>> the most convenient for keeping up with Rust development as well.
+>>
+>>
+>> On Fri, Aug 1, 2014 at 10:50 AM, Kevin Cantu <me at kevincantu.org> wrote:
+>>
+>>> Ditto.
+>>>
+>>> /me scratches neck beard
+>>>
+>>>
+>>> Kevin
+>>>
+>>>
+>>>
+>>>
+>>>
+>>> On Fri, Aug 1, 2014 at 9:51 AM, Steve Klabnik <steve at steveklabnik.com>
+>>> wrote:
+>>>
+>>>> I actually find mailing lists to have a perfectly serviceable UI, but
+>>>> I recognize that others don't.
+>>>>
+>>>> I'm just really an old man at heart...
+>>>> _______________________________________________
+>>>> Rust-dev mailing list
+>>>> Rust-dev at mozilla.org
+>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>>
+>>>
+>>>
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>>
+>>
+>>
+>> --
+>> Blaine Pace
+>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140801/69ba9f8d/attachment.html>
+
+From gsingh_2011 at yahoo.com  Fri Aug  1 17:52:21 2014
+From: gsingh_2011 at yahoo.com (Gulshan Singh)
+Date: Fri, 1 Aug 2014 17:52:21 -0700
+Subject: [rust-dev] Place for discussions
+In-Reply-To: <CAHrH6bPLXV8g7zX-wXj=r5+9shXDbQ_1LYNc6SyUR_mD7w8RpQ@mail.gmail.com>
+References: <927038759428461094.055756troplin-bluewin.ch@news.gmane.org>
+	<53DAC005.50603@mozilla.com>
+	<CAJY4u8GgbODkHFXV4xuhE22-is2i1tf3rrWapuEyUVPOVVaxNw@mail.gmail.com>
+	<CAPhDKbEb4475AsDRevKLiyPbdqvpO3L_aGo30m5O5RRAFy+QYw@mail.gmail.com>
+	<CABL+ZB6F3j=UZ1qDFPsZyEcacasCkmWU7xzGg6L6JW2UXiYtRg@mail.gmail.com>
+	<CABq6+aeWcVdZ3hB+yW8xJWkLVpjeXNXvwMaRO4K0pzLP9MAgZw@mail.gmail.com>
+	<CANuX03M2uT-_g48tcvxSZKSfVzNOZ8tyRdpcx+N+fG7F6OtetQ@mail.gmail.com>
+	<CAJY4u8GY9-NU=W0T5j_JzibDi+ahJqaruKCuW3tnsmovteqpLA@mail.gmail.com>
+	<CAHrH6bPLXV8g7zX-wXj=r5+9shXDbQ_1LYNc6SyUR_mD7w8RpQ@mail.gmail.com>
+Message-ID: <CANEZYrc_nk7A-5eceaabcRUO23ZHb3pU0if5fg9zA+Y3Fk44cA@mail.gmail.com>
+
+I'm against the mailing list partially because I don't think email is the
+best way to have these types of discussions anymore, and partially because
+the mailing list instance running this list stores passwords in plaintext
+(since it keeps emailing me my password in plaintext).
+
+
+On Fri, Aug 1, 2014 at 4:58 PM, Sean McArthur <smcarthur at mozilla.com> wrote:
+
+> I went into my account settings for the Rust Discourse, and fiddled with
+> the email notifications such that I get emails for all topics, and replying
+> to the emails works just as with a mailing list. I quite like the HTML
+> emails that are sent also, as it makes code and links and such much easier
+> to grok.
+>
+>
+> On Fri, Aug 1, 2014 at 1:32 PM, Evan G <eg1290 at gmail.com> wrote:
+>
+>> Has anyone here tried using the Discourse instance in a mailing-list like
+>> setup? I know this is one of the target audiences for Discourse installs,
+>> there has been some work put in to make this happen, and some communities
+>> have started migrating mailman lists to discourse.
+>>
+>>
+>> On Fri, Aug 1, 2014 at 3:27 PM, Blaine Pace <blainepace at gmail.com> wrote:
+>>
+>>> Not to get the "+1!" ball rolling too far, but I find the mailing list
+>>> the most convenient for keeping up with Rust development as well.
+>>>
+>>>
+>>> On Fri, Aug 1, 2014 at 10:50 AM, Kevin Cantu <me at kevincantu.org> wrote:
+>>>
+>>>> Ditto.
+>>>>
+>>>> /me scratches neck beard
+>>>>
+>>>>
+>>>> Kevin
+>>>>
+>>>>
+>>>>
+>>>>
+>>>>
+>>>> On Fri, Aug 1, 2014 at 9:51 AM, Steve Klabnik <steve at steveklabnik.com>
+>>>> wrote:
+>>>>
+>>>>> I actually find mailing lists to have a perfectly serviceable UI, but
+>>>>> I recognize that others don't.
+>>>>>
+>>>>> I'm just really an old man at heart...
+>>>>> _______________________________________________
+>>>>> Rust-dev mailing list
+>>>>> Rust-dev at mozilla.org
+>>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>>>
+>>>>
+>>>>
+>>>> _______________________________________________
+>>>> Rust-dev mailing list
+>>>> Rust-dev at mozilla.org
+>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>>
+>>>>
+>>>
+>>>
+>>> --
+>>> Blaine Pace
+>>>
+>>>
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140801/1798f53e/attachment.html>
+
+From echristo at gmail.com  Sat Aug  2 10:39:40 2014
+From: echristo at gmail.com (Eric Christopher)
+Date: Sat, 2 Aug 2014 10:39:40 -0700
+Subject: [rust-dev] Place for discussions
+In-Reply-To: <CANEZYrc_nk7A-5eceaabcRUO23ZHb3pU0if5fg9zA+Y3Fk44cA@mail.gmail.com>
+References: <927038759428461094.055756troplin-bluewin.ch@news.gmane.org>
+	<53DAC005.50603@mozilla.com>
+	<CAJY4u8GgbODkHFXV4xuhE22-is2i1tf3rrWapuEyUVPOVVaxNw@mail.gmail.com>
+	<CAPhDKbEb4475AsDRevKLiyPbdqvpO3L_aGo30m5O5RRAFy+QYw@mail.gmail.com>
+	<CABL+ZB6F3j=UZ1qDFPsZyEcacasCkmWU7xzGg6L6JW2UXiYtRg@mail.gmail.com>
+	<CABq6+aeWcVdZ3hB+yW8xJWkLVpjeXNXvwMaRO4K0pzLP9MAgZw@mail.gmail.com>
+	<CANuX03M2uT-_g48tcvxSZKSfVzNOZ8tyRdpcx+N+fG7F6OtetQ@mail.gmail.com>
+	<CAJY4u8GY9-NU=W0T5j_JzibDi+ahJqaruKCuW3tnsmovteqpLA@mail.gmail.com>
+	<CAHrH6bPLXV8g7zX-wXj=r5+9shXDbQ_1LYNc6SyUR_mD7w8RpQ@mail.gmail.com>
+	<CANEZYrc_nk7A-5eceaabcRUO23ZHb3pU0if5fg9zA+Y3Fk44cA@mail.gmail.com>
+Message-ID: <CALehDX6qQxzkLbgcBJnjS8XsK01Q5iek_RYACtzWrQ7HLQOZ=Q@mail.gmail.com>
+
+On Fri, Aug 1, 2014 at 5:52 PM, Gulshan Singh <gsingh_2011 at yahoo.com> wrote:
+> I'm against the mailing list partially because I don't think email is the
+> best way to have these types of discussions anymore, and partially because
+
+Email is handy because it has a familiar UI and a good searchable
+record. Also, because it can be put into whatever client you wish to
+read within rather than having to rely upon some other method.
+
+> the mailing list instance running this list stores passwords in plaintext
+> (since it keeps emailing me my password in plaintext).
+>
+
+The system even tells you not to use a password you care about and
+that it will send it to you in plain text once a month when you sign
+up.
+
+-eric
+
+>
+> On Fri, Aug 1, 2014 at 4:58 PM, Sean McArthur <smcarthur at mozilla.com> wrote:
+>>
+>> I went into my account settings for the Rust Discourse, and fiddled with
+>> the email notifications such that I get emails for all topics, and replying
+>> to the emails works just as with a mailing list. I quite like the HTML
+>> emails that are sent also, as it makes code and links and such much easier
+>> to grok.
+>>
+>>
+>> On Fri, Aug 1, 2014 at 1:32 PM, Evan G <eg1290 at gmail.com> wrote:
+>>>
+>>> Has anyone here tried using the Discourse instance in a mailing-list like
+>>> setup? I know this is one of the target audiences for Discourse installs,
+>>> there has been some work put in to make this happen, and some communities
+>>> have started migrating mailman lists to discourse.
+>>>
+>>>
+>>> On Fri, Aug 1, 2014 at 3:27 PM, Blaine Pace <blainepace at gmail.com> wrote:
+>>>>
+>>>> Not to get the "+1!" ball rolling too far, but I find the mailing list
+>>>> the most convenient for keeping up with Rust development as well.
+>>>>
+>>>>
+>>>> On Fri, Aug 1, 2014 at 10:50 AM, Kevin Cantu <me at kevincantu.org> wrote:
+>>>>>
+>>>>> Ditto.
+>>>>>
+>>>>> /me scratches neck beard
+>>>>>
+>>>>>
+>>>>> Kevin
+>>>>>
+>>>>>
+>>>>>
+>>>>>
+>>>>>
+>>>>> On Fri, Aug 1, 2014 at 9:51 AM, Steve Klabnik <steve at steveklabnik.com>
+>>>>> wrote:
+>>>>>>
+>>>>>> I actually find mailing lists to have a perfectly serviceable UI, but
+>>>>>> I recognize that others don't.
+>>>>>>
+>>>>>> I'm just really an old man at heart...
+>>>>>> _______________________________________________
+>>>>>> Rust-dev mailing list
+>>>>>> Rust-dev at mozilla.org
+>>>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>>>
+>>>>>
+>>>>>
+>>>>> _______________________________________________
+>>>>> Rust-dev mailing list
+>>>>> Rust-dev at mozilla.org
+>>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>>>
+>>>>
+>>>>
+>>>>
+>>>> --
+>>>> Blaine Pace
+>>>>
+>>>>
+>>>> _______________________________________________
+>>>> Rust-dev mailing list
+>>>> Rust-dev at mozilla.org
+>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>>
+>>>
+>>>
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+From bryce at fisher-fleig.org  Sun Aug  3 12:04:13 2014
+From: bryce at fisher-fleig.org (Bryce Fisher-Fleig)
+Date: Sun, 3 Aug 2014 12:04:13 -0700
+Subject: [rust-dev] Accessing Rustup.sh Securely
+Message-ID: <CAJ5y=59mhWMSJPWgeuAecrFgjEjyAue4TSzvNO4bM=p_nrWzkw@mail.gmail.com>
+
+Dear RustLangers,
+
+TL;DR::
+Only access rustup.sh at
+https://raw.githubusercontent.com/rust-lang/rust-www/gh-pages/rustup.sh and
+NOT at www.rust-lang.org.
+
+Full Story::
+If you're like me, you love the convenience of getting the lastest version
+of the rust compiler and cargo updated via rustup.sh. However, this script
+is delivered insecurely over HTTP.
+
+HTTP by itself provides no guarrantees that the content sent by the server
+is the same as content received by client. Eric Butler created a firefox
+extension called Firesheep that allows you to hijack any insecure session
+cookies available on any computer on the wifi network [
+http://codebutler.com/firesheep/]. Joel Weinberger of the Google Chrome
+security team recently explained how any content delivered over HTTP can be
+changed by a malicious or compromised router between you and the server [
+https://www.youtube.com/watch?v=X1ZFjOZMSQg].
+
+Why is this a problem for rustup.sh? Because we're encouraged to curl
+rustup.sh and pipe the result to sudo. The problem is that an infected or
+compromised router could insert malware into rustup.sh and run that code as
+root. Now you no longer own your computer.
+
+What's the fix? ONLY ACCESS RUSTUP.SH OVER HTTPS. HTTPS more-or-less
+guarrantees that the content sent from the server is what is delivered to
+the client. Fortunately, github delivers all it's content securely over
+HTTPS. You can have a high degree of confidence by simply accessing
+rustup.sh from
+https://raw.githubusercontent.com/rust-lang/rust-www/gh-pages/rustup.sh
+
+Why don't the maintainers of www.rust-lang.org deliver all the content over
+HTTPS? www.rust-lang.org is hosted using GithubPages on a custom domain.
+Unfortunately, GithubPages doesn't allow HTTPS for custom domains, which is
+a pity. However, by using GithubPages any pull requests merged into the
+repo are immediately reflected on www.rust-lang.org. Also, GithubPages
+provides DDOS protection and is provided free of charge to open source
+projects like Rust. So, all things considered, this seems like the best
+course of action currently.
+
+Cheers,
+Bryce
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140803/8dad96cd/attachment.html>
+
+From erick.tryzelaar at gmail.com  Sun Aug  3 12:07:04 2014
+From: erick.tryzelaar at gmail.com (Erick Tryzelaar)
+Date: Sun, 3 Aug 2014 12:07:04 -0700
+Subject: [rust-dev] Accessing Rustup.sh Securely
+In-Reply-To: <CAJ5y=59mhWMSJPWgeuAecrFgjEjyAue4TSzvNO4bM=p_nrWzkw@mail.gmail.com>
+References: <CAJ5y=59mhWMSJPWgeuAecrFgjEjyAue4TSzvNO4bM=p_nrWzkw@mail.gmail.com>
+Message-ID: <CALdfqQJ-MO5oXWkJkT4TcVVZ5R4DL35TWYvmFkP3qWpPjZzqWg@mail.gmail.com>
+
+Thanks for this. If anyone wants to track our progress securing
+rust-lang.org, you can follow this issue:
+
+https://github.com/rust-lang/rust/issues/16123
+
+
+On Sun, Aug 3, 2014 at 12:04 PM, Bryce Fisher-Fleig <bryce at fisher-fleig.org>
+wrote:
+
+> Dear RustLangers,
+>
+> TL;DR::
+> Only access rustup.sh at
+> https://raw.githubusercontent.com/rust-lang/rust-www/gh-pages/rustup.sh
+> and NOT at www.rust-lang.org.
+>
+> Full Story::
+> If you're like me, you love the convenience of getting the lastest version
+> of the rust compiler and cargo updated via rustup.sh. However, this script
+> is delivered insecurely over HTTP.
+>
+> HTTP by itself provides no guarrantees that the content sent by the server
+> is the same as content received by client. Eric Butler created a firefox
+> extension called Firesheep that allows you to hijack any insecure session
+> cookies available on any computer on the wifi network [
+> http://codebutler.com/firesheep/]. Joel Weinberger of the Google Chrome
+> security team recently explained how any content delivered over HTTP can be
+> changed by a malicious or compromised router between you and the server [
+> https://www.youtube.com/watch?v=X1ZFjOZMSQg].
+>
+> Why is this a problem for rustup.sh? Because we're encouraged to curl
+> rustup.sh and pipe the result to sudo. The problem is that an infected or
+> compromised router could insert malware into rustup.sh and run that code as
+> root. Now you no longer own your computer.
+>
+> What's the fix? ONLY ACCESS RUSTUP.SH OVER HTTPS. HTTPS more-or-less
+> guarrantees that the content sent from the server is what is delivered to
+> the client. Fortunately, github delivers all it's content securely over
+> HTTPS. You can have a high degree of confidence by simply accessing
+> rustup.sh from
+> https://raw.githubusercontent.com/rust-lang/rust-www/gh-pages/rustup.sh
+>
+> Why don't the maintainers of www.rust-lang.org deliver all the content
+> over HTTPS? www.rust-lang.org is hosted using GithubPages on a custom
+> domain. Unfortunately, GithubPages doesn't allow HTTPS for custom domains,
+> which is a pity. However, by using GithubPages any pull requests merged
+> into the repo are immediately reflected on www.rust-lang.org. Also,
+> GithubPages provides DDOS protection and is provided free of charge to open
+> source projects like Rust. So, all things considered, this seems like the
+> best course of action currently.
+>
+> Cheers,
+> Bryce
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140803/cd5b339c/attachment.html>
+
+From bryce at fisher-fleig.org  Sun Aug  3 12:15:34 2014
+From: bryce at fisher-fleig.org (Bryce Fisher-Fleig)
+Date: Sun, 3 Aug 2014 12:15:34 -0700
+Subject: [rust-dev] Accessing Rustup.sh Securely
+In-Reply-To: <CALdfqQJ-MO5oXWkJkT4TcVVZ5R4DL35TWYvmFkP3qWpPjZzqWg@mail.gmail.com>
+References: <CAJ5y=59mhWMSJPWgeuAecrFgjEjyAue4TSzvNO4bM=p_nrWzkw@mail.gmail.com>
+	<CALdfqQJ-MO5oXWkJkT4TcVVZ5R4DL35TWYvmFkP3qWpPjZzqWg@mail.gmail.com>
+Message-ID: <CAJ5y=589D+TJ3oFSe4UPR=jp_FT-r234ARhR-m3JM7Jnuhdw5g@mail.gmail.com>
+
+Thanks for pointing me to this issue!! I opened a similar issue on rust-www
+and got no responses for days.
+
+I've actually setup SSL + CloudFront for my own blog and I have some
+experience with this.
+
+
+On Sun, Aug 3, 2014 at 12:07 PM, Erick Tryzelaar <erick.tryzelaar at gmail.com>
+wrote:
+
+> Thanks for this. If anyone wants to track our progress securing
+> rust-lang.org, you can follow this issue:
+>
+> https://github.com/rust-lang/rust/issues/16123
+>
+>
+> On Sun, Aug 3, 2014 at 12:04 PM, Bryce Fisher-Fleig <
+> bryce at fisher-fleig.org> wrote:
+>
+>> Dear RustLangers,
+>>
+>> TL;DR::
+>> Only access rustup.sh at
+>> https://raw.githubusercontent.com/rust-lang/rust-www/gh-pages/rustup.sh
+>> and NOT at www.rust-lang.org.
+>>
+>> Full Story::
+>> If you're like me, you love the convenience of getting the lastest
+>> version of the rust compiler and cargo updated via rustup.sh. However, this
+>> script is delivered insecurely over HTTP.
+>>
+>> HTTP by itself provides no guarrantees that the content sent by the
+>> server is the same as content received by client. Eric Butler created a
+>> firefox extension called Firesheep that allows you to hijack any insecure
+>> session cookies available on any computer on the wifi network [
+>> http://codebutler.com/firesheep/]. Joel Weinberger of the Google Chrome
+>> security team recently explained how any content delivered over HTTP can be
+>> changed by a malicious or compromised router between you and the server [
+>> https://www.youtube.com/watch?v=X1ZFjOZMSQg].
+>>
+>> Why is this a problem for rustup.sh? Because we're encouraged to curl
+>> rustup.sh and pipe the result to sudo. The problem is that an infected or
+>> compromised router could insert malware into rustup.sh and run that code as
+>> root. Now you no longer own your computer.
+>>
+>> What's the fix? ONLY ACCESS RUSTUP.SH OVER HTTPS. HTTPS more-or-less
+>> guarrantees that the content sent from the server is what is delivered to
+>> the client. Fortunately, github delivers all it's content securely over
+>> HTTPS. You can have a high degree of confidence by simply accessing
+>> rustup.sh from
+>> https://raw.githubusercontent.com/rust-lang/rust-www/gh-pages/rustup.sh
+>>
+>> Why don't the maintainers of www.rust-lang.org deliver all the content
+>> over HTTPS? www.rust-lang.org is hosted using GithubPages on a custom
+>> domain. Unfortunately, GithubPages doesn't allow HTTPS for custom domains,
+>> which is a pity. However, by using GithubPages any pull requests merged
+>> into the repo are immediately reflected on www.rust-lang.org. Also,
+>> GithubPages provides DDOS protection and is provided free of charge to open
+>> source projects like Rust. So, all things considered, this seems like the
+>> best course of action currently.
+>>
+>> Cheers,
+>> Bryce
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140803/93d64326/attachment.html>
+
+From bryce at fisher-fleig.org  Sun Aug  3 12:52:37 2014
+From: bryce at fisher-fleig.org (Bryce Fisher-Fleig)
+Date: Sun, 3 Aug 2014 12:52:37 -0700
+Subject: [rust-dev] Accessing Rustup.sh Securely
+In-Reply-To: <CAJ5y=589D+TJ3oFSe4UPR=jp_FT-r234ARhR-m3JM7Jnuhdw5g@mail.gmail.com>
+References: <CAJ5y=59mhWMSJPWgeuAecrFgjEjyAue4TSzvNO4bM=p_nrWzkw@mail.gmail.com>
+	<CALdfqQJ-MO5oXWkJkT4TcVVZ5R4DL35TWYvmFkP3qWpPjZzqWg@mail.gmail.com>
+	<CAJ5y=589D+TJ3oFSe4UPR=jp_FT-r234ARhR-m3JM7Jnuhdw5g@mail.gmail.com>
+Message-ID: <CAJ5y=5_zN_O8Zh0QHios6_CeU6JCyaGVs2bbe2BP8adZAfBwew@mail.gmail.com>
+
+Pardon my slowness -- I'm having trouble figuring out where the repo for
+doc.rust-lang.org is located so I can make a PR. Can someone point me in
+the right direction?
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140803/187fca4e/attachment.html>
+
+From eg1290 at gmail.com  Sun Aug  3 12:54:53 2014
+From: eg1290 at gmail.com (Evan G)
+Date: Sun, 3 Aug 2014 14:54:53 -0500
+Subject: [rust-dev] Accessing Rustup.sh Securely
+In-Reply-To: <CAJ5y=5_zN_O8Zh0QHios6_CeU6JCyaGVs2bbe2BP8adZAfBwew@mail.gmail.com>
+References: <CAJ5y=59mhWMSJPWgeuAecrFgjEjyAue4TSzvNO4bM=p_nrWzkw@mail.gmail.com>
+	<CALdfqQJ-MO5oXWkJkT4TcVVZ5R4DL35TWYvmFkP3qWpPjZzqWg@mail.gmail.com>
+	<CAJ5y=589D+TJ3oFSe4UPR=jp_FT-r234ARhR-m3JM7Jnuhdw5g@mail.gmail.com>
+	<CAJ5y=5_zN_O8Zh0QHios6_CeU6JCyaGVs2bbe2BP8adZAfBwew@mail.gmail.com>
+Message-ID: <CAJY4u8Gb5iv+9h5d5Y9OG8xunEQp3E2OdXKO6Uogpyvkf5Tiqw@mail.gmail.com>
+
+The rust documentation is generated from the rust repo and source code.
+
+
+On Sun, Aug 3, 2014 at 2:52 PM, Bryce Fisher-Fleig <bryce at fisher-fleig.org>
+wrote:
+
+> Pardon my slowness -- I'm having trouble figuring out where the repo for
+> doc.rust-lang.org is located so I can make a PR. Can someone point me in
+> the right direction?
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140803/96fd2333/attachment.html>
+
+From danielmicay at gmail.com  Sun Aug  3 14:12:04 2014
+From: danielmicay at gmail.com (Daniel Micay)
+Date: Sun, 03 Aug 2014 17:12:04 -0400
+Subject: [rust-dev] Accessing Rustup.sh Securely
+In-Reply-To: <CAJ5y=59mhWMSJPWgeuAecrFgjEjyAue4TSzvNO4bM=p_nrWzkw@mail.gmail.com>
+References: <CAJ5y=59mhWMSJPWgeuAecrFgjEjyAue4TSzvNO4bM=p_nrWzkw@mail.gmail.com>
+Message-ID: <53DEA5A4.7060904@gmail.com>
+
+On 03/08/14 03:04 PM, Bryce Fisher-Fleig wrote:
+> Dear RustLangers,
+> 
+> TL;DR::
+> Only access rustup.sh at
+> https://raw.githubusercontent.com/rust-lang/rust-www/gh-pages/rustup.sh
+> and NOT at www.rust-lang.org <http://www.rust-lang.org>.
+> 
+> Full Story::
+> If you're like me, you love the convenience of getting the lastest
+> version of the rust compiler and cargo updated via rustup.sh. However,
+> this script is delivered insecurely over HTTP.
+> 
+> HTTP by itself provides no guarrantees that the content sent by the
+> server is the same as content received by client. Eric Butler created a
+> firefox extension called Firesheep that allows you to hijack any
+> insecure session cookies available on any computer on the wifi network
+> [http://codebutler.com/firesheep/]. Joel Weinberger of the Google Chrome
+> security team recently explained how any content delivered over HTTP can
+> be changed by a malicious or compromised router between you and the
+> server [https://www.youtube.com/watch?v=X1ZFjOZMSQg].
+> 
+> Why is this a problem for rustup.sh? Because we're encouraged to curl
+> rustup.sh and pipe the result to sudo. The problem is that an infected
+> or compromised router could insert malware into rustup.sh and run that
+> code as root. Now you no longer own your computer.
+> 
+> What's the fix? ONLY ACCESS RUSTUP.SH OVER HTTPS. HTTPS more-or-less
+> guarrantees that the content sent from the server is what is delivered
+> to the client. Fortunately, github delivers all it's content securely
+> over HTTPS. You can have a high degree of confidence by simply accessing
+> rustup.sh from
+> https://raw.githubusercontent.com/rust-lang/rust-www/gh-pages/rustup.sh
+> 
+> Why don't the maintainers of www.rust-lang.org
+> <http://www.rust-lang.org> deliver all the content over HTTPS?
+> www.rust-lang.org <http://www.rust-lang.org> is hosted using GithubPages
+> on a custom domain. Unfortunately, GithubPages doesn't allow HTTPS for
+> custom domains, which is a pity. However, by using GithubPages any pull
+> requests merged into the repo are immediately reflected on
+> www.rust-lang.org <http://www.rust-lang.org>. Also, GithubPages provides
+> DDOS protection and is provided free of charge to open source projects
+> like Rust. So, all things considered, this seems like the best course of
+> action currently.
+> 
+> Cheers,
+> Bryce
+
+That's not going to help because you're still downloading the compiler
+snapshots over HTTP.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140803/f073c3f5/attachment.sig>
+
+From lionel.parreaux at gmail.com  Sun Aug  3 16:27:49 2014
+From: lionel.parreaux at gmail.com (Lionel Parreaux)
+Date: Mon, 4 Aug 2014 01:27:49 +0200
+Subject: [rust-dev] Conflicting implementations of a trait
+Message-ID: <CALTWw7sDC5ZdanNiYsu-852_G8pB5gGHYR8GwtUs5xz+JHK_8g@mail.gmail.com>
+
+Hi,
+
+I just stumbled upon your message, and that reminded me of something I had
+thought about.
+In Scala, type classes are interfaces, and type class instances are types
+implementing these interfaces.
+But the "receiver type" (the self type, the type of the instance), only
+serves to define operations, not store any data. It will eventually store
+the vtable for these operations though, when passed to methods or objects
+requiring the associated type class (type classes are a runtime mechanism).
+Type class Add in Scala would be something symmetric like:
+    trait Add[A,B,C] { def add (a:A, b:B): C }
+
+Now, I was thinking that this was also a very nice way of doing things in
+the context of a static system.
+"Add" may not be a very compelling example for this, so let's take the
+example of a "Hash" trait.
+
+If we defined Hash the Scala way in Rust (with a separate self type: trait
+Hash<T>), it would mean we could create as many versions of it as we'd
+like, without coherence or safety problems, because we'd be using a
+different self-type each time.
+There are two important use cases to distinguish:
+- A HashSet type will be parametrized not only with the element type T, but
+also with the hashing implementation for this type, HT:Hash<T>. This is
+required to ensure we only ever use one hash function for all operations of
+this set.
+- If a particular function wants to be able to get the hash of type X, it
+will require a type parameter HT:Hash<X>. Such a function could locally use
+a hash table with the provided hash function, for example. There is no need
+that the type X be bound to a single hashing function.
+This way, Hashing is a concept totally decoupled the types it applies on,
+but we retain necessary coherence and link-safety.
+
+There seem to be many traits that would benefit from this kind of
+decoupling. For example, it could be useful to define several different
+orderings for a single type. A particular case: we may want to only locally
+define some ordering for a type which has no semantic notion of ordering,
+just so that we can store this type in a TreeSet.
+Another one : Show, to get a string representation of an object, or
+Iterator (there may be different ways of iterating on a string; eg: by word
+or by char?).
+I think some traits are inherently, semantically coupled to a type (Clone,
+Add?). For the others it may be useful to have them decoupled.
+
+
+As for the problem of argument representation (references or value), have
+you thought about some trait of the form "ArgRepr<T>", that has a static
+"wrap" constructor producing the appropriate representation?
+With each type definition X, we would implement ArgRepr<X> for the
+appropriate argument representation of this type. Then, we'd have:
+    fn foo<T, AT:ArgRepr<T>, U, AU:ArgRepr<U>, O> (x: T, y: U) -> O
+        where (AT,AU): Mul<O>
+    {
+        AT::wrap(&x) * AU::wrap(&y)  // calls to wrap hopefully inlined,
+otherwise the whole thing is pretty useless
+    }
+
+Well, that does look quite ugly and verbose :/
+Maybe some help from the syntax/language would make it better.
+
+Cheers,
+LP.
+
+
+Sebastian Gesemann s.gesemann at gmail.com
+Tue Jul 22 10:34:42 PDT 2014
+
+> Am 22.07.2014 18:50, schrieb Allen Welkie:
+> >* Can there be two simultaneous implementations of a generic trait? I ask
+> *>* because I want to extend the Complex class to allow for multiplication by
+> *>* scalars, so that you can use "a * b" where "a" and "b" can be either
+> *>* scalars or Complex.
+> *
+> [snip]
+>
+> Something like this was my first attempt in Rust. I was able to define
+> two own types (complex and imaginary) which I could mix with f64 for
+> multiplication, addition, etc.
+>
+> But it required a kind of "double dispatch". Niko explained it here:http://smallcultfollowing.com/babysteps/blog/2012/10/04/refining-traits-slash-impls/
+>
+> Unfortunately, given how these traits are defined now, design requires a
+> bit of foresight. If you want to mix types like this for binary
+> operations eventually, you should probably start this kind of
+> dispatching early on. You can't do that with num's complex struct now.
+> Its Add/Mul/etc impls weren't designed with double-dispatch in mind. For
+> now, you would have to define your own types like I did.
+>
+> But there is a chance that the binary operator traits change. For a
+> binary operator like + and * there is no clear "receiver" (an object you
+> call an add function on). IMHO the operands should be treated equally.
+> One approach that I saw mentioned by Niko (in another blog post I
+> believe) was to use tuples for that:
+>
+>     trait Add<Out> {
+>         fn add(self) -> Out;
+>     }
+>
+>     impl Add<Complex<f64>> for (f64,Compex<f64>) {
+>         fn add((lhs, rhs) : (f64, Complex<f64>)) -> Complex<f64> {
+>             ...
+>         }
+>     }
+>
+> And this makes it much easier to extend the interface of certain types
+> together.
+>
+> On the other hand, there still needs to go some thought into this with
+> respect to passing operands by value or reference. You don't want
+> unnecessary clones. And you probably don't want operands to be
+> moved-from in some cases. And the way these kinds of traits are refined
+> should work well together with generic code:
+>
+>     fn foo<T,U,O>(x: T, y: U) -> O
+>         where ???: Mul<O>
+>     {
+>         x * y
+>     }
+>
+> Ideally, this should work for every type T and U that can be multiplied
+> somehow. The question however is, how to write down the type bound?
+> Should we write
+>
+>     (&T,&U): Add<O>
+>
+> to avoid moving? Should we write
+>
+>     (T,U): Add<O>
+>
+> for a nicer, more intuitive syntax perhaps? I don't know. If you have a
+> good idea how to do that, I'm all ears. I'm very much interested in
+> getting easily overloadable operators without the pain of
+> double-dispatch and without the pain of clumsly type bounds for generic
+> functions that only work for half the cases due to references and such.
+>
+> Cheers!
+> sg
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140804/a5aa1e79/attachment.html>
+
+From pnathan.software at gmail.com  Sun Aug  3 19:02:09 2014
+From: pnathan.software at gmail.com (Paul Nathan)
+Date: Sun, 3 Aug 2014 19:02:09 -0700
+Subject: [rust-dev] Implementing a clone trait on &mut struct.
+Message-ID: <CALXzQZixSkx_fecEfG6Wep0yVnPHFzOmQHyj3Q7UskG0+raE9Q@mail.gmail.com>
+
+Hi,
+
+I've gotten myself in a bit of a bind.
+
+As part of my work with shared memory with workers, I've implemented a
+(relatively leaky at the moment) abstraction over Arc<RWLock<T>>, called
+Pool.
+
+Part of my abstraction requires the Clone trait be implemented for T.
+
+However, up in the user layer, I have something that looks roughly like this
+
+struct Agent { ... }
+
+struct Tracker {
+  Pool<&'r mut Agent>
+}
+
+At which point, the type checker complains and asks me to implement
+something of this signature:
+
+impl<'r> Clone for &'r mut Agent {
+
+Which seems quite patently ridiculous - as if I understand things
+something, I'm being asked to return a reference to something on the
+*stack* of the fn clone() function. Something smells fishy here...
+
+Some assistance and clarification would be appreciated.
+
+Regards,
+Paul
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140803/71fa8084/attachment.html>
+
+From lists at dhardy.name  Sun Aug  3 22:38:20 2014
+From: lists at dhardy.name (Diggory Hardy)
+Date: Mon, 04 Aug 2014 07:38:20 +0200
+Subject: [rust-dev] Accessing Rustup.sh Securely
+In-Reply-To: <53DEA5A4.7060904@gmail.com>
+References: <CAJ5y=59mhWMSJPWgeuAecrFgjEjyAue4TSzvNO4bM=p_nrWzkw@mail.gmail.com>
+	<53DEA5A4.7060904@gmail.com>
+Message-ID: <8609332.TcrLU0gyZ8@yoga.dhardy>
+
+Which is why I don't use it.
+
+A third point is that root access is really not required; e.g. I usually 
+install software into /home/install/NAME and then do no more than create links 
+to the binaries from my own bin folder.
+
+Of course, that doesn't remove the need to validate the downloaded files.
+
+On Sunday 03 August 2014 17:12:04 Daniel Micay wrote:
+> On 03/08/14 03:04 PM, Bryce Fisher-Fleig wrote:
+> > Dear RustLangers,
+> > 
+> > TL;DR::
+> > Only access rustup.sh at
+> > https://raw.githubusercontent.com/rust-lang/rust-www/gh-pages/rustup.sh
+> > and NOT at www.rust-lang.org <http://www.rust-lang.org>.
+> > 
+> That's not going to help because you're still downloading the compiler
+> snapshots over HTTP.
+
+From lists at dhardy.name  Sun Aug  3 22:48:32 2014
+From: lists at dhardy.name (Diggory Hardy)
+Date: Mon, 04 Aug 2014 07:48:32 +0200
+Subject: [rust-dev] Place for discussions
+In-Reply-To: <53DAC005.50603@mozilla.com>
+References: <927038759428461094.055756troplin-bluewin.ch@news.gmane.org>
+	<53DAC005.50603@mozilla.com>
+Message-ID: <8661974.O1anU3arCV@yoga.dhardy>
+
+I like the mailing list for news items: new releases, This Week in Rust, RFCs 
+for discussion, etc. Maybe replace it with a news-only list where all posts 
+are moderated?
+
+This is one thing both discourse and RFCs don't seem to be good at: summarised 
+news (e.g. notifications on new RFCs/discourses and daily compilations of 
+comments).
+
+Just my 2 cents.
+
+On Thursday 31 July 2014 15:15:33 Brian Anderson wrote:
+> Here's the current state of official project support for various forums:
+> 
+> * discourse.rust-lang.org is for *discussion of the development of Rust
+> itself*. It is maintained by Mozilla.
+> * r/rust is for user discussion. It is maintained by the community.
+> * rust-dev is for user discussion. It is maintained by Mozilla. It used
+> to be for development discussion but none of the core developers like
+> working there because the signal-to-noise is awful and it is unmoderatable.
+> * stackoverflow is ultimately where we want users to go for help.
+> 
+> Discourse is an *experiment* to see if it works better than mailing
+> lists for having civil conversations. If it works, we may shut off the
+> mailing list. It's not clear whether we would extend discourse to
+> general Rust discussion or leave reddit and stackoverflow for that.
+> 
+> On 07/30/2014 06:08 PM, Tobias M?ller wrote:
+> > Hello,
+> > 
+> > I'm following rust for quite a while, but the discussions are more and
+> > more
+> > distributed between different places.
+> > The mailing list was probably first, then with more user attention reddit
+> > and StackOverflow, and now the discourse forum.
+> > 
+> > I understand that StackOverflow and Reddit are more for users, not
+> > developers, but the discourse forum seems mostly redundant.
+> > 
+> > What's the reason for that split? Is the mailing list deprecated? Which
+> > one
+> > is the future?
+> > 
+> > I for myself prefer the mailing list because of the gmane NNTP service, I
+> > can use my usual usenet software and have all my forums in one place.
+> > 
+> > Tobi
+> > 
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org
+> > https://mail.mozilla.org/listinfo/rust-dev
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+From dpx.infinity at gmail.com  Sun Aug  3 23:31:25 2014
+From: dpx.infinity at gmail.com (Vladimir Matveev)
+Date: Mon, 4 Aug 2014 10:31:25 +0400
+Subject: [rust-dev] Implementing a clone trait on &mut struct.
+In-Reply-To: <CA+jWdBghuZny-vV1QOhTgwdLV-jQzgKz6xSrAtxFQnmdMy911w@mail.gmail.com>
+References: <CALXzQZixSkx_fecEfG6Wep0yVnPHFzOmQHyj3Q7UskG0+raE9Q@mail.gmail.com>
+	<CA+jWdBghuZny-vV1QOhTgwdLV-jQzgKz6xSrAtxFQnmdMy911w@mail.gmail.com>
+Message-ID: <CA+jWdBgDNEBQyp4bsDVAJFm0TpHG_c13e9RM_qNuPnEYmOn8Yw@mail.gmail.com>
+
+Forgot to send a copy to mailing list.
+
+2014-08-04 10:30 GMT+04:00 Vladimir Matveev <dpx.infinity at gmail.com>:
+> Hi, Paul,
+>
+> The problem with Clone implementation for mutable reference is not
+> that it does not make sense at all; after all, it is just an integer
+> value behind the fancy name, and, for example, plain & references [are
+> cloneable](http://doc.rust-lang.org/std/clone/trait.Clone.html).
+> However, Clone can't be implemented for mutable references because
+> &mut is unaliasable - there can't be more than one mutable reference
+> pointing to the same thing at the same time, but Clone does exactly
+> this.
+>
+> Moreover, you say that `Pool<T>` is an abstraction over
+> `Arc<RWLock<T>>`, right? This means that `T` should also be Share +
+> Send, and while references are Share, they are not Send - you can't
+> send a reference to another task because it can point to original
+> task's stack, and if that original task exits, the reference may
+> become invalid. So it is likely that your overall design is incorrect.
+> It's hard to say more without more details on what you want to do.
+>
+> 2014-08-04 6:02 GMT+04:00 Paul Nathan <pnathan.software at gmail.com>:
+>> Hi,
+>>
+>> I've gotten myself in a bit of a bind.
+>>
+>> As part of my work with shared memory with workers, I've implemented a
+>> (relatively leaky at the moment) abstraction over Arc<RWLock<T>>, called
+>> Pool.
+>>
+>> Part of my abstraction requires the Clone trait be implemented for T.
+>>
+>> However, up in the user layer, I have something that looks roughly like this
+>>
+>> struct Agent { ... }
+>>
+>> struct Tracker {
+>>   Pool<&'r mut Agent>
+>> }
+>>
+>> At which point, the type checker complains and asks me to implement
+>> something of this signature:
+>>
+>> impl<'r> Clone for &'r mut Agent {
+>>
+>> Which seems quite patently ridiculous - as if I understand things something,
+>> I'm being asked to return a reference to something on the *stack* of the fn
+>> clone() function. Something smells fishy here...
+>>
+>> Some assistance and clarification would be appreciated.
+>>
+>> Regards,
+>> Paul
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+
+From pnathan.software at gmail.com  Sun Aug  3 23:59:45 2014
+From: pnathan.software at gmail.com (Paul Nathan)
+Date: Sun, 3 Aug 2014 23:59:45 -0700
+Subject: [rust-dev] Implementing a clone trait on &mut struct.
+In-Reply-To: <CA+jWdBghuZny-vV1QOhTgwdLV-jQzgKz6xSrAtxFQnmdMy911w@mail.gmail.com>
+References: <CALXzQZixSkx_fecEfG6Wep0yVnPHFzOmQHyj3Q7UskG0+raE9Q@mail.gmail.com>
+	<CA+jWdBghuZny-vV1QOhTgwdLV-jQzgKz6xSrAtxFQnmdMy911w@mail.gmail.com>
+Message-ID: <CALXzQZiicVaUKUrjVWa9+=AeD6Rq1-qwgS8dNeV7FYyAwxBFCg@mail.gmail.com>
+
+Vladimir,
+
+Without going into too much detail (as it it is tedious and not terribly
+useful), what I am doing is building an instance of the classic
+master/worker distributed system design[1] where the master sets up some
+memory, shares it out to the workers, which then start working on it while
+the master reads the progress of the workers. After a period of time, the
+workers finish and the master takes over writing the work out to whatever
+long-term storage it uses.
+
+Two collections are at play here: the job list collection, and the worker
+collection. A given job gets instantiated into a specific activation record
+as it gets worked on. Both the job list and the worker need a path in
+memory to the (same) activation record as they roll along. Only one Rust
+task gets to write to the data at a time, by definition of the problem set
+up.
+
+So you see, mutable pointers out to the data blocks are key here.
+
+several key points are to be made here:
+
+1. message passing is *not* desirable - there's no need to have  copies of
+this (presumably large) data floating around. Indeed, sharing the state
+between tasks is the key aspect in this exercise.
+1a. Setting up to use channels in an actorish system here is an exercise in
+yarn untangling. It devolved into building a closure which had two
+half-duplex channels, implementing a mini-server in-code to communicate
+with other objects. It could probably be cleaned up considerably with some
+care and feeding of a macro... but nonetheless, it was ugly and carried a
+high cognitive budget to consider.
+
+2.  Atomic barriers need to gate the shared data, as it will be both read
+and written periodically.
+
+3. Where the memory lives is largely immaterial. The main task can be
+assumed to allocate adequate memory - either in the heap or in its own
+stack - and this is passed around.
+
+
+Regards,
+Paul
+
+[1] It's actually a continuous integration server with a master and
+workers, as my patience with Jenkins oddities has fairly well run out.
+
+
+
+On Sun, Aug 3, 2014 at 11:30 PM, Vladimir Matveev <dpx.infinity at gmail.com>
+wrote:
+
+> Hi, Paul,
+>
+> The problem with Clone implementation for mutable reference is not
+> that it does not make sense at all; after all, it is just an integer
+> value behind the fancy name, and, for example, plain & references [are
+> cloneable](http://doc.rust-lang.org/std/clone/trait.Clone.html).
+> However, Clone can't be implemented for mutable references because
+> &mut is unaliasable - there can't be more than one mutable reference
+> pointing to the same thing at the same time, but Clone does exactly
+> this.
+>
+> Moreover, you say that `Pool<T>` is an abstraction over
+> `Arc<RWLock<T>>`, right? This means that `T` should also be Share +
+> Send, and while references are Share, they are not Send - you can't
+> send a reference to another task because it can point to original
+> task's stack, and if that original task exits, the reference may
+> become invalid. So it is likely that your overall design is incorrect.
+> It's hard to say more without more details on what you want to do.
+>
+> 2014-08-04 6:02 GMT+04:00 Paul Nathan <pnathan.software at gmail.com>:
+> > Hi,
+> >
+> > I've gotten myself in a bit of a bind.
+> >
+> > As part of my work with shared memory with workers, I've implemented a
+> > (relatively leaky at the moment) abstraction over Arc<RWLock<T>>, called
+> > Pool.
+> >
+> > Part of my abstraction requires the Clone trait be implemented for T.
+> >
+> > However, up in the user layer, I have something that looks roughly like
+> this
+> >
+> > struct Agent { ... }
+> >
+> > struct Tracker {
+> >   Pool<&'r mut Agent>
+> > }
+> >
+> > At which point, the type checker complains and asks me to implement
+> > something of this signature:
+> >
+> > impl<'r> Clone for &'r mut Agent {
+> >
+> > Which seems quite patently ridiculous - as if I understand things
+> something,
+> > I'm being asked to return a reference to something on the *stack* of the
+> fn
+> > clone() function. Something smells fishy here...
+> >
+> > Some assistance and clarification would be appreciated.
+> >
+> > Regards,
+> > Paul
+> >
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org
+> > https://mail.mozilla.org/listinfo/rust-dev
+> >
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140803/a89eb24f/attachment.html>
+
+From axel.viala at darnuria.eu  Mon Aug  4 01:00:13 2014
+From: axel.viala at darnuria.eu (Axel Viala)
+Date: Mon, 04 Aug 2014 10:00:13 +0200
+Subject: [rust-dev] Rust meetup Paris #7: 18 August 2014
+Message-ID: <53DF3D8D.8020008@darnuria.eu>
+
+Hello dears Rusties!
+
+I am pretty happy to announce the 7th meetup Rust in Paris for the 18 
+August 2014
+
+This time that will be a little one.
+We will focus on short presentation and hacking together. :)
+
+Thanks!
+
+See you there!
+
+http://www.meetup.com/Rust-Paris/events/185457762/
+-- 
+My Mozillian profile because I believe in an Open Internet.
+https://mozillians.org/en-US/u/darnuria/
+
+From lists at ncameron.org  Mon Aug  4 03:31:21 2014
+From: lists at ncameron.org (Nick Cameron)
+Date: Mon, 4 Aug 2014 12:31:21 +0200
+Subject: [rust-dev] this week's older RFCs
+Message-ID: <CAA5tgF1GT7OEcftSzt=ubheFC5tZJ+9o+nWPn-W4bjE0uObM9g@mail.gmail.com>
+
+The RFCs up for discussion this week are up on discuss:
+http://discuss.rust-lang.org/t/this-weeks-older-rfcs-up-for-discussion/311/
+
+Thanks, Nick
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140804/53565dcc/attachment.html>
+
+From saneyuki.s.snyk at gmail.com  Thu Aug  7 08:59:49 2014
+From: saneyuki.s.snyk at gmail.com (Tetsuharu OHZEKI)
+Date: Fri, 8 Aug 2014 00:59:49 +0900
+Subject: [rust-dev] Tokyo Rust meetup: 2014-09-27
+Message-ID: <CACyPx=nF+pxONDdWmvS54No1yLBK_cd=teCJzS7heWnO1tWffw@mail.gmail.com>
+
+Hello Rust Ninjas!
+
+I announce the Rust Meetup in Tokyo on Sunday September 27th, 2014,
+at Mozilla Japan office in Tokyo. Sign up here to attend:
+
+https://atnd.org/events/54657
+
+This meetup targets to learn Rust language more deeply, and communicate
+with Rust guys who lives in Tokyo (or Japan).
+If you find other Rust guys or try to learn Rust more, let's discuss
+together.
+
+* Rust has not been known widely in Japan yet.
+  So this time would aim to learn the basic, fundamental,
+  and some introduction of Rust.
+
+* We would talk a session with using Japanese,
+  but some attendances can speak English modestly.
+
+* Sessions has not been confirmed all yet.
+  Please see more details in the above sign up page. sorry!
+
+* We call this meetup as "Rust Samurai", inspired by a naming of
+"JavaScript Ninja",  and the Tom Cruise's 2003 movie.
+The pronounce difference ("R" & "L") is Japanese-English :)
+
+Finally, I'm looking forward to see you at this meetup.
+
+See you then!
+
+-- 
+Tetsuharu OHZEKI
+saneyuki.s.snyk at gmail.com
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140808/02117af8/attachment.html>
+
+From banderson at mozilla.com  Thu Aug  7 11:19:56 2014
+From: banderson at mozilla.com (Brian Anderson)
+Date: Thu, 07 Aug 2014 11:19:56 -0700
+Subject: [rust-dev] Tokyo Rust meetup: 2014-09-27
+In-Reply-To: <CACyPx=nF+pxONDdWmvS54No1yLBK_cd=teCJzS7heWnO1tWffw@mail.gmail.com>
+References: <CACyPx=nF+pxONDdWmvS54No1yLBK_cd=teCJzS7heWnO1tWffw@mail.gmail.com>
+Message-ID: <53E3C34C.60407@mozilla.com>
+
+Added to the calendar: 
+https://www.google.com/calendar/embed?src=apd9vmbc22egenmtu5l6c5jbfc%40group.calendar.google.com&ctz=America/Los_Angeles
+
+On 08/07/2014 08:59 AM, Tetsuharu OHZEKI wrote:
+> Hello Rust Ninjas!
+>
+> I announce the Rust Meetup in Tokyo on Sunday September 27th, 2014,
+> at Mozilla Japan office in Tokyo. Sign up here to attend:
+>
+> https://atnd.org/events/54657
+>
+> This meetup targets to learn Rust language more deeply, and communicate
+> with Rust guys who lives in Tokyo (or Japan).
+> If you find other Rust guys or try to learn Rust more, let's discuss 
+> together.
+>
+> * Rust has not been known widely in Japan yet.
+>   So this time would aim to learn the basic, fundamental,
+>   and some introduction of Rust.
+>
+> * We would talk a session with using Japanese,
+>   but some attendances can speak English modestly.
+>
+> * Sessions has not been confirmed all yet.
+>   Please see more details in the above sign up page. sorry!
+>
+> * We call this meetup as "Rust Samurai", inspired by a naming of
+> "JavaScript Ninja",  and the Tom Cruise's 2003 movie.
+> The pronounce difference ("R" & "L") is Japanese-English :)
+>
+> Finally, I'm looking forward to see you at this meetup.
+>
+> See you then!
+>
+> -- 
+> Tetsuharu OHZEKI
+> saneyuki.s.snyk at gmail.com <mailto:saneyuki.s.snyk at gmail.com>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140807/63721d17/attachment.html>
+
+From lists at ncameron.org  Fri Aug  8 01:50:44 2014
+From: lists at ncameron.org (Nick Cameron)
+Date: Fri, 8 Aug 2014 10:50:44 +0200
+Subject: [rust-dev] older RFCs for next week
+Message-ID: <CAA5tgF0bU0VaZAEJi8SumSWqLZ+=DGdAiPkfKw1AKb8cydGoDQ@mail.gmail.com>
+
+Are here
+http://discuss.rust-lang.org/t/next-weeks-older-rfcs-for-discussion/353
+
+This is the last week I will post to the mailing list. From now on these
+posts will only appear on discourse.
+
+Cheers, Nick
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140808/50a8e8cf/attachment.html>
+
+From pnathan.software at gmail.com  Mon Aug 11 09:25:56 2014
+From: pnathan.software at gmail.com (Paul Nathan)
+Date: Mon, 11 Aug 2014 09:25:56 -0700
+Subject: [rust-dev] Seattle Meetup tonight, 7pm
+Message-ID: <CALXzQZg9BZLiY3ALEQpASdr0QLsoS5QKn_cXDDABQtVkbuhgtQ@mail.gmail.com>
+
+Hi everyone!
+
+It's time for the August Rust meetup here in Seattle. There will be PIZZA.
+
+Here's a link to the information:
+
+http://www.eventbrite.com/e/mozilla-rust-seattle-meetup-tickets-12222326307?aff=eac2
+
+Regards,
+Paul
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140811/f1b5d28a/attachment.html>
+
+From davidb at davidb.org  Tue Aug 12 22:45:36 2014
+From: davidb at davidb.org (David Brown)
+Date: Tue, 12 Aug 2014 22:45:36 -0700
+Subject: [rust-dev] Tying lifetime of struct to owned object within it
+Message-ID: <20140813054536.GA18433@davidb.org>
+
+I'm trying to figure out how to get something like this to compile.
+What I want is a struct that owns a string as well as contains
+structures containing slices of that string.  My real use case is more
+complicated, but it seems to boil down easily to this.
+
+This gives me an error:
+
+life.rs:16:21: 16:32 error: `result.text` does not live long enough
+life.rs:16     result.fields = result.text.as_slice().split(' ').collect();
+                               ^~~~~~~~~~~
+life.rs:13:40: 19:2 note: reference must be valid for the lifetime 'a as defined on the block at 13:39...
+life.rs:13 fn build<'a>(text: String) -> Info<'a> {
+life.rs:14     let mut result = Info { text: text, fields: Vec::new() };
+life.rs:15 
+life.rs:16     result.fields = result.text.as_slice().split(' ').collect();
+life.rs:17 
+life.rs:18     result
+           ...
+life.rs:13:40: 19:2 note: ...but borrowed value is only valid for the block at 13:39
+life.rs:13 fn build<'a>(text: String) -> Info<'a> {
+life.rs:14     let mut result = Info { text: text, fields: Vec::new() };
+life.rs:15 
+life.rs:16     result.fields = result.text.as_slice().split(' ').collect();
+life.rs:17 
+life.rs:18     result
+           ...
+
+Is there a way to do this, or do I need to allocate strings for the
+copies of the individual slices?
+
+Thanks,
+David Brown
+
+----------------------------------------------------------------------
+// life.rs
+
+fn main() {
+    let info = build(String::from_str("this is a test"));
+    println!("{}", info.fields[0]);
+}
+
+struct Info<'a> {
+    text: String,
+    fields: Vec<&'a str>,
+}
+
+fn build<'a>(text: String) -> Info<'a> {
+    let mut result = Info { text: text, fields: Vec::new() };
+
+    result.fields = result.text.as_slice().split(' ').collect();
+
+    result
+}
+----------------------------------------------------------------------
+
+From alan.andradec at gmail.com  Wed Aug 13 20:39:07 2014
+From: alan.andradec at gmail.com (Alan Andrade)
+Date: Wed, 13 Aug 2014 20:39:07 -0700
+Subject: [rust-dev] SF Hack night topics
+Message-ID: <B8DA5A29-BBB3-4D4D-A485-3FDFD007CBAD@gmail.com>
+
+Hi Rusties,
+
+The first SF hack night is happening next Tuesday and we still need to decide what topics we?ll jump into.
+Following the lead of @cmr and his latest blog post http://blog.octayn.net/blog/2014/07/15/state-of-rust-0.11.0/, we will be hacking the following projects:
+
+- Zinc http://zinc.rs/
+- Piston http://www.piston.rs/
+- Iron http://ironframework.io/
+
+I setup a spreadsheet to gauge interest. Please add yourself to any project or add your project.
+
+https://docs.google.com/spreadsheets/d/1tXXDOwXjL9VDr6hJMnyVe3ReBubAc6oWSMzV8VdIFh4/edit
+
+
+\o/ So excited !!!
+
+@alan-andrade
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140813/0bed78f6/attachment.html>
+
+From phiroc at free.fr  Thu Aug 14 02:50:32 2014
+From: phiroc at free.fr (Philippe de Rochambeau)
+Date: Thu, 14 Aug 2014 11:50:32 +0200
+Subject: [rust-dev] Right list?
+Message-ID: <DA5A08F5-C98F-46E5-AD78-ECD903A85F75@free.fr>
+
+Hi,
+
+is this the right list to ask ? newbie ? questions about Rust?
+
+Many thanks.
+
+Philippe
+
+From pnkfelix at mozilla.com  Thu Aug 14 03:15:23 2014
+From: pnkfelix at mozilla.com (Felix S. Klock II)
+Date: Thu, 14 Aug 2014 12:15:23 +0200
+Subject: [rust-dev] Right list?
+In-Reply-To: <DA5A08F5-C98F-46E5-AD78-ECD903A85F75@free.fr>
+References: <DA5A08F5-C98F-46E5-AD78-ECD903A85F75@free.fr>
+Message-ID: <D618D91E-903D-4356-8503-92B80455C793@mozilla.com>
+
+Philppe (cc?ing rust-dev)-
+
+Hi!  I think that we are currently encouraging users to post questions about using the language (or tools, etc) to StackOverflow, using the ?rust? tag so that the community can find them easily.
+
+http://stackoverflow.com/questions/tagged/rust
+
+You can see Brian?s recent overview of our various communication channels and where we hope to go with them here:
+
+https://mail.mozilla.org/pipermail/rust-dev/2014-July/010979.html
+
+Cheers,
+-Felix
+
+On 14 Aug 2014, at 11:50, Philippe de Rochambeau <phiroc at free.fr> wrote:
+
+> Hi,
+> 
+> is this the right list to ask ? newbie ? questions about Rust?
+> 
+> Many thanks.
+> 
+> Philippe
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From banderson at mozilla.com  Thu Aug 14 12:29:24 2014
+From: banderson at mozilla.com (Brian Anderson)
+Date: Thu, 14 Aug 2014 12:29:24 -0700
+Subject: [rust-dev] SF Hack night topics
+In-Reply-To: <B8DA5A29-BBB3-4D4D-A485-3FDFD007CBAD@gmail.com>
+References: <B8DA5A29-BBB3-4D4D-A485-3FDFD007CBAD@gmail.com>
+Message-ID: <53ED0E14.10504@mozilla.com>
+
+If I want to hack on zinc, what do I need? Should I bring some type of 
+hardware? I have no experience with Arduino, etc.
+
+On 08/13/2014 08:39 PM, Alan Andrade wrote:
+> Hi Rusties,
+>
+> The first SF hack night is happening next Tuesday 
+> <http://www.meetup.com/SF-Rust-Hacknights/events/194585552/> and we 
+> still need to decide what topics we?ll jump into.
+> Following the lead of @cmr and his latest blog post 
+> http://blog.octayn.net/blog/2014/07/15/state-of-rust-0.11.0/, we will 
+> be hacking the following projects:
+>
+> - Zinc http://zinc.rs/
+> - Piston http://www.piston.rs/ <http://www.piston.rs/>
+> - Iron http://ironframework.io/
+>
+> I setup a spreadsheet to gauge interest. Please add yourself to any 
+> project or add your project.
+>
+> https://docs.google.com/spreadsheets/d/1tXXDOwXjL9VDr6hJMnyVe3ReBubAc6oWSMzV8VdIFh4/edit
+>
+>
+> \o/ So excited !!!
+>
+> @alan-andrade
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140814/ea991aea/attachment.html>
+
+From mail at bharr.is  Thu Aug 14 14:18:03 2014
+From: mail at bharr.is (Ben Harris)
+Date: Fri, 15 Aug 2014 09:18:03 +1200
+Subject: [rust-dev] SF Hack night topics
+In-Reply-To: <53ED0E14.10504@mozilla.com>
+References: <B8DA5A29-BBB3-4D4D-A485-3FDFD007CBAD@gmail.com>
+	<53ED0E14.10504@mozilla.com>
+Message-ID: <CAMtf1HsOwDpXX1z94sCFE9FVH62+gx7eLYW6ds99uX7-o6aL2w@mail.gmail.com>
+
+Something like this (https://www.pjrc.com/teensy/teensy31.html) has just
+enough Zinc support to get going - but the lack of a good debug interface
+makes life a little hard if you get stuck. If you pick another platform
+with an ARM Cortex processor I can make sure the Zinc tree has some support
+for it (we are a couple of weeks away from a nice 'pick up and go' state).
+
+
+On 15 August 2014 07:29, Brian Anderson <banderson at mozilla.com> wrote:
+
+>  If I want to hack on zinc, what do I need? Should I bring some type of
+> hardware? I have no experience with Arduino, etc.
+>
+>
+> On 08/13/2014 08:39 PM, Alan Andrade wrote:
+>
+>   Hi Rusties,
+>
+>  The first SF hack night is happening next Tuesday
+> <http://www.meetup.com/SF-Rust-Hacknights/events/194585552/> and we still
+> need to decide what topics we?ll jump into.
+> Following the lead of @cmr and his latest blog post
+> http://blog.octayn.net/blog/2014/07/15/state-of-rust-0.11.0/, we will be
+> hacking the following projects:
+>
+>  - Zinc http://zinc.rs/
+> - Piston http://www.piston.rs/
+> - Iron http://ironframework.io/
+>
+>  I setup a spreadsheet to gauge interest. Please add yourself to any
+> project or add your project.
+>
+>
+> https://docs.google.com/spreadsheets/d/1tXXDOwXjL9VDr6hJMnyVe3ReBubAc6oWSMzV8VdIFh4/edit
+>
+>
+>  \o/ So excited !!!
+>
+>  @alan-andrade
+>
+>
+> _______________________________________________
+> Rust-dev mailing listRust-dev at mozilla.orghttps://mail.mozilla.org/listinfo/rust-dev
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140815/ffd09ba0/attachment.html>
+
+From lists at dhardy.name  Mon Aug 18 02:59:31 2014
+From: lists at dhardy.name (Diggory Hardy)
+Date: Mon, 18 Aug 2014 11:59:31 +0200
+Subject: [rust-dev] recent London meetup: recordings?
+Message-ID: <1559754.ESPcEH3WNP@tph-l13071>
+
+Dear Rust users,
+
+I heard Nick Cameron gave a talk about Dynamically Sized Types in London last 
+Thursday[1]. Are there recordings available?
+
+[1]: http://www.meetup.com/Rust-London-User-Group/events/196222722/
+
+From ben at 0x539.de  Mon Aug 18 06:54:36 2014
+From: ben at 0x539.de (Benjamin Herr)
+Date: Mon, 18 Aug 2014 15:54:36 +0200
+Subject: [rust-dev] recent London meetup: recordings?
+In-Reply-To: <1559754.ESPcEH3WNP@tph-l13071>
+References: <1559754.ESPcEH3WNP@tph-l13071>
+Message-ID: <1408370076.6330.26.camel@0x539.de>
+
+Hi,
+
+these two have been posted to reddit [^1]:
+
+https://air.mozilla.org/zinc-the-embedded-rust-stack-vladimir-pouzanov/
+
+https://air.mozilla.org/dynamically-sized-typed-nick-cameron/
+
+
+[^1]:
+http://www.reddit.com/r/rust/comments/2dng4h/videos_of_london_meetup_talks_zinc_and_dst/
+
+Hope this helps!
+
+
+On Mon, 2014-08-18 at 11:59 +0200, Diggory Hardy wrote:
+> Dear Rust users,
+> 
+> I heard Nick Cameron gave a talk about Dynamically Sized Types in London last 
+> Thursday[1]. Are there recordings available?
+> 
+> [1]: http://www.meetup.com/Rust-London-User-Group/events/196222722/
+
+
+
+From thiezz at gmail.com  Mon Aug 18 14:48:16 2014
+From: thiezz at gmail.com (Thiez)
+Date: Mon, 18 Aug 2014 23:48:16 +0200
+Subject: [rust-dev] Tying lifetime of struct to owned object within it
+In-Reply-To: <20140813054536.GA18433@davidb.org>
+References: <20140813054536.GA18433@davidb.org>
+Message-ID: <CAM1si4hnJuHLMwkAahCiOFtwjbM9UP6Htoo3gqg-RyAM8ZPQ9Q@mail.gmail.com>
+
+The borrow checker is correct, your code is not actually safe. Imagine this:
+
+    let mut info = build(String::from_str("this is a test"));
+    info.text = String::from_str("this assignment drops the original
+string");
+    info.fields[0]; // Accesses freed memory.
+
+
+The thing is that `Info.text` is not guaranteed to live as long as `Info`.
+
+If you change the type of `Info.text` and the argument of `build` to `&'a
+str` and pass "this is a test" everything works nicely. I suppose it would
+be safe if you could convince the compiler that `Info.text` cannot change
+but there is only inherited immutability so that does not work.
+
+You could do something with arenas; by only having a borrowed reference to
+`Info` the compiler should ensure that you do not sneakily change either
+`Info.text` or 'Info.fields`.
+
+----------------------------------------------------------------------
+extern crate arena;
+
+fn main() {
+    let ref ar = arena::Arena::new();
+    let info = build(ar, "this is a test");
+    println!("{}", info.fields[0]);
+}
+
+struct Info<'a> {
+    text: &'a String,
+    fields: Vec<&'a str>,
+}
+
+fn build<'a>(ar: &'a arena::Arena, text: &str) -> &'a Info<'a> {
+    ar.alloc(||{
+        let mut result = Info {
+            text: ar.alloc(||String::from_str(text)),
+            fields: vec![],
+        };
+        result.fields = result.text.as_slice().split(' ').collect();
+        result
+    })
+}
+----------------------------------------------------------------------
+
+
+On Wed, Aug 13, 2014 at 7:45 AM, David Brown <davidb at davidb.org> wrote:
+
+> I'm trying to figure out how to get something like this to compile.
+> What I want is a struct that owns a string as well as contains
+> structures containing slices of that string.  My real use case is more
+> complicated, but it seems to boil down easily to this.
+>
+> This gives me an error:
+>
+> life.rs:16:21: 16:32 error: `result.text` does not live long enough
+> life.rs:16     result.fields = result.text.as_slice().split('
+> ').collect();
+>                               ^~~~~~~~~~~
+> life.rs:13:40: 19:2 note: reference must be valid for the lifetime 'a as
+> defined on the block at 13:39...
+> life.rs:13 fn build<'a>(text: String) -> Info<'a> {
+> life.rs:14     let mut result = Info { text: text, fields: Vec::new() };
+> life.rs:15 life.rs:16     result.fields = result.text.as_slice().split('
+> ').collect();
+> life.rs:17 life.rs:18     result
+>           ...
+> life.rs:13:40: 19:2 note: ...but borrowed value is only valid for the
+> block at 13:39
+> life.rs:13 fn build<'a>(text: String) -> Info<'a> {
+> life.rs:14     let mut result = Info { text: text, fields: Vec::new() };
+> life.rs:15 life.rs:16     result.fields = result.text.as_slice().split('
+> ').collect();
+> life.rs:17 life.rs:18     result
+>           ...
+>
+> Is there a way to do this, or do I need to allocate strings for the
+> copies of the individual slices?
+>
+> Thanks,
+> David Brown
+>
+> ----------------------------------------------------------------------
+> // life.rs
+>
+> fn main() {
+>    let info = build(String::from_str("this is a test"));
+>    println!("{}", info.fields[0]);
+> }
+>
+> struct Info<'a> {
+>    text: String,
+>    fields: Vec<&'a str>,
+> }
+>
+> fn build<'a>(text: String) -> Info<'a> {
+>    let mut result = Info { text: text, fields: Vec::new() };
+>
+>    result.fields = result.text.as_slice().split(' ').collect();
+>
+>    result
+> }
+> ----------------------------------------------------------------------
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140818/845d9ba2/attachment.html>
+
+From erick.tryzelaar at gmail.com  Tue Aug 19 11:42:49 2014
+From: erick.tryzelaar at gmail.com (Erick Tryzelaar)
+Date: Tue, 19 Aug 2014 11:42:49 -0700
+Subject: [rust-dev] 7/31 SF Bay Area Meetup
+In-Reply-To: <CALdfqQJan1d5_cx_T_5bQk7R=X3QnxHjPOMZoJeAY7nigJUTQw@mail.gmail.com>
+References: <CALdfqQJan1d5_cx_T_5bQk7R=X3QnxHjPOMZoJeAY7nigJUTQw@mail.gmail.com>
+Message-ID: <CALdfqQJOqMPGzRFx4MxoYqKgiEDL8ta26qXVTSj_BWFYiZAcyQ@mail.gmail.com>
+
+Hello everyone,
+
+After a long delay, I finally was able to get the video of the meetup
+uploaded here:
+
+https://air.mozilla.org/bay-area-rust-meetup-july-2014/
+
+Enjoy!
+-Erick
+
+
+
+On Tue, Jul 15, 2014 at 12:20 PM, Erick Tryzelaar <erick.tryzelaar at gmail.com
+> wrote:
+
+> Hello Oxidizers!
+>
+> I'm pleased to announce the next Bay Area Rust Meetup on Thursday July 31,
+> 2014, at Hack Reactor in San Francisco. Sign up here to attend:
+>
+> http://www.meetup.com/Rust-Bay-Area/events/181256992/
+>
+> This meetups theme is based on the amazing work at building Rust's web
+> infrastructure. We have talks across the  the entire web stack. Here is are
+> lineup of speakers:
+>
+> ? Jonathan Reem and Zach Pomerantz: Iron <https://github.com/iron/iron>
+> middleware framework
+>
+> ? Steven Fackler: The design and a bit of implementation of rust-postgres
+> <https://github.com/sfackler/rust-postgres/>. I'll also briefly go over
+> rust-postgres-macros which leverages Rust's compiler plugin support to add
+> some static safety checks to SQL statements.
+>
+> ? Christoph Burg: Floor <https://github.com/floor-org/floor> web server
+>
+> ? James Rowe: Why you should make a Web Framework in Rust
+>
+> Since we're having the event in a new location, we'll be funding dinner
+> ourselves tonight, so please bring a couple dollars to help chip in for the
+> food. We also hope to record the sessions for Air Mozilla and stream them
+> live online, but we're figuring out the details for that. I'll send out
+> more once we figure out setup out.
+>
+> Finally, please make sure to grab a visitor's pass from the reception desk
+> when you first get here.
+>
+> See you then!
+> -Erick
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140819/9101d761/attachment.html>
+
+From pcwalton at mozilla.com  Tue Aug 19 13:05:27 2014
+From: pcwalton at mozilla.com (Patrick Walton)
+Date: Tue, 19 Aug 2014 13:05:27 -0700
+Subject: [rust-dev] By-value variable captures landing soon
+Message-ID: <53F3AE07.8090903@mozilla.com>
+
+Hi everyone,
+
+I've submitted a pull request to make captures in closures *by-value* by 
+default. Previously, they were all by-reference (except for `proc`). 
+This means that several code patterns will break. Mutating upvars is the 
+most common pattern:
+
+     let mut a = 10;
+     [ 1i, 2, 3 ].iter().map(|x| a += *x);
+
+Change this code to:
+
+     let mut a = 10;
+     [ 1i, 2, 3 ].iter().map(ref |x| a += *x);
+
+That is, add the `ref` keyword before the opening `|` of the closure.
+
+As a simple measure to get your code up to date, you can simply prepend 
+`ref` en masse to your closures. This will allow you to opt into the old 
+semantics and will continue to work in the future.
+
+This is a preparatory change for the move to unboxed closures. After 
+this, there should be no further changes necessary to get your closures 
+up to date; they should "just work" after closures become unboxed by 
+default. (However, the *types* of your closures may change in the future 
+once boxed closures are removed, so you may have to update 
+function/method/etc. signatures. But the closures themselves should not 
+need to change.)
+
+Welcome to the brave new world!
+
+Patrick
+
+From pcwalton at mozilla.com  Tue Aug 19 13:07:37 2014
+From: pcwalton at mozilla.com (Patrick Walton)
+Date: Tue, 19 Aug 2014 13:07:37 -0700
+Subject: [rust-dev] By-value variable captures landing soon
+In-Reply-To: <53F3AE07.8090903@mozilla.com>
+References: <53F3AE07.8090903@mozilla.com>
+Message-ID: <53F3AE89.9030709@mozilla.com>
+
+On 8/19/14 1:05 PM, Patrick Walton wrote:
+> I've submitted a pull request to make captures in closures *by-value* by
+> default.
+
+Oh, here's the pull request:
+
+https://github.com/rust-lang/rust/pull/16610
+
+And here's the relevant RFC:
+
+https://github.com/rust-lang/rfcs/blob/master/active/0038-capture-by-value.md
+
+Related, the unboxed closures RFC:
+
+https://github.com/rust-lang/rfcs/blob/master/active/0044-closures.md
+
+Patrick
+
+
+From eg1290 at gmail.com  Tue Aug 19 13:39:44 2014
+From: eg1290 at gmail.com (Evan G)
+Date: Tue, 19 Aug 2014 15:39:44 -0500
+Subject: [rust-dev] By-value variable captures landing soon
+In-Reply-To: <53F3AE89.9030709@mozilla.com>
+References: <53F3AE07.8090903@mozilla.com>
+	<53F3AE89.9030709@mozilla.com>
+Message-ID: <CAJY4u8GLDYwuK0Qsai5=VwgiXYvq7mpvfu9xEq3HDMDH4J88HA@mail.gmail.com>
+
+Is there a way to capture some variables by-value, and others by-reference?
+The 'ref' syntax you talked about seemed to be only for the whole argument
+list, but I might have misunderstood.
+On Aug 19, 2014 3:07 PM, "Patrick Walton" <pcwalton at mozilla.com> wrote:
+
+> On 8/19/14 1:05 PM, Patrick Walton wrote:
+>
+>> I've submitted a pull request to make captures in closures *by-value* by
+>> default.
+>>
+>
+> Oh, here's the pull request:
+>
+> https://github.com/rust-lang/rust/pull/16610
+>
+> And here's the relevant RFC:
+>
+> https://github.com/rust-lang/rfcs/blob/master/active/0038-
+> capture-by-value.md
+>
+> Related, the unboxed closures RFC:
+>
+> https://github.com/rust-lang/rfcs/blob/master/active/0044-closures.md
+>
+> Patrick
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140819/6785d00b/attachment.html>
+
+From pcwalton at mozilla.com  Tue Aug 19 13:43:18 2014
+From: pcwalton at mozilla.com (Patrick Walton)
+Date: Tue, 19 Aug 2014 13:43:18 -0700
+Subject: [rust-dev] By-value variable captures landing soon
+In-Reply-To: <CAJY4u8GLDYwuK0Qsai5=VwgiXYvq7mpvfu9xEq3HDMDH4J88HA@mail.gmail.com>
+References: <53F3AE07.8090903@mozilla.com>	<53F3AE89.9030709@mozilla.com>
+	<CAJY4u8GLDYwuK0Qsai5=VwgiXYvq7mpvfu9xEq3HDMDH4J88HA@mail.gmail.com>
+Message-ID: <53F3B6E6.9000808@mozilla.com>
+
+On 8/19/14 1:39 PM, Evan G wrote:
+> Is there a way to capture some variables by-value, and others
+> by-reference? The 'ref' syntax you talked about seemed to be only for
+> the whole argument list, but I might have misunderstood.
+
+If you need more fine-grained control, you can create references 
+explicitly outside the closure, and capture those by-value along with 
+the other values you'd like to capture by value.
+
+Patrick
+
+
+From danielmicay at gmail.com  Tue Aug 19 13:43:31 2014
+From: danielmicay at gmail.com (Daniel Micay)
+Date: Tue, 19 Aug 2014 16:43:31 -0400
+Subject: [rust-dev] By-value variable captures landing soon
+In-Reply-To: <CAJY4u8GLDYwuK0Qsai5=VwgiXYvq7mpvfu9xEq3HDMDH4J88HA@mail.gmail.com>
+References: <53F3AE07.8090903@mozilla.com>	<53F3AE89.9030709@mozilla.com>
+	<CAJY4u8GLDYwuK0Qsai5=VwgiXYvq7mpvfu9xEq3HDMDH4J88HA@mail.gmail.com>
+Message-ID: <53F3B6F3.3080505@gmail.com>
+
+On 19/08/14 04:39 PM, Evan G wrote:
+> Is there a way to capture some variables by-value, and others
+> by-reference? The 'ref' syntax you talked about seemed to be only for
+> the whole argument list, but I might have misunderstood.
+
+You can capture references by-value, because they're normal values. The
+`ref` syntax is sugar for a common case.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140819/c6847a54/attachment.sig>
+
+From eg1290 at gmail.com  Tue Aug 19 14:05:44 2014
+From: eg1290 at gmail.com (Evan G)
+Date: Tue, 19 Aug 2014 16:05:44 -0500
+Subject: [rust-dev] By-value variable captures landing soon
+In-Reply-To: <53F3B6E6.9000808@mozilla.com>
+References: <53F3AE07.8090903@mozilla.com> <53F3AE89.9030709@mozilla.com>
+	<CAJY4u8GLDYwuK0Qsai5=VwgiXYvq7mpvfu9xEq3HDMDH4J88HA@mail.gmail.com>
+	<53F3B6E6.9000808@mozilla.com>
+Message-ID: <CAJY4u8FNCZLmK1VSWcNn-yBpHEiKF-LDp-vOAor0DTVzB4c5AQ@mail.gmail.com>
+
+That makes sense. Thanks.
+
+
+On Tue, Aug 19, 2014 at 3:43 PM, Patrick Walton <pcwalton at mozilla.com>
+wrote:
+
+> On 8/19/14 1:39 PM, Evan G wrote:
+>
+>> Is there a way to capture some variables by-value, and others
+>> by-reference? The 'ref' syntax you talked about seemed to be only for
+>> the whole argument list, but I might have misunderstood.
+>>
+>
+> If you need more fine-grained control, you can create references
+> explicitly outside the closure, and capture those by-value along with the
+> other values you'd like to capture by value.
+>
+> Patrick
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140819/9ecf1c45/attachment.html>
+
+From irrequietus at gmail.com  Sat Aug 23 12:47:14 2014
+From: irrequietus at gmail.com (George Makrydakis)
+Date: Sat, 23 Aug 2014 22:47:14 +0300
+Subject: [rust-dev] Status of CTFE in Rust (issue 11621)
+Message-ID: <53F8EFC2.4010404@gmail.com>
+
+Greetings,
+
+My question is related to https://github.com/rust-lang/rust/issues/11621 
+which has not seen meaningful updates so far. I decided to ask in a 
+separate thread rather than 
+https://mail.mozilla.org/pipermail/rust-dev/2014-January/008252.html 
+because I have not been able to find any updates to Pierre Talbot's 
+https://github.com/ptal/rust-ctfe-proposal which is partially discussed 
+there. Given that languages like C++ and D permit through various ways 
+some form of compile time function evaluation:
+
+(1) Is this ever coming to Rust or is it considered so low priority that 
+it is something for post 1.0?
+(2) What about Pierre Talbot's initial work, is it to continue (lack of 
+updates for 7 months) ?
+(3) How many people are working together or independently on CTFE?
+(4) Is there a possibility of a group of people working on this, 
+theoretically at least?
+
+It has been said in the irc channel that there is somewhat no opposition 
+to adding this feature, but there seems to be no concrete plan about it. 
+Please clarify if somebody has better insight on this.
+
+Thank you.
+
+From pwalton at mozilla.com  Sat Aug 23 13:10:17 2014
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 23 Aug 2014 13:10:17 -0700
+Subject: [rust-dev] Status of CTFE in Rust (issue 11621)
+In-Reply-To: <53F8EFC2.4010404@gmail.com>
+References: <53F8EFC2.4010404@gmail.com>
+Message-ID: <908b687f-91f9-4354-8f4b-7eded2c05032@email.android.com>
+
+I want to clarify something: "post 1.0" does not mean "low priority" or "will never come to Rust". Post-1.0 means just that: post 1.0. Without taking a position on this feature in particular, there are many high priority features slated for post 1.0. Think of 1.0 as a sort of minimum viable product in which plenty of useful software can be written productively and enjoyably, and is backwards-compatible so that we don't break people's code anymore.
+
+Patrick
+
+On August 23, 2014 12:47:14 PM PDT, George Makrydakis <irrequietus at gmail.com> wrote:
+>Greetings,
+>
+>My question is related to
+>https://github.com/rust-lang/rust/issues/11621 
+>which has not seen meaningful updates so far. I decided to ask in a 
+>separate thread rather than 
+>https://mail.mozilla.org/pipermail/rust-dev/2014-January/008252.html 
+>because I have not been able to find any updates to Pierre Talbot's 
+>https://github.com/ptal/rust-ctfe-proposal which is partially discussed
+>
+>there. Given that languages like C++ and D permit through various ways 
+>some form of compile time function evaluation:
+>
+>(1) Is this ever coming to Rust or is it considered so low priority
+>that 
+>it is something for post 1.0?
+>(2) What about Pierre Talbot's initial work, is it to continue (lack of
+>
+>updates for 7 months) ?
+>(3) How many people are working together or independently on CTFE?
+>(4) Is there a possibility of a group of people working on this, 
+>theoretically at least?
+>
+>It has been said in the irc channel that there is somewhat no
+>opposition 
+>to adding this feature, but there seems to be no concrete plan about
+>it. 
+>Please clarify if somebody has better insight on this.
+>
+>Thank you.
+>_______________________________________________
+>Rust-dev mailing list
+>Rust-dev at mozilla.org
+>https://mail.mozilla.org/listinfo/rust-dev
+
+-- 
+Sent from my Android phone with K-9 Mail. Please excuse my brevity.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140823/a38df0f0/attachment.html>
+
+From irrequietus at gmail.com  Sat Aug 23 13:47:46 2014
+From: irrequietus at gmail.com (George Makrydakis)
+Date: Sat, 23 Aug 2014 23:47:46 +0300
+Subject: [rust-dev] Status of CTFE in Rust (issue 11621)
+In-Reply-To: <908b687f-91f9-4354-8f4b-7eded2c05032@email.android.com>
+References: <53F8EFC2.4010404@gmail.com>
+	<908b687f-91f9-4354-8f4b-7eded2c05032@email.android.com>
+Message-ID: <53F8FDF2.2050102@gmail.com>
+
+
+On 08/23/2014 11:10 PM, Patrick Walton wrote:
+> I want to clarify something: "post 1.0" does not mean "low priority" 
+> or "will never come to Rust". Post-1.0 means just that: post 1.0. 
+> Without taking a position on this feature in particular, there are 
+> many high priority features slated for post 1.0. Think of 1.0 as a 
+> sort of minimum viable product in which plenty of useful software can 
+> be written productively and enjoyably, and is backwards-compatible so 
+> that we don't break people's code anymore.
+>
+> Patrick
+
+Thanks and definitely; I am just asking if this is slated already for 
+development by anybody or group of people that I am unaware of, despite 
+it is of no immediate concern.
+
+>
+> On August 23, 2014 12:47:14 PM PDT, George Makrydakis 
+> <irrequietus at gmail.com> wrote:
+>
+>     Greetings,
+>
+>     My question is related tohttps://github.com/rust-lang/rust/issues/11621  
+>     which has not seen meaningful updates so far. I decided to ask in a
+>     separate thread rather than
+>     https://mail.mozilla.org/pipermail/rust-dev/2014-January/008252.html  
+>     because I have not been able to find any updates to Pierre Talbot's
+>     https://github.com/ptal/rust-ctfe-proposal  which is partially discussed
+>     there. Given that languages like C++ and D permit through various ways
+>     some form of compile time function evaluation:
+>
+>     (1) Is this ever coming to Rust or is it considered so low priority that
+>     it is something for post 1.0?
+>     (2) What about Pierre Talbot's initial work, is it to continue (lack of
+>     updates for 7
+>     months) ?
+>     (3) How many people are working together or independently on CTFE?
+>     (4) Is there a possibility of a group of people working on this,
+>     theoretically at least?
+>
+>     It has been said in the irc channel that there is somewhat no opposition
+>     to adding this feature, but there seems to be no concrete plan about it.
+>     Please clarify if somebody has better insight on this.
+>
+>     Thank you.
+>     ------------------------------------------------------------------------
+>
+>     Rust-dev mailing list
+>     Rust-dev at mozilla.org
+>     https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+> -- 
+> Sent from my Android phone with K-9 Mail. Please excuse my brevity. 
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140823/f20713b6/attachment.html>
+
+From cg.wowus.cg at gmail.com  Sat Aug 23 15:14:59 2014
+From: cg.wowus.cg at gmail.com (Clark Gaebel)
+Date: Sat, 23 Aug 2014 18:14:59 -0400
+Subject: [rust-dev] [announce] CloQ
+Message-ID: <CA+aES6PnewP0Xz_JZBUFUa500Ke9bcQ6eGepPeVjj82sP+uOPg@mail.gmail.com>
+
+?Hi rust-dev!
+
+I would like to announce the release of a library I just wrote called CloQ:
+a queue of closures [1].
+
+It lets you store unboxed closures in a queue, and pop them out to run
+later. Think of it as a less box-y RingBuf<Box<Fn|FnMut|FnOnce>>.
+
+The only allocations it does is for a single backing array of memory, and
+the only dependencies are on liballoc and libcore (and libtest for testing).
+
+I hope this helps people looking to make performant schedulers when unboxed
+closures are fully complete.
+
+Have fun!
+  - Clark
+
+[1] https://github.com/cgaebel/cloq
+
+?
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140823/e069d0f8/attachment.html>
+
+From vadimcn at gmail.com  Sun Aug 24 14:48:04 2014
+From: vadimcn at gmail.com (Vadim Chugunov)
+Date: Sun, 24 Aug 2014 14:48:04 -0700
+Subject: [rust-dev] Dynamic format template
+Message-ID: <CADecdi+ZYQvkxJPbtpiB7Kgq3npMC0+kGa_BUUmbfrM2RA8=bw@mail.gmail.com>
+
+Hi,
+Is there any way to make Rust's fmt module to consume format template
+specified at runtime?
+This might be useful for localization of format!'ed strings, or, if one
+wants to use format! as a rudimentary template engine.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140824/4a4c7e7f/attachment.html>
+
+From kevin at sb.org  Sun Aug 24 16:33:25 2014
+From: kevin at sb.org (Kevin Ballard)
+Date: Sun, 24 Aug 2014 16:33:25 -0700
+Subject: [rust-dev] Dynamic format template
+In-Reply-To: <CADecdi+ZYQvkxJPbtpiB7Kgq3npMC0+kGa_BUUmbfrM2RA8=bw@mail.gmail.com>
+References: <CADecdi+ZYQvkxJPbtpiB7Kgq3npMC0+kGa_BUUmbfrM2RA8=bw@mail.gmail.com>
+Message-ID: <22E3ACBA-8C86-4BB0-B5E4-3CFE65459717@sb.org>
+
+It?s technically possible, but horribly unsafe. The only thing that makes it safe to do normally is the syntax extension that implements `format!()` ensures all the types match. If you really think you need this, you can look at the implementation of core::fmt. But it?s certainly not appropriate for localization, or template engines.
+
+-Kevin Ballard
+
+> On Aug 24, 2014, at 2:48 PM, Vadim Chugunov <vadimcn at gmail.com> wrote:
+> 
+> Hi,
+> Is there any way to make Rust's fmt module to consume format template specified at runtime? 
+> This might be useful for localization of format!'ed strings, or, if one wants to use format! as a rudimentary template engine.
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: smime.p7s
+Type: application/pkcs7-signature
+Size: 4118 bytes
+Desc: not available
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140824/8dad974d/attachment.p7s>
+
+From matthieu.monrocq at gmail.com  Mon Aug 25 09:29:48 2014
+From: matthieu.monrocq at gmail.com (Matthieu Monrocq)
+Date: Mon, 25 Aug 2014 18:29:48 +0200
+Subject: [rust-dev] Dynamic format template
+In-Reply-To: <22E3ACBA-8C86-4BB0-B5E4-3CFE65459717@sb.org>
+References: <CADecdi+ZYQvkxJPbtpiB7Kgq3npMC0+kGa_BUUmbfrM2RA8=bw@mail.gmail.com>
+	<22E3ACBA-8C86-4BB0-B5E4-3CFE65459717@sb.org>
+Message-ID: <CAKE6RfjGahA74BajmyaumdFdkwmPs8wECmcKDz+u+j=agGyZmQ@mail.gmail.com>
+
+While not possible today, there is actually nothing preventing you to
+create a safe alternative (or even improving format so it works in this
+way).
+
+In a sense, a formatting function has two set of inputs:
+
+- the format itself, from which you extract a set of constraints (expected
+type-signature)
+- the arguments to format, which can be seen as a single tuple (provided
+type-signature)
+
+And as long as you can ensure at compile time that you never attempt to
+apply an "expected type-signature" to an incompatible "provided
+type-signature", then you are safe.
+
+
+I would suppose that as far as having runtime formats go, you would need to
+introduce an intermediary step: the expected type-signature.
+
+You could have a "Format" object, generic over the expected type-signature,
+and a "new" constructor method taking a &str and returning an
+"Option<Format<...>>".
+
+
+Now, you have two phases:
+
+ - the "new" constructor checks, at runtime, that the specified format
+matches the expected type-signature
+ - the compiler checks, at compile-time, that the provided type-signature
+(arguments) match the expected type-signature (or it can be coerced to)
+
+It might require variadic generics and subtle massaging of the type system,
+however I do think it would be possible.
+
+
+It might not be the best way to attack the issue though.
+
+
+
+On Mon, Aug 25, 2014 at 1:33 AM, Kevin Ballard <kevin at sb.org> wrote:
+
+> It?s technically possible, but horribly unsafe. The only thing that makes
+> it safe to do normally is the syntax extension that implements `format!()`
+> ensures all the types match. If you really think you need this, you can
+> look at the implementation of core::fmt. But it?s certainly not appropriate
+> for localization, or template engines.
+>
+> -Kevin Ballard
+>
+> > On Aug 24, 2014, at 2:48 PM, Vadim Chugunov <vadimcn at gmail.com> wrote:
+> >
+> > Hi,
+> > Is there any way to make Rust's fmt module to consume format template
+> specified at runtime?
+> > This might be useful for localization of format!'ed strings, or, if one
+> wants to use format! as a rudimentary template engine.
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org
+> > https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140825/435863e6/attachment.html>
+
+From gwatson at mozilla.com  Mon Aug 25 14:54:36 2014
+From: gwatson at mozilla.com (Glenn Watson)
+Date: Tue, 26 Aug 2014 07:54:36 +1000
+Subject: [rust-dev] [ANN] RACER integration for Sublime Text
+Message-ID: <53FBB09C.8070106@mozilla.com>
+
+Hi,
+
+I've started a simple integration of the RACER code completion utility 
+for Sublime Text 3.
+
+Source code (and more information) is available here:
+https://github.com/glennw/RustAutoComplete
+
+You can install it through Package Control:
+https://sublime.wbond.net/packages/RustAutoComplete
+
+Pull requests for new features or fixes are welcome!
+
+Cheers
+
+
+From banderson at mozilla.com  Mon Aug 25 15:31:12 2014
+From: banderson at mozilla.com (Brian Anderson)
+Date: Mon, 25 Aug 2014 15:31:12 -0700
+Subject: [rust-dev] [ANN] RACER integration for Sublime Text
+In-Reply-To: <53FBB09C.8070106@mozilla.com>
+References: <53FBB09C.8070106@mozilla.com>
+Message-ID: <53FBB930.1020209@mozilla.com>
+
+Awesome, Glenn! Thanks. Racer all the things.
+
+On 08/25/2014 02:54 PM, Glenn Watson wrote:
+> Hi,
+>
+> I've started a simple integration of the RACER code completion utility 
+> for Sublime Text 3.
+>
+> Source code (and more information) is available here:
+> https://github.com/glennw/RustAutoComplete
+>
+> You can install it through Package Control:
+> https://sublime.wbond.net/packages/RustAutoComplete
+>
+> Pull requests for new features or fixes are welcome!
+>
+> Cheers
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From rustphil at phildawes.net  Mon Aug 25 22:15:17 2014
+From: rustphil at phildawes.net (Phil Dawes)
+Date: Tue, 26 Aug 2014 06:15:17 +0100
+Subject: [rust-dev] [ANN] RACER integration for Sublime Text
+In-Reply-To: <CAPb4X5nAFrGLvbfECmMz_U_Ziwk=HUAoBPzZZJ-mRjsvz99BNA@mail.gmail.com>
+References: <53FBB09C.8070106@mozilla.com>
+	<CAPb4X5nAFrGLvbfECmMz_U_Ziwk=HUAoBPzZZJ-mRjsvz99BNA@mail.gmail.com>
+Message-ID: <CAPb4X5=rqERBaPxuZ3kqwpVgutLkC78XVnf3zwDWOmn0_8dtgw@mail.gmail.com>
+
+Oops, forgot to CC the list. Gmail strikes again!
+
+
+On Tue, Aug 26, 2014 at 6:13 AM, Phil Dawes <rustphil at phildawes.net> wrote:
+
+> This is awesome. A bunch of people have been asking for this so thanks
+> very much for building it.
+>
+> I don't know much about sublime text - does it make sense to bundle this
+> with the racer package?
+>
+> Cheers,
+>
+> Phil
+>
+>
+> On Mon, Aug 25, 2014 at 10:54 PM, Glenn Watson <gwatson at mozilla.com>
+> wrote:
+>
+>> Hi,
+>>
+>> I've started a simple integration of the RACER code completion utility
+>> for Sublime Text 3.
+>>
+>> Source code (and more information) is available here:
+>> https://github.com/glennw/RustAutoComplete
+>>
+>> You can install it through Package Control:
+>> https://sublime.wbond.net/packages/RustAutoComplete
+>>
+>> Pull requests for new features or fixes are welcome!
+>>
+>> Cheers
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140826/e7dc08bc/attachment.html>
+
+From gwatson at mozilla.com  Mon Aug 25 22:33:40 2014
+From: gwatson at mozilla.com (Glenn Watson)
+Date: Tue, 26 Aug 2014 15:33:40 +1000
+Subject: [rust-dev] [ANN] RACER integration for Sublime Text
+In-Reply-To: <CAPb4X5=rqERBaPxuZ3kqwpVgutLkC78XVnf3zwDWOmn0_8dtgw@mail.gmail.com>
+References: <53FBB09C.8070106@mozilla.com>	<CAPb4X5nAFrGLvbfECmMz_U_Ziwk=HUAoBPzZZJ-mRjsvz99BNA@mail.gmail.com>
+	<CAPb4X5=rqERBaPxuZ3kqwpVgutLkC78XVnf3zwDWOmn0_8dtgw@mail.gmail.com>
+Message-ID: <53FC1C34.70405@mozilla.com>
+
+I'm not really sure - I don't know much about the ST ecosystem either :)
+
+I suspect it's easier to keep it separate given the way Package Control 
+seems to work but someone more knowledgeable about ST may like to 
+comment on that?
+
+I'd be happy to bundle it with Racer if it makes sense to do so.
+
+Cheers
+
+
+On 26/08/14 15:15, Phil Dawes wrote:
+> Oops, forgot to CC the list. Gmail strikes again!
+>
+>
+> On Tue, Aug 26, 2014 at 6:13 AM, Phil Dawes <rustphil at phildawes.net 
+> <mailto:rustphil at phildawes.net>> wrote:
+>
+>     This is awesome. A bunch of people have been asking for this so
+>     thanks very much for building it.
+>
+>     I don't know much about sublime text - does it make sense to
+>     bundle this with the racer package?
+>
+>     Cheers,
+>
+>     Phil
+>
+>
+>     On Mon, Aug 25, 2014 at 10:54 PM, Glenn Watson
+>     <gwatson at mozilla.com <mailto:gwatson at mozilla.com>> wrote:
+>
+>         Hi,
+>
+>         I've started a simple integration of the RACER code completion
+>         utility for Sublime Text 3.
+>
+>         Source code (and more information) is available here:
+>         https://github.com/glennw/RustAutoComplete
+>
+>         You can install it through Package Control:
+>         https://sublime.wbond.net/packages/RustAutoComplete
+>
+>         Pull requests for new features or fixes are welcome!
+>
+>         Cheers
+>
+>         _______________________________________________
+>         Rust-dev mailing list
+>         Rust-dev at mozilla.org <mailto:Rust-dev at mozilla.org>
+>         https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+>
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140826/da6b7e82/attachment.html>
+
+From manishsmail at gmail.com  Tue Aug 26 13:12:19 2014
+From: manishsmail at gmail.com (Manish Goregaokar)
+Date: Wed, 27 Aug 2014 01:42:19 +0530
+Subject: [rust-dev] Dynamic format template
+In-Reply-To: <CAKE6RfjGahA74BajmyaumdFdkwmPs8wECmcKDz+u+j=agGyZmQ@mail.gmail.com>
+References: <CADecdi+ZYQvkxJPbtpiB7Kgq3npMC0+kGa_BUUmbfrM2RA8=bw@mail.gmail.com>
+	<22E3ACBA-8C86-4BB0-B5E4-3CFE65459717@sb.org>
+	<CAKE6RfjGahA74BajmyaumdFdkwmPs8wECmcKDz+u+j=agGyZmQ@mail.gmail.com>
+Message-ID: <CACpkpxnVh7ido2s62ykaqRUnHGXcyGmoo4nysLt-TZBpOO-_ug@mail.gmail.com>
+
+Why not create a trait Localizer , and make Box<Localizer> fmt!able?
+
+-Manish Goregaokar
+
+
+On Mon, Aug 25, 2014 at 9:59 PM, Matthieu Monrocq <
+matthieu.monrocq at gmail.com> wrote:
+
+> While not possible today, there is actually nothing preventing you to
+> create a safe alternative (or even improving format so it works in this
+> way).
+>
+> In a sense, a formatting function has two set of inputs:
+>
+> - the format itself, from which you extract a set of constraints (expected
+> type-signature)
+> - the arguments to format, which can be seen as a single tuple (provided
+> type-signature)
+>
+> And as long as you can ensure at compile time that you never attempt to
+> apply an "expected type-signature" to an incompatible "provided
+> type-signature", then you are safe.
+>
+>
+> I would suppose that as far as having runtime formats go, you would need
+> to introduce an intermediary step: the expected type-signature.
+>
+> You could have a "Format" object, generic over the expected
+> type-signature, and a "new" constructor method taking a &str and returning
+> an "Option<Format<...>>".
+>
+>
+> Now, you have two phases:
+>
+>  - the "new" constructor checks, at runtime, that the specified format
+> matches the expected type-signature
+>  - the compiler checks, at compile-time, that the provided type-signature
+> (arguments) match the expected type-signature (or it can be coerced to)
+>
+> It might require variadic generics and subtle massaging of the type
+> system, however I do think it would be possible.
+>
+>
+> It might not be the best way to attack the issue though.
+>
+>
+>
+> On Mon, Aug 25, 2014 at 1:33 AM, Kevin Ballard <kevin at sb.org> wrote:
+>
+>> It?s technically possible, but horribly unsafe. The only thing that makes
+>> it safe to do normally is the syntax extension that implements `format!()`
+>> ensures all the types match. If you really think you need this, you can
+>> look at the implementation of core::fmt. But it?s certainly not appropriate
+>> for localization, or template engines.
+>>
+>> -Kevin Ballard
+>>
+>> > On Aug 24, 2014, at 2:48 PM, Vadim Chugunov <vadimcn at gmail.com> wrote:
+>> >
+>> > Hi,
+>> > Is there any way to make Rust's fmt module to consume format template
+>> specified at runtime?
+>> > This might be useful for localization of format!'ed strings, or, if one
+>> wants to use format! as a rudimentary template engine.
+>> > _______________________________________________
+>> > Rust-dev mailing list
+>> > Rust-dev at mozilla.org
+>> > https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140827/8da2ade9/attachment.html>
+
+From steve at steveklabnik.com  Tue Aug 26 15:27:10 2014
+From: steve at steveklabnik.com (Steve Klabnik)
+Date: Tue, 26 Aug 2014 18:27:10 -0400
+Subject: [rust-dev] Brooklyn.rs meetup #2
+Message-ID: <CABL+ZB7_N_+aE8KDSNiHNkE4hGvjzmTQag6fzPp5FFm5DwdOhg@mail.gmail.com>
+
+Hey all,
+
+I've been really busy, and let Brooklyn.rs slide. Rather than let the
+perfect be the enemy of the good, we'll have another hack day this
+Saturday, the 30th, at Brooklyn Roasting Company at 1pm. Next month
+I'll try to do one on a weeknight somewhere.
+
+I've also updated the community calendar, and don't plan on spamming
+rust-dev again, since this is a local thing. I did add a mailing list
+signup to http://brooklyn.rs/ though, so please sign up there if you
+want to hear about future events.
+
+- Steve
+
+From manishsmail at gmail.com  Wed Aug 27 11:23:22 2014
+From: manishsmail at gmail.com (Manish Goregaokar)
+Date: Wed, 27 Aug 2014 23:53:22 +0530
+Subject: [rust-dev] Cleaner and more visible llvm options?
+Message-ID: <CACpkpxkTbAAJQ7nYgHxeQnbKBE=Uujh5P0mvhU1_M3Cajoj_cQ@mail.gmail.com>
+
+A few days ago I was setting up a clean Rust build, and I wanted to avoid
+the llvm build.
+
+For some reason, the apt-get install from the Travis file didn't work --
+there were gpg issues. Eventually I ended up using Servo's llvm snapshot.
+Which was fine with me.
+
+However, the only reason I knew that we could do this was because I've
+worked with Rust's travis file before and knew that llvm could be
+apt-get'ed with some gpg jugglery.
+
+Today, a friend of mine was trying to build Rust, and he had no clue about
+this -- so went to build LLVM. LLVM takes *very* long to compile -- perhaps
+we should make the apt-get alternative more visible somehow? Compile times
+can be a put off to newbies.
+
+Even better, provide our own llvm snapshot on rust-lang.org that gets
+downloaded with the right configure flag, perhaps even making this the
+default option. Servo does this for Rust, and it's a rather smooth
+experience.
+
+-Manishearth
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140827/d6beac54/attachment.html>
+
+From banderson at mozilla.com  Wed Aug 27 11:49:04 2014
+From: banderson at mozilla.com (Brian Anderson)
+Date: Wed, 27 Aug 2014 11:49:04 -0700
+Subject: [rust-dev] Cleaner and more visible llvm options?
+In-Reply-To: <CACpkpxkTbAAJQ7nYgHxeQnbKBE=Uujh5P0mvhU1_M3Cajoj_cQ@mail.gmail.com>
+References: <CACpkpxkTbAAJQ7nYgHxeQnbKBE=Uujh5P0mvhU1_M3Cajoj_cQ@mail.gmail.com>
+Message-ID: <53FE2820.2030405@mozilla.com>
+
+Right now the options are to use the default in-tree build, or your own 
+out-of-tree build. The out-of-tree build is risky because it doesn't 
+carry our patches and isn't tested.
+
+You are suggesting that we also provide official LLVM snapshots. This 
+has been considered many times but never done for a few reasons: the 
+time and effort to set up more automation; the LLVM build happens "once" 
+and then it doesn't get rebuilt (of course in practice people rebuild 
+LLVM pretty often); with more people using binaries and not building 
+from source the pain isn't universal. Basically, it's never been painful 
+enough to fix.
+
+I opened a bug at least: https://github.com/rust-lang/rust/issues/16796
+
+On 08/27/2014 11:23 AM, Manish Goregaokar wrote:
+> A few days ago I was setting up a clean Rust build, and I wanted to 
+> avoid the llvm build.
+>
+> For some reason, the apt-get install from the Travis file didn't work 
+> -- there were gpg issues. Eventually I ended up using Servo's llvm 
+> snapshot. Which was fine with me.
+>
+> However, the only reason I knew that we could do this was because I've 
+> worked with Rust's travis file before and knew that llvm could be 
+> apt-get'ed with some gpg jugglery.
+>
+> Today, a friend of mine was trying to build Rust, and he had no clue 
+> about this -- so went to build LLVM. LLVM takes /very/ long to compile 
+> -- perhaps we should make the apt-get alternative more visible 
+> somehow? Compile times can be a put off to newbies.
+>
+> Even better, provide our own llvm snapshot on rust-lang.org 
+> <http://rust-lang.org/> that gets downloaded with the right configure 
+> flag, perhaps even making this the default option. Servo does this for 
+> Rust, and it's a rather smooth experience.
+>
+> -Manishearth
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140827/ddad253a/attachment.html>
+
+From pnathan.software at gmail.com  Wed Aug 27 14:31:54 2014
+From: pnathan.software at gmail.com (Paul Nathan)
+Date: Wed, 27 Aug 2014 14:31:54 -0700
+Subject: [rust-dev] Rust Meetup in Seattle Sept 8
+In-Reply-To: <CALXzQZiUQKHTpNXwd1gi4xQ3TqtJH+=K6dbVySaLv8SiytubGw@mail.gmail.com>
+References: <CALXzQZiUQKHTpNXwd1gi4xQ3TqtJH+=K6dbVySaLv8SiytubGw@mail.gmail.com>
+Message-ID: <CALXzQZjg5L+ArHtOgY0NOpL3gWgREt3==BqXrGeXBzFDUCOv6Q@mail.gmail.com>
+
+Hi,
+
+Sept 8 is the next meet up time for Rust in Seattle.  While I could get my
+fine employer to host again, I think another venue would be nice for people
+who don't care to come downtown after 6.  The venue should be able to hold
+4-10 people.
+
+It would also be nice to get some presentations prearranged. Cargo has been
+bruited about as a black box that would be nice to learn more about.
+
+Thanks,
+Paul
+
+P.S., this marks the fourth Seattle Rust meet up. I wonder how stickers
+could be arranged. Is there a Mozilla rep in Seattle that could help out
+here? :)
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140827/a6b95784/attachment.html>
+
+From banderson at mozilla.com  Wed Aug 27 15:49:50 2014
+From: banderson at mozilla.com (Brian Anderson)
+Date: Wed, 27 Aug 2014 15:49:50 -0700
+Subject: [rust-dev] Rust Meetup in Seattle Sept 8
+In-Reply-To: <CALXzQZjg5L+ArHtOgY0NOpL3gWgREt3==BqXrGeXBzFDUCOv6Q@mail.gmail.com>
+References: <CALXzQZiUQKHTpNXwd1gi4xQ3TqtJH+=K6dbVySaLv8SiytubGw@mail.gmail.com>
+	<CALXzQZjg5L+ArHtOgY0NOpL3gWgREt3==BqXrGeXBzFDUCOv6Q@mail.gmail.com>
+Message-ID: <53FE608E.3060801@mozilla.com>
+
+I will ship stickers to anybody doing promotion for Rust. Email me your 
+shipping address and the quantity in private.
+
+On 08/27/2014 02:31 PM, Paul Nathan wrote:
+>
+> Hi,
+>
+> Sept 8 is the next meet up time for Rust in Seattle. While I could get 
+> my fine employer to host again, I think another venue would be nice 
+> for people who don't care to come downtown after 6.  The venue should 
+> be able to hold 4-10 people.
+>
+> It would also be nice to get some presentations prearranged. Cargo has 
+> been bruited about as a black box that would be nice to learn more about.
+>
+> Thanks,
+> Paul
+>
+> P.S., this marks the fourth Seattle Rust meet up. I wonder how 
+> stickers could be arranged. Is there a Mozilla rep in Seattle that 
+> could help out here? :)
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140827/30348648/attachment.html>
+
+From pnathan.software at gmail.com  Thu Aug 28 14:39:11 2014
+From: pnathan.software at gmail.com (Paul Nathan)
+Date: Thu, 28 Aug 2014 14:39:11 -0700
+Subject: [rust-dev] Rust Meetup in Seattle Sept 8
+In-Reply-To: <CALXzQZjg5L+ArHtOgY0NOpL3gWgREt3==BqXrGeXBzFDUCOv6Q@mail.gmail.com>
+References: <CALXzQZiUQKHTpNXwd1gi4xQ3TqtJH+=K6dbVySaLv8SiytubGw@mail.gmail.com>
+	<CALXzQZjg5L+ArHtOgY0NOpL3gWgREt3==BqXrGeXBzFDUCOv6Q@mail.gmail.com>
+Message-ID: <CALXzQZisf9b2fwbmYnjpDYs=pVF2GH6LWaHBQuGeDnSSErHgiA@mail.gmail.com>
+
+Hi!
+
+The UW has graciously allowed us to use one of their rooms:
+
+Quoth tyoverby on r/Rust:
+
+I've reserved room 203 in the CSE building from 5:30pm to 9:00pm.  The room
+has whiteboards on all the walls and also has a projector.
+
+http://www.reddit.com/r/rust/comments/2erz55/seattle_rust_meetup_sept_8/ck33uxt
+ On Aug 27, 2014 2:31 PM, "Paul Nathan" <pnathan.software at gmail.com> wrote:
+
+> Hi,
+>
+> Sept 8 is the next meet up time for Rust in Seattle.  While I could get my
+> fine employer to host again, I think another venue would be nice for people
+> who don't care to come downtown after 6.  The venue should be able to hold
+> 4-10 people.
+>
+> It would also be nice to get some presentations prearranged. Cargo has
+> been bruited about as a black box that would be nice to learn more about.
+>
+> Thanks,
+> Paul
+>
+> P.S., this marks the fourth Seattle Rust meet up. I wonder how stickers
+> could be arranged. Is there a Mozilla rep in Seattle that could help out
+> here? :)
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140828/4a53b072/attachment.html>
+
+From nodakai at gmail.com  Fri Aug 29 18:49:20 2014
+From: nodakai at gmail.com (Kai Noda)
+Date: Sat, 30 Aug 2014 09:49:20 +0800
+Subject: [rust-dev] Can Rust Git HEAD build Git HEAD itself?
+Message-ID: <CAHx8Sr=qwH9++HQ+urwv0Rr3sQ9Kp-oZPB9QzQvChBQpCbkusw@mail.gmail.com>
+
+Hi Rustlers,
+
+When I build Rust Git HEAD with the binary package from rust-lang.org in
+this way,
+
+$ CC=gcc47 CXX=g++47 ./configure --prefix=$HOME/local/rust
+--enable-valgrind --enable-local-rust
+--local-rust-root=$HOME/local/rust-nightly-x86_64-unknown-linux-gnu/
+$ make -j8 install
+
+it (usually) works fine.  However, whey I try to use the above installation
+of Rust to build the same Git HEAD itself like this way,
+
+CC=gcc47 CXX=g++47 ./configure --prefix=$HOME/local/rust --enable-valgrind
+--enable-local-rust --local-rust-root=$HOME/local/rust
+$ make
+
+I've never been successful (as of today, I get errors quoted at the end of
+this mail.)
+
+Is this normal (do all developers usually use the binary package?) or
+should I file bug reports to Github whenever I see them?  I was a bit
+surprised to see them because I thought (platform-triple)/stage[0-3] were
+bootstrapping phases.  Of course I'm well aware that Rust is in a very
+early stage of development...
+
+Regards,
+Kai
+
+??  ? <nodakai at gmail.com>
+
+
+rustc:
+x86_64-unknown-linux-gnu/stage0/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcore
+/home/nodakai/src/rust-HEAD/src/libcore/lib.rs:61:37: 61:57 warning:
+feature has added to rust, directive not necessary
+/home/nodakai/src/rust-HEAD/src/libcore/lib.rs:61 #![feature(simd,
+unsafe_destructor, issue_5723_bootstrap)]
+
+          ^~~~~~~~~~~~~~~~~~~~
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337:1: 341:2 error: the
+parameter type `T` may not live long enough; consider adding an explicit
+lifetime bound `T:'b`...
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337 pub struct Ref<'b, T> {
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:338     // FIXME #12808:
+strange name to try to avoid interfering with
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:339     // field accesses
+of the contained type via Deref
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:340     _parent: &'b
+RefCell<T>
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:341 }
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337:1: 341:2 note: ...so
+that the reference type `&'b cell::RefCell<T>` does not outlive the data it
+points at
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337 pub struct Ref<'b, T> {
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:338     // FIXME #12808:
+strange name to try to avoid interfering with
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:339     // field accesses
+of the contained type via Deref
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:340     _parent: &'b
+RefCell<T>
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:341 }
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392:1: 396:2 error: the
+parameter type `T` may not live long enough; consider adding an explicit
+lifetime bound `T:'b`...
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392 pub struct RefMut<'b,
+T> {
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:393     // FIXME #12808:
+strange name to try to avoid interfering with
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:394     // field accesses
+of the contained type via Deref
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:395     _parent: &'b
+RefCell<T>
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:396 }
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392:1: 396:2 note: ...so
+that the reference type `&'b cell::RefCell<T>` does not outlive the data it
+points at
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392 pub struct RefMut<'b,
+T> {
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:393     // FIXME #12808:
+strange name to try to avoid interfering with
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:394     // field accesses
+of the contained type via Deref
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:395     _parent: &'b
+RefCell<T>
+/home/nodakai/src/rust-HEAD/src/libcore/cell.rs:396 }
+/home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112:1: 115:2 error: the
+parameter type `A` may not live long enough; consider adding an explicit
+lifetime bound `A:'a`...
+/home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112 struct
+Finallyalizer<'a,A> {
+/home/nodakai/src/rust-HEAD/src/libcore/finally.rs:113     mutate: &'a mut
+A,
+/home/nodakai/src/rust-HEAD/src/libcore/finally.rs:114     dtor: |&mut A|:
+'a
+/home/nodakai/src/rust-HEAD/src/libcore/finally.rs:115 }
+/home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112:1: 115:2 note: ...so
+that the reference type `&'a mut A` does not outlive the data it points at
+/home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112 struct
+Finallyalizer<'a,A> {
+/home/nodakai/src/rust-HEAD/src/libcore/finally.rs:113     mutate: &'a mut
+A,
+/home/nodakai/src/rust-HEAD/src/libcore/finally.rs:114     dtor: |&mut A|:
+'a
+/home/nodakai/src/rust-HEAD/src/libcore/finally.rs:115 }
+/home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788:1: 790:2 error: the
+parameter type `T` may not live long enough; consider adding an explicit
+lifetime bound `T:'a`...
+/home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788 pub struct ByRef<'a, T>
+{
+/home/nodakai/src/rust-HEAD/src/libcore/iter.rs:789     iter: &'a mut T
+/home/nodakai/src/rust-HEAD/src/libcore/iter.rs:790 }
+/home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788:1: 790:2 note: ...so
+that the reference type `&'a mut T` does not outlive the data it points at
+/home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788 pub struct ByRef<'a, T>
+{
+/home/nodakai/src/rust-HEAD/src/libcore/iter.rs:789     iter: &'a mut T
+/home/nodakai/src/rust-HEAD/src/libcore/iter.rs:790 }
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138:1: 1142:2 error: the
+parameter type `T` may not live long enough; consider adding an explicit
+lifetime bound `T:'a`...
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138 pub struct Splits<'a,
+T> {
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1139     v: &'a [T],
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1140     pred: |t: &T|: 'a
+-> bool,
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1141     finished: bool
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1142 }
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138:1: 1142:2 note: ...so
+that the reference type `&'a [T]` does not outlive the data it points at
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138 pub struct Splits<'a,
+T> {
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1139     v: &'a [T],
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1140     pred: |t: &T|: 'a
+-> bool,
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1141     finished: bool
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1142 }
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205:1: 1209:2 error: the
+parameter type `T` may not live long enough; consider adding an explicit
+lifetime bound `T:'a`...
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205 pub struct
+MutSplits<'a, T> {
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1206     v: &'a mut [T],
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1207     pred: |t: &T|: 'a
+-> bool,
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1208     finished: bool
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1209 }
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205:1: 1209:2 note: ...so
+that the reference type `&'a mut [T]` does not outlive the data it points at
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205 pub struct
+MutSplits<'a, T> {
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1206     v: &'a mut [T],
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1207     pred: |t: &T|: 'a
+-> bool,
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1208     finished: bool
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1209 }
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321:1: 1324:2 error: the
+parameter type `T` may not live long enough; consider adding an explicit
+lifetime bound `T:'a`...
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321 pub struct
+Windows<'a, T> {
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1322     v: &'a [T],
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1323     size: uint
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1324 }
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321:1: 1324:2 note: ...so
+that the reference type `&'a [T]` does not outlive the data it points at
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321 pub struct
+Windows<'a, T> {
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1322     v: &'a [T],
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1323     size: uint
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1324 }
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367:1: 1370:2 error: the
+parameter type `T` may not live long enough; consider adding an explicit
+lifetime bound `T:'a`...
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367 pub struct Chunks<'a,
+T> {
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1368     v: &'a [T],
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1369     size: uint
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1370 }
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367:1: 1370:2 note: ...so
+that the reference type `&'a [T]` does not outlive the data it points at
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367 pub struct Chunks<'a,
+T> {
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1368     v: &'a [T],
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1369     size: uint
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1370 }
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459:1: 1462:2 error: the
+parameter type `T` may not live long enough; consider adding an explicit
+lifetime bound `T:'a`...
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459 pub struct
+MutChunks<'a, T> {
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1460     v: &'a mut [T],
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1461     chunk_size: uint
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1462 }
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459:1: 1462:2 note: ...so
+that the reference type `&'a mut [T]` does not outlive the data it points at
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459 pub struct
+MutChunks<'a, T> {
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1460     v: &'a mut [T],
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1461     chunk_size: uint
+/home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1462 }
+error: aborting due to 9 previous errors
+make: ***
+[x86_64-unknown-linux-gnu/stage0/lib/rustlib/x86_64-unknown-linux-gnu/lib/stamp.core]
+Error 101
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140830/4f522dbd/attachment.html>
+
+From masanori.ogino at gmail.com  Fri Aug 29 19:07:11 2014
+From: masanori.ogino at gmail.com (Masanori Ogino)
+Date: Sat, 30 Aug 2014 11:07:11 +0900
+Subject: [rust-dev] Can Rust Git HEAD build Git HEAD itself?
+In-Reply-To: <CAHx8Sr=qwH9++HQ+urwv0Rr3sQ9Kp-oZPB9QzQvChBQpCbkusw@mail.gmail.com>
+References: <CAHx8Sr=qwH9++HQ+urwv0Rr3sQ9Kp-oZPB9QzQvChBQpCbkusw@mail.gmail.com>
+Message-ID: <CAA-4+jdBzEzqS1Z_1ySHZLAZ0LUT37OaCb6YMOD_N2giBPanrA@mail.gmail.com>
+
+To bootstrap from binary snapshots, Rust often uses #[cfg(stage0)] and
+#[cfg(not(stage0))] when breaking changes are approved. When we update
+snapshots #[cfg(stage0)] code is removed and #[cfg(not(stage0))] code is
+used in all stages.
+
+If you use git HEAD Rust for bootstrapping after such breaking changes are
+landed, git HEAD might fail to compile #[cfg(stage0)] code.
+
+cf. https://github.com/rust-lang/rust/pull/16859
+
+
+2014-08-30 10:49 GMT+09:00 Kai Noda <nodakai at gmail.com>:
+
+> Hi Rustlers,
+>
+> When I build Rust Git HEAD with the binary package from rust-lang.org in
+> this way,
+>
+> $ CC=gcc47 CXX=g++47 ./configure --prefix=$HOME/local/rust
+> --enable-valgrind --enable-local-rust
+> --local-rust-root=$HOME/local/rust-nightly-x86_64-unknown-linux-gnu/
+> $ make -j8 install
+>
+> it (usually) works fine.  However, whey I try to use the above
+> installation of Rust to build the same Git HEAD itself like this way,
+>
+> CC=gcc47 CXX=g++47 ./configure --prefix=$HOME/local/rust --enable-valgrind
+> --enable-local-rust --local-rust-root=$HOME/local/rust
+> $ make
+>
+> I've never been successful (as of today, I get errors quoted at the end of
+> this mail.)
+>
+> Is this normal (do all developers usually use the binary package?) or
+> should I file bug reports to Github whenever I see them?  I was a bit
+> surprised to see them because I thought (platform-triple)/stage[0-3] were
+> bootstrapping phases.  Of course I'm well aware that Rust is in a very
+> early stage of development...
+>
+> Regards,
+> Kai
+>
+> ??  ? <nodakai at gmail.com>
+>
+>
+> rustc:
+> x86_64-unknown-linux-gnu/stage0/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcore
+> /home/nodakai/src/rust-HEAD/src/libcore/lib.rs:61:37: 61:57 warning:
+> feature has added to rust, directive not necessary
+> /home/nodakai/src/rust-HEAD/src/libcore/lib.rs:61 #![feature(simd,
+> unsafe_destructor, issue_5723_bootstrap)]
+>
+>             ^~~~~~~~~~~~~~~~~~~~
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337:1: 341:2 error: the
+> parameter type `T` may not live long enough; consider adding an explicit
+> lifetime bound `T:'b`...
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337 pub struct Ref<'b, T>
+> {
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:338     // FIXME #12808:
+> strange name to try to avoid interfering with
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:339     // field accesses
+> of the contained type via Deref
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:340     _parent: &'b
+> RefCell<T>
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:341 }
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337:1: 341:2 note: ...so
+> that the reference type `&'b cell::RefCell<T>` does not outlive the data it
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337 pub struct Ref<'b, T>
+> {
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:338     // FIXME #12808:
+> strange name to try to avoid interfering with
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:339     // field accesses
+> of the contained type via Deref
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:340     _parent: &'b
+> RefCell<T>
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:341 }
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392:1: 396:2 error: the
+> parameter type `T` may not live long enough; consider adding an explicit
+> lifetime bound `T:'b`...
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392 pub struct RefMut<'b,
+> T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:393     // FIXME #12808:
+> strange name to try to avoid interfering with
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:394     // field accesses
+> of the contained type via Deref
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:395     _parent: &'b
+> RefCell<T>
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:396 }
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392:1: 396:2 note: ...so
+> that the reference type `&'b cell::RefCell<T>` does not outlive the data it
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392 pub struct RefMut<'b,
+> T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:393     // FIXME #12808:
+> strange name to try to avoid interfering with
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:394     // field accesses
+> of the contained type via Deref
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:395     _parent: &'b
+> RefCell<T>
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:396 }
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112:1: 115:2 error:
+> the parameter type `A` may not live long enough; consider adding an
+> explicit lifetime bound `A:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112 struct
+> Finallyalizer<'a,A> {
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:113     mutate: &'a
+> mut A,
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:114     dtor: |&mut
+> A|: 'a
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:115 }
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112:1: 115:2 note:
+> ...so that the reference type `&'a mut A` does not outlive the data it
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112 struct
+> Finallyalizer<'a,A> {
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:113     mutate: &'a
+> mut A,
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:114     dtor: |&mut
+> A|: 'a
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:115 }
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788:1: 790:2 error: the
+> parameter type `T` may not live long enough; consider adding an explicit
+> lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788 pub struct ByRef<'a,
+> T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:789     iter: &'a mut T
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:790 }
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788:1: 790:2 note: ...so
+> that the reference type `&'a mut T` does not outlive the data it points at
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788 pub struct ByRef<'a,
+> T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:789     iter: &'a mut T
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:790 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138:1: 1142:2 error:
+> the parameter type `T` may not live long enough; consider adding an
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138 pub struct
+> Splits<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1139     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1140     pred: |t: &T|:
+> 'a -> bool,
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1141     finished: bool
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1142 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138:1: 1142:2 note:
+> ...so that the reference type `&'a [T]` does not outlive the data it points
+> at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138 pub struct
+> Splits<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1139     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1140     pred: |t: &T|:
+> 'a -> bool,
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1141     finished: bool
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1142 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205:1: 1209:2 error:
+> the parameter type `T` may not live long enough; consider adding an
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205 pub struct
+> MutSplits<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1206     v: &'a mut [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1207     pred: |t: &T|:
+> 'a -> bool,
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1208     finished: bool
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1209 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205:1: 1209:2 note:
+> ...so that the reference type `&'a mut [T]` does not outlive the data it
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205 pub struct
+> MutSplits<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1206     v: &'a mut [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1207     pred: |t: &T|:
+> 'a -> bool,
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1208     finished: bool
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1209 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321:1: 1324:2 error:
+> the parameter type `T` may not live long enough; consider adding an
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321 pub struct
+> Windows<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1322     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1323     size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1324 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321:1: 1324:2 note:
+> ...so that the reference type `&'a [T]` does not outlive the data it points
+> at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321 pub struct
+> Windows<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1322     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1323     size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1324 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367:1: 1370:2 error:
+> the parameter type `T` may not live long enough; consider adding an
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367 pub struct
+> Chunks<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1368     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1369     size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1370 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367:1: 1370:2 note:
+> ...so that the reference type `&'a [T]` does not outlive the data it points
+> at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367 pub struct
+> Chunks<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1368     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1369     size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1370 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459:1: 1462:2 error:
+> the parameter type `T` may not live long enough; consider adding an
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459 pub struct
+> MutChunks<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1460     v: &'a mut [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1461     chunk_size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1462 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459:1: 1462:2 note:
+> ...so that the reference type `&'a mut [T]` does not outlive the data it
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459 pub struct
+> MutChunks<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1460     v: &'a mut [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1461     chunk_size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1462 }
+> error: aborting due to 9 previous errors
+> make: ***
+> [x86_64-unknown-linux-gnu/stage0/lib/rustlib/x86_64-unknown-linux-gnu/lib/stamp.core]
+> Error 101
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+
+
+-- 
+Masanori Ogino <masanori.ogino at gmail.com>
+http://twitter.com/omasanori
+http://gplus.to/omasanori
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140830/25f14a7d/attachment.html>
+
+From dbau.pp at gmail.com  Fri Aug 29 19:15:06 2014
+From: dbau.pp at gmail.com (Huon Wilson)
+Date: Sat, 30 Aug 2014 12:15:06 +1000
+Subject: [rust-dev] Can Rust Git HEAD build Git HEAD itself?
+In-Reply-To: <CAHx8Sr=qwH9++HQ+urwv0Rr3sQ9Kp-oZPB9QzQvChBQpCbkusw@mail.gmail.com>
+References: <CAHx8Sr=qwH9++HQ+urwv0Rr3sQ9Kp-oZPB9QzQvChBQpCbkusw@mail.gmail.com>
+Message-ID: <540133AA.9020408@gmail.com>
+
+Yes, the first stage of bootstrapping uses a binary snapshot of some 
+older commit (you need a Rust compiler to build Rust, so we need to do 
+this). There's no particular guarantee that the snapshot has the same 
+behaviour as the version being compiled, and in general it doesn't, as 
+you see.
+
+The libraries have to phase themselves, using #[cfg(stage0)] to specify 
+the code that is compiled with the snapshot, and #[cfg(not(stage0))] for 
+the code that should be compiled with the non-snapshot stages (i.e. the 
+newer compiler with all the latest features). e.g. the error you see 
+there has these markings 
+https://github.com/rust-lang/rust/blob/5419b2ca2c27b4745fa1f2773719350420542c76/src/libcore/cell.rs#L325-L341 
+. This means using a compiler inappropriate for stage0 as the snapshot 
+(like HEAD, which needs to be using the not(stage0) code) will try to 
+compile code that is broken for it.
+
+The fact that it works with nightly is essentially just a coincidence 
+that the versions match closely enough (the Rust nightly is 12 hours 
+behind HEAD on average, and so may be missing the breaking commits).
+
+
+In summary: local-rust failing is not a bug, it's just a consequence of 
+us bootstrapping while changing the language.
+
+
+Huon
+
+On 30/08/14 11:49, Kai Noda wrote:
+> Hi Rustlers,
+>
+> When I build Rust Git HEAD with the binary package from rust-lang.org 
+> <http://rust-lang.org> in this way,
+>
+> $ CC=gcc47 CXX=g++47 ./configure --prefix=$HOME/local/rust 
+> --enable-valgrind --enable-local-rust 
+> --local-rust-root=$HOME/local/rust-nightly-x86_64-unknown-linux-gnu/
+> $ make -j8 install
+>
+> it (usually) works fine.  However, whey I try to use the above 
+> installation of Rust to build the same Git HEAD itself like this way,
+>
+> CC=gcc47 CXX=g++47 ./configure --prefix=$HOME/local/rust 
+> --enable-valgrind --enable-local-rust --local-rust-root=$HOME/local/rust
+> $ make
+>
+> I've never been successful (as of today, I get errors quoted at the 
+> end of this mail.)
+>
+> Is this normal (do all developers usually use the binary package?) or 
+> should I file bug reports to Github whenever I see them?  I was a bit 
+> surprised to see them because I thought (platform-triple)/stage[0-3] 
+> were bootstrapping phases.  Of course I'm well aware that Rust is in a 
+> very early stage of development...
+>
+> Regards,
+> Kai
+>
+> ??  ? <nodakai at gmail.com <mailto:nodakai at gmail.com>>
+>
+>
+> rustc: 
+> x86_64-unknown-linux-gnu/stage0/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcore
+> /home/nodakai/src/rust-HEAD/src/libcore/lib.rs:61:37: 61:57 warning: 
+> feature has added to rust, directive not necessary
+> /home/nodakai/src/rust-HEAD/src/libcore/lib.rs:61 <http://lib.rs:61> 
+> #![feature(simd, unsafe_destructor, issue_5723_bootstrap)]
+>                               ^~~~~~~~~~~~~~~~~~~~
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337:1: 341:2 error: 
+> the parameter type `T` may not live long enough; consider adding an 
+> explicit lifetime bound `T:'b`...
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337 
+> <http://cell.rs:337> pub struct Ref<'b, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:338 
+> <http://cell.rs:338>     // FIXME #12808: strange name to try to avoid 
+> interfering with
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:339 
+> <http://cell.rs:339>     // field accesses of the contained type via Deref
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:340 
+> <http://cell.rs:340>     _parent: &'b RefCell<T>
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:341 <http://cell.rs:341> }
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337:1: 341:2 note: 
+> ...so that the reference type `&'b cell::RefCell<T>` does not outlive 
+> the data it points at
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337 
+> <http://cell.rs:337> pub struct Ref<'b, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:338 
+> <http://cell.rs:338>     // FIXME #12808: strange name to try to avoid 
+> interfering with
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:339 
+> <http://cell.rs:339>     // field accesses of the contained type via Deref
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:340 
+> <http://cell.rs:340>     _parent: &'b RefCell<T>
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:341 <http://cell.rs:341> }
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392:1: 396:2 error: 
+> the parameter type `T` may not live long enough; consider adding an 
+> explicit lifetime bound `T:'b`...
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392 
+> <http://cell.rs:392> pub struct RefMut<'b, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:393 
+> <http://cell.rs:393>     // FIXME #12808: strange name to try to avoid 
+> interfering with
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:394 
+> <http://cell.rs:394>     // field accesses of the contained type via Deref
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:395 
+> <http://cell.rs:395>     _parent: &'b RefCell<T>
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:396 <http://cell.rs:396> }
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392:1: 396:2 note: 
+> ...so that the reference type `&'b cell::RefCell<T>` does not outlive 
+> the data it points at
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392 
+> <http://cell.rs:392> pub struct RefMut<'b, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:393 
+> <http://cell.rs:393>     // FIXME #12808: strange name to try to avoid 
+> interfering with
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:394 
+> <http://cell.rs:394>     // field accesses of the contained type via Deref
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:395 
+> <http://cell.rs:395>     _parent: &'b RefCell<T>
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:396 <http://cell.rs:396> }
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112:1: 115:2 error: 
+> the parameter type `A` may not live long enough; consider adding an 
+> explicit lifetime bound `A:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112 
+> <http://finally.rs:112> struct Finallyalizer<'a,A> {
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:113 
+> <http://finally.rs:113>     mutate: &'a mut A,
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:114 
+> <http://finally.rs:114>     dtor: |&mut A|: 'a
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:115 
+> <http://finally.rs:115> }
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112:1: 115:2 note: 
+> ...so that the reference type `&'a mut A` does not outlive the data it 
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112 
+> <http://finally.rs:112> struct Finallyalizer<'a,A> {
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:113 
+> <http://finally.rs:113>     mutate: &'a mut A,
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:114 
+> <http://finally.rs:114>     dtor: |&mut A|: 'a
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:115 
+> <http://finally.rs:115> }
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788:1: 790:2 error: 
+> the parameter type `T` may not live long enough; consider adding an 
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788 
+> <http://iter.rs:788> pub struct ByRef<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:789 
+> <http://iter.rs:789>     iter: &'a mut T
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:790 <http://iter.rs:790> }
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788:1: 790:2 note: 
+> ...so that the reference type `&'a mut T` does not outlive the data it 
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788 
+> <http://iter.rs:788> pub struct ByRef<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:789 
+> <http://iter.rs:789>     iter: &'a mut T
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:790 <http://iter.rs:790> }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138:1: 1142:2 error: 
+> the parameter type `T` may not live long enough; consider adding an 
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138 
+> <http://slice.rs:1138> pub struct Splits<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1139 
+> <http://slice.rs:1139>     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1140 
+> <http://slice.rs:1140>     pred: |t: &T|: 'a -> bool,
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1141 
+> <http://slice.rs:1141>     finished: bool
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1142 
+> <http://slice.rs:1142> }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138:1: 1142:2 note: 
+> ...so that the reference type `&'a [T]` does not outlive the data it 
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138 
+> <http://slice.rs:1138> pub struct Splits<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1139 
+> <http://slice.rs:1139>     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1140 
+> <http://slice.rs:1140>     pred: |t: &T|: 'a -> bool,
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1141 
+> <http://slice.rs:1141>     finished: bool
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1142 
+> <http://slice.rs:1142> }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205:1: 1209:2 error: 
+> the parameter type `T` may not live long enough; consider adding an 
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205 
+> <http://slice.rs:1205> pub struct MutSplits<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1206 
+> <http://slice.rs:1206>     v: &'a mut [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1207 
+> <http://slice.rs:1207>     pred: |t: &T|: 'a -> bool,
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1208 
+> <http://slice.rs:1208>     finished: bool
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1209 
+> <http://slice.rs:1209> }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205:1: 1209:2 note: 
+> ...so that the reference type `&'a mut [T]` does not outlive the data 
+> it points at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205 
+> <http://slice.rs:1205> pub struct MutSplits<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1206 
+> <http://slice.rs:1206>     v: &'a mut [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1207 
+> <http://slice.rs:1207>     pred: |t: &T|: 'a -> bool,
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1208 
+> <http://slice.rs:1208>     finished: bool
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1209 
+> <http://slice.rs:1209> }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321:1: 1324:2 error: 
+> the parameter type `T` may not live long enough; consider adding an 
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321 
+> <http://slice.rs:1321> pub struct Windows<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1322 
+> <http://slice.rs:1322>     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1323 
+> <http://slice.rs:1323>     size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1324 
+> <http://slice.rs:1324> }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321:1: 1324:2 note: 
+> ...so that the reference type `&'a [T]` does not outlive the data it 
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321 
+> <http://slice.rs:1321> pub struct Windows<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1322 
+> <http://slice.rs:1322>     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1323 
+> <http://slice.rs:1323>     size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1324 
+> <http://slice.rs:1324> }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367:1: 1370:2 error: 
+> the parameter type `T` may not live long enough; consider adding an 
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367 
+> <http://slice.rs:1367> pub struct Chunks<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1368 
+> <http://slice.rs:1368>     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1369 
+> <http://slice.rs:1369>     size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1370 
+> <http://slice.rs:1370> }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367:1: 1370:2 note: 
+> ...so that the reference type `&'a [T]` does not outlive the data it 
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367 
+> <http://slice.rs:1367> pub struct Chunks<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1368 
+> <http://slice.rs:1368>     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1369 
+> <http://slice.rs:1369>     size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1370 
+> <http://slice.rs:1370> }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459:1: 1462:2 error: 
+> the parameter type `T` may not live long enough; consider adding an 
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459 
+> <http://slice.rs:1459> pub struct MutChunks<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1460 
+> <http://slice.rs:1460>     v: &'a mut [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1461 
+> <http://slice.rs:1461>     chunk_size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1462 
+> <http://slice.rs:1462> }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459:1: 1462:2 note: 
+> ...so that the reference type `&'a mut [T]` does not outlive the data 
+> it points at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459 
+> <http://slice.rs:1459> pub struct MutChunks<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1460 
+> <http://slice.rs:1460>     v: &'a mut [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1461 
+> <http://slice.rs:1461>     chunk_size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1462 
+> <http://slice.rs:1462> }
+> error: aborting due to 9 previous errors
+> make: *** 
+> [x86_64-unknown-linux-gnu/stage0/lib/rustlib/x86_64-unknown-linux-gnu/lib/stamp.core] 
+> Error 101
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140830/2c30fb1c/attachment.html>
+
+From nodakai at gmail.com  Fri Aug 29 21:15:34 2014
+From: nodakai at gmail.com (Kai Noda)
+Date: Sat, 30 Aug 2014 12:15:34 +0800
+Subject: [rust-dev] Can Rust Git HEAD build Git HEAD itself?
+In-Reply-To: <540133AA.9020408@gmail.com>
+References: <CAHx8Sr=qwH9++HQ+urwv0Rr3sQ9Kp-oZPB9QzQvChBQpCbkusw@mail.gmail.com>
+	<540133AA.9020408@gmail.com>
+Message-ID: <CAHx8Srkt2OvCzmqyoNObbbnbnPnjU9s=Q7YgtPLfyUwSLbqEbw@mail.gmail.com>
+
+Hi Ogino-san and Huon,
+
+Thanks a lot for your quick but detailed answers!  Now I have a better
+understanding of the build process. So if I use the terminology defined in
+the below (a bit outdated) wiki page, it's like you removed "stage0" and
+then split "stage1" into two sub-stages (with and without #[cfg] clauses.)
+
+https://github.com/rust-lang/rust/wiki/Note-compiler-snapshots
+
+(~_~).oO(It seems to me that stage2 and 3 are identical now...)
+
+Anyways, I get to understand that living only with the Git repo is
+practically impossible since there's no official way to know what version
+#[cfg(stage0)] clauses expect and thus there's no other way than to
+download the nightly build frequently enough.
+
+Kai
+
+2014-08-30 10:15 GMT+08:00 Huon Wilson <dbau.pp at gmail.com>:
+
+>  Yes, the first stage of bootstrapping uses a binary snapshot of some
+> older commit (you need a Rust compiler to build Rust, so we need to do
+> this). There's no particular guarantee that the snapshot has the same
+> behaviour as the version being compiled, and in general it doesn't, as you
+> see.
+>
+> The libraries have to phase themselves, using #[cfg(stage0)] to specify
+> the code that is compiled with the snapshot, and #[cfg(not(stage0))] for
+> the code that should be compiled with the non-snapshot stages (i.e. the
+> newer compiler with all the latest features). e.g. the error you see there
+> has these markings
+> https://github.com/rust-lang/rust/blob/5419b2ca2c27b4745fa1f2773719350420542c76/src/libcore/cell.rs#L325-L341
+> . This means using a compiler inappropriate for stage0 as the snapshot
+> (like HEAD, which needs to be using the not(stage0) code) will try to
+> compile code that is broken for it.
+>
+> The fact that it works with nightly is essentially just a coincidence that
+> the versions match closely enough (the Rust nightly is 12 hours behind HEAD
+> on average, and so may be missing the breaking commits).
+>
+>
+> In summary: local-rust failing is not a bug, it's just a consequence of us
+> bootstrapping while changing the language.
+>
+>
+> Huon
+>
+>
+> On 30/08/14 11:49, Kai Noda wrote:
+>
+>  Hi Rustlers,
+>
+>  When I build Rust Git HEAD with the binary package from rust-lang.org in
+> this way,
+>
+>  $ CC=gcc47 CXX=g++47 ./configure --prefix=$HOME/local/rust
+> --enable-valgrind --enable-local-rust
+> --local-rust-root=$HOME/local/rust-nightly-x86_64-unknown-linux-gnu/
+> $ make -j8 install
+>
+>  it (usually) works fine.  However, whey I try to use the above
+> installation of Rust to build the same Git HEAD itself like this way,
+>
+>  CC=gcc47 CXX=g++47 ./configure --prefix=$HOME/local/rust
+> --enable-valgrind --enable-local-rust --local-rust-root=$HOME/local/rust
+>  $ make
+>
+>  I've never been successful (as of today, I get errors quoted at the end
+> of this mail.)
+>
+>  Is this normal (do all developers usually use the binary package?) or
+> should I file bug reports to Github whenever I see them?  I was a bit
+> surprised to see them because I thought (platform-triple)/stage[0-3] were
+> bootstrapping phases.  Of course I'm well aware that Rust is in a very
+> early stage of development...
+>
+>  Regards,
+> Kai
+>
+> ??  ? <nodakai at gmail.com>
+>
+>
+>  rustc:
+> x86_64-unknown-linux-gnu/stage0/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcore
+> /home/nodakai/src/rust-HEAD/src/libcore/lib.rs:61:37: 61:57 warning:
+> feature has added to rust, directive not necessary
+> /home/nodakai/src/rust-HEAD/src/libcore/lib.rs:61 #![feature(simd,
+> unsafe_destructor, issue_5723_bootstrap)]
+>
+>             ^~~~~~~~~~~~~~~~~~~~
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337:1: 341:2 error: the
+> parameter type `T` may not live long enough; consider adding an explicit
+> lifetime bound `T:'b`...
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337 pub struct Ref<'b, T>
+> {
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:338     // FIXME #12808:
+> strange name to try to avoid interfering with
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:339     // field accesses
+> of the contained type via Deref
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:340     _parent: &'b
+> RefCell<T>
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:341 }
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337:1: 341:2 note: ...so
+> that the reference type `&'b cell::RefCell<T>` does not outlive the data it
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337 pub struct Ref<'b, T>
+> {
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:338     // FIXME #12808:
+> strange name to try to avoid interfering with
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:339     // field accesses
+> of the contained type via Deref
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:340     _parent: &'b
+> RefCell<T>
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:341 }
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392:1: 396:2 error: the
+> parameter type `T` may not live long enough; consider adding an explicit
+> lifetime bound `T:'b`...
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392 pub struct RefMut<'b,
+> T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:393     // FIXME #12808:
+> strange name to try to avoid interfering with
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:394     // field accesses
+> of the contained type via Deref
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:395     _parent: &'b
+> RefCell<T>
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:396 }
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392:1: 396:2 note: ...so
+> that the reference type `&'b cell::RefCell<T>` does not outlive the data it
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392 pub struct RefMut<'b,
+> T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:393     // FIXME #12808:
+> strange name to try to avoid interfering with
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:394     // field accesses
+> of the contained type via Deref
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:395     _parent: &'b
+> RefCell<T>
+> /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:396 }
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112:1: 115:2 error:
+> the parameter type `A` may not live long enough; consider adding an
+> explicit lifetime bound `A:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112 struct
+> Finallyalizer<'a,A> {
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:113     mutate: &'a
+> mut A,
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:114     dtor: |&mut
+> A|: 'a
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:115 }
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112:1: 115:2 note:
+> ...so that the reference type `&'a mut A` does not outlive the data it
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112 struct
+> Finallyalizer<'a,A> {
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:113     mutate: &'a
+> mut A,
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:114     dtor: |&mut
+> A|: 'a
+> /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:115 }
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788:1: 790:2 error: the
+> parameter type `T` may not live long enough; consider adding an explicit
+> lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788 pub struct ByRef<'a,
+> T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:789     iter: &'a mut T
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:790 }
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788:1: 790:2 note: ...so
+> that the reference type `&'a mut T` does not outlive the data it points at
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788 pub struct ByRef<'a,
+> T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:789     iter: &'a mut T
+> /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:790 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138:1: 1142:2 error:
+> the parameter type `T` may not live long enough; consider adding an
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138 pub struct
+> Splits<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1139     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1140     pred: |t: &T|:
+> 'a -> bool,
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1141     finished: bool
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1142 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138:1: 1142:2 note:
+> ...so that the reference type `&'a [T]` does not outlive the data it points
+> at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138 pub struct
+> Splits<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1139     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1140     pred: |t: &T|:
+> 'a -> bool,
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1141     finished: bool
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1142 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205:1: 1209:2 error:
+> the parameter type `T` may not live long enough; consider adding an
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205 pub struct
+> MutSplits<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1206     v: &'a mut [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1207     pred: |t: &T|:
+> 'a -> bool,
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1208     finished: bool
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1209 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205:1: 1209:2 note:
+> ...so that the reference type `&'a mut [T]` does not outlive the data it
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205 pub struct
+> MutSplits<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1206     v: &'a mut [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1207     pred: |t: &T|:
+> 'a -> bool,
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1208     finished: bool
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1209 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321:1: 1324:2 error:
+> the parameter type `T` may not live long enough; consider adding an
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321 pub struct
+> Windows<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1322     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1323     size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1324 }
+>  /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321:1: 1324:2 note:
+> ...so that the reference type `&'a [T]` does not outlive the data it points
+> at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321 pub struct
+> Windows<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1322     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1323     size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1324 }
+>  /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367:1: 1370:2 error:
+> the parameter type `T` may not live long enough; consider adding an
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367 pub struct
+> Chunks<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1368     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1369     size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1370 }
+>  /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367:1: 1370:2 note:
+> ...so that the reference type `&'a [T]` does not outlive the data it points
+> at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367 pub struct
+> Chunks<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1368     v: &'a [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1369     size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1370 }
+>  /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459:1: 1462:2 error:
+> the parameter type `T` may not live long enough; consider adding an
+> explicit lifetime bound `T:'a`...
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459 pub struct
+> MutChunks<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1460     v: &'a mut [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1461     chunk_size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1462 }
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459:1: 1462:2 note:
+> ...so that the reference type `&'a mut [T]` does not outlive the data it
+> points at
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459 pub struct
+> MutChunks<'a, T> {
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1460     v: &'a mut [T],
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1461     chunk_size: uint
+> /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1462 }
+> error: aborting due to 9 previous errors
+> make: ***
+> [x86_64-unknown-linux-gnu/stage0/lib/rustlib/x86_64-unknown-linux-gnu/lib/stamp.core]
+> Error 101
+>
+>
+> _______________________________________________
+> Rust-dev mailing listRust-dev at mozilla.orghttps://mail.mozilla.org/listinfo/rust-dev
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140830/3c8e72ac/attachment.html>
+
+From dbau.pp at gmail.com  Fri Aug 29 22:03:19 2014
+From: dbau.pp at gmail.com (Huon Wilson)
+Date: Sat, 30 Aug 2014 15:03:19 +1000
+Subject: [rust-dev] Can Rust Git HEAD build Git HEAD itself?
+In-Reply-To: <CAHx8Srkt2OvCzmqyoNObbbnbnPnjU9s=Q7YgtPLfyUwSLbqEbw@mail.gmail.com>
+References: <CAHx8Sr=qwH9++HQ+urwv0Rr3sQ9Kp-oZPB9QzQvChBQpCbkusw@mail.gmail.com>
+	<540133AA.9020408@gmail.com>
+	<CAHx8Srkt2OvCzmqyoNObbbnbnPnjU9s=Q7YgtPLfyUwSLbqEbw@mail.gmail.com>
+Message-ID: <54015B17.8090300@gmail.com>
+
+The information is recorded in 
+https://github.com/rust-lang/rust/blob/master/src/snapshots.txt e.g. at 
+the time of writing the most recent snapshot is of commit a86d9ad == 
+a86d9ad15e339ab343a12513f9c90556f677b9ca.
+
+In any case, building from source with anything other than the provided 
+stage0 snapshots (i.e. the ones that are downloaded by default by the 
+makefiles) is going to be annoying.
+
+
+Huon
+
+On 30/08/14 14:15, Kai Noda wrote:
+> Hi Ogino-san and Huon,
+>
+> Thanks a lot for your quick but detailed answers!  Now I have a better 
+> understanding of the build process. So if I use the 
+> terminology defined in the below (a bit outdated) wiki page, it's like 
+> you removed "stage0" and then split "stage1" into two sub-stages (with 
+> and without #[cfg] clauses.)
+>
+> https://github.com/rust-lang/rust/wiki/Note-compiler-snapshots
+>
+> (~_~).oO(It seems to me that stage2 and 3 are identical now...)
+>
+> Anyways, I get to understand that living only with the Git repo is 
+> practically impossible since there's no official way to know what 
+> version #[cfg(stage0)] clauses expect and thus there's no other way 
+> than to download the nightly build frequently enough.
+>
+> Kai
+>
+> 2014-08-30 10:15 GMT+08:00 Huon Wilson <dbau.pp at gmail.com 
+> <mailto:dbau.pp at gmail.com>>:
+>
+>     Yes, the first stage of bootstrapping uses a binary snapshot of
+>     some older commit (you need a Rust compiler to build Rust, so we
+>     need to do this). There's no particular guarantee that the
+>     snapshot has the same behaviour as the version being compiled, and
+>     in general it doesn't, as you see.
+>
+>     The libraries have to phase themselves, using #[cfg(stage0)] to
+>     specify the code that is compiled with the snapshot, and
+>     #[cfg(not(stage0))] for the code that should be compiled with the
+>     non-snapshot stages (i.e. the newer compiler with all the latest
+>     features). e.g. the error you see there has these markings
+>     https://github.com/rust-lang/rust/blob/5419b2ca2c27b4745fa1f2773719350420542c76/src/libcore/cell.rs#L325-L341
+>     . This means using a compiler inappropriate for stage0 as the
+>     snapshot (like HEAD, which needs to be using the not(stage0) code)
+>     will try to compile code that is broken for it.
+>
+>     The fact that it works with nightly is essentially just a
+>     coincidence that the versions match closely enough (the Rust
+>     nightly is 12 hours behind HEAD on average, and so may be missing
+>     the breaking commits).
+>
+>
+>     In summary: local-rust failing is not a bug, it's just a
+>     consequence of us bootstrapping while changing the language.
+>
+>
+>     Huon
+>
+>
+>     On 30/08/14 11:49, Kai Noda wrote:
+>>     Hi Rustlers,
+>>
+>>     When I build Rust Git HEAD with the binary package from
+>>     rust-lang.org <http://rust-lang.org> in this way,
+>>
+>>     $ CC=gcc47 CXX=g++47 ./configure --prefix=$HOME/local/rust
+>>     --enable-valgrind --enable-local-rust
+>>     --local-rust-root=$HOME/local/rust-nightly-x86_64-unknown-linux-gnu/
+>>     $ make -j8 install
+>>
+>>     it (usually) works fine.  However, whey I try to use the above
+>>     installation of Rust to build the same Git HEAD itself like this way,
+>>
+>>     CC=gcc47 CXX=g++47 ./configure --prefix=$HOME/local/rust
+>>     --enable-valgrind --enable-local-rust
+>>     --local-rust-root=$HOME/local/rust
+>>     $ make
+>>
+>>     I've never been successful (as of today, I get errors quoted at
+>>     the end of this mail.)
+>>
+>>     Is this normal (do all developers usually use the binary
+>>     package?) or should I file bug reports to Github whenever I see
+>>     them?  I was a bit surprised to see them because I thought
+>>     (platform-triple)/stage[0-3] were bootstrapping phases.  Of
+>>     course I'm well aware that Rust is in a very early stage of
+>>     development...
+>>
+>>     Regards,
+>>     Kai
+>>
+>>     ??  ? <nodakai at gmail.com <mailto:nodakai at gmail.com>>
+>>
+>>
+>>     rustc:
+>>     x86_64-unknown-linux-gnu/stage0/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcore
+>>     /home/nodakai/src/rust-HEAD/src/libcore/lib.rs:61:37: 61:57
+>>     warning: feature has added to rust, directive not necessary
+>>     /home/nodakai/src/rust-HEAD/src/libcore/lib.rs:61
+>>     <http://lib.rs:61> #![feature(simd, unsafe_destructor,
+>>     issue_5723_bootstrap)]
+>>         ^~~~~~~~~~~~~~~~~~~~
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337:1: 341:2
+>>     error: the parameter type `T` may not live long enough; consider
+>>     adding an explicit lifetime bound `T:'b`...
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337
+>>     <http://cell.rs:337> pub struct Ref<'b, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:338
+>>     <http://cell.rs:338>     // FIXME #12808: strange name to try to
+>>     avoid interfering with
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:339
+>>     <http://cell.rs:339>     // field accesses of the contained type
+>>     via Deref
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:340
+>>     <http://cell.rs:340> _parent: &'b RefCell<T>
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:341
+>>     <http://cell.rs:341> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337:1: 341:2
+>>     note: ...so that the reference type `&'b cell::RefCell<T>` does
+>>     not outlive the data it points at
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:337
+>>     <http://cell.rs:337> pub struct Ref<'b, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:338
+>>     <http://cell.rs:338>     // FIXME #12808: strange name to try to
+>>     avoid interfering with
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:339
+>>     <http://cell.rs:339>     // field accesses of the contained type
+>>     via Deref
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:340
+>>     <http://cell.rs:340> _parent: &'b RefCell<T>
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:341
+>>     <http://cell.rs:341> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392:1: 396:2
+>>     error: the parameter type `T` may not live long enough; consider
+>>     adding an explicit lifetime bound `T:'b`...
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392
+>>     <http://cell.rs:392> pub struct RefMut<'b, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:393
+>>     <http://cell.rs:393>     // FIXME #12808: strange name to try to
+>>     avoid interfering with
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:394
+>>     <http://cell.rs:394>     // field accesses of the contained type
+>>     via Deref
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:395
+>>     <http://cell.rs:395> _parent: &'b RefCell<T>
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:396
+>>     <http://cell.rs:396> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392:1: 396:2
+>>     note: ...so that the reference type `&'b cell::RefCell<T>` does
+>>     not outlive the data it points at
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:392
+>>     <http://cell.rs:392> pub struct RefMut<'b, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:393
+>>     <http://cell.rs:393>     // FIXME #12808: strange name to try to
+>>     avoid interfering with
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:394
+>>     <http://cell.rs:394>     // field accesses of the contained type
+>>     via Deref
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:395
+>>     <http://cell.rs:395> _parent: &'b RefCell<T>
+>>     /home/nodakai/src/rust-HEAD/src/libcore/cell.rs:396
+>>     <http://cell.rs:396> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112:1: 115:2
+>>     error: the parameter type `A` may not live long enough; consider
+>>     adding an explicit lifetime bound `A:'a`...
+>>     /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112
+>>     <http://finally.rs:112> struct Finallyalizer<'a,A> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:113
+>>     <http://finally.rs:113> mutate: &'a mut A,
+>>     /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:114
+>>     <http://finally.rs:114> dtor: |&mut A|: 'a
+>>     /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:115
+>>     <http://finally.rs:115> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112:1: 115:2
+>>     note: ...so that the reference type `&'a mut A` does not outlive
+>>     the data it points at
+>>     /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:112
+>>     <http://finally.rs:112> struct Finallyalizer<'a,A> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:113
+>>     <http://finally.rs:113> mutate: &'a mut A,
+>>     /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:114
+>>     <http://finally.rs:114> dtor: |&mut A|: 'a
+>>     /home/nodakai/src/rust-HEAD/src/libcore/finally.rs:115
+>>     <http://finally.rs:115> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788:1: 790:2
+>>     error: the parameter type `T` may not live long enough; consider
+>>     adding an explicit lifetime bound `T:'a`...
+>>     /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788
+>>     <http://iter.rs:788> pub struct ByRef<'a, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:789
+>>     <http://iter.rs:789> iter: &'a mut T
+>>     /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:790
+>>     <http://iter.rs:790> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788:1: 790:2
+>>     note: ...so that the reference type `&'a mut T` does not outlive
+>>     the data it points at
+>>     /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:788
+>>     <http://iter.rs:788> pub struct ByRef<'a, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:789
+>>     <http://iter.rs:789> iter: &'a mut T
+>>     /home/nodakai/src/rust-HEAD/src/libcore/iter.rs:790
+>>     <http://iter.rs:790> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138:1: 1142:2
+>>     error: the parameter type `T` may not live long enough; consider
+>>     adding an explicit lifetime bound `T:'a`...
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138
+>>     <http://slice.rs:1138> pub struct Splits<'a, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1139
+>>     <http://slice.rs:1139>     v: &'a [T],
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1140
+>>     <http://slice.rs:1140> pred: |t: &T|: 'a -> bool,
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1141
+>>     <http://slice.rs:1141> finished: bool
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1142
+>>     <http://slice.rs:1142> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138:1: 1142:2
+>>     note: ...so that the reference type `&'a [T]` does not outlive
+>>     the data it points at
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1138
+>>     <http://slice.rs:1138> pub struct Splits<'a, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1139
+>>     <http://slice.rs:1139>     v: &'a [T],
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1140
+>>     <http://slice.rs:1140> pred: |t: &T|: 'a -> bool,
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1141
+>>     <http://slice.rs:1141> finished: bool
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1142
+>>     <http://slice.rs:1142> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205:1: 1209:2
+>>     error: the parameter type `T` may not live long enough; consider
+>>     adding an explicit lifetime bound `T:'a`...
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205
+>>     <http://slice.rs:1205> pub struct MutSplits<'a, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1206
+>>     <http://slice.rs:1206>     v: &'a mut [T],
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1207
+>>     <http://slice.rs:1207> pred: |t: &T|: 'a -> bool,
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1208
+>>     <http://slice.rs:1208> finished: bool
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1209
+>>     <http://slice.rs:1209> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205:1: 1209:2
+>>     note: ...so that the reference type `&'a mut [T]` does not
+>>     outlive the data it points at
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1205
+>>     <http://slice.rs:1205> pub struct MutSplits<'a, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1206
+>>     <http://slice.rs:1206>     v: &'a mut [T],
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1207
+>>     <http://slice.rs:1207> pred: |t: &T|: 'a -> bool,
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1208
+>>     <http://slice.rs:1208> finished: bool
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1209
+>>     <http://slice.rs:1209> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321:1: 1324:2
+>>     error: the parameter type `T` may not live long enough; consider
+>>     adding an explicit lifetime bound `T:'a`...
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321
+>>     <http://slice.rs:1321> pub struct Windows<'a, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1322
+>>     <http://slice.rs:1322>     v: &'a [T],
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1323
+>>     <http://slice.rs:1323> size: uint
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1324
+>>     <http://slice.rs:1324> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321:1: 1324:2
+>>     note: ...so that the reference type `&'a [T]` does not outlive
+>>     the data it points at
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1321
+>>     <http://slice.rs:1321> pub struct Windows<'a, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1322
+>>     <http://slice.rs:1322>     v: &'a [T],
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1323
+>>     <http://slice.rs:1323> size: uint
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1324
+>>     <http://slice.rs:1324> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367:1: 1370:2
+>>     error: the parameter type `T` may not live long enough; consider
+>>     adding an explicit lifetime bound `T:'a`...
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367
+>>     <http://slice.rs:1367> pub struct Chunks<'a, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1368
+>>     <http://slice.rs:1368>     v: &'a [T],
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1369
+>>     <http://slice.rs:1369> size: uint
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1370
+>>     <http://slice.rs:1370> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367:1: 1370:2
+>>     note: ...so that the reference type `&'a [T]` does not outlive
+>>     the data it points at
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1367
+>>     <http://slice.rs:1367> pub struct Chunks<'a, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1368
+>>     <http://slice.rs:1368>     v: &'a [T],
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1369
+>>     <http://slice.rs:1369> size: uint
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1370
+>>     <http://slice.rs:1370> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459:1: 1462:2
+>>     error: the parameter type `T` may not live long enough; consider
+>>     adding an explicit lifetime bound `T:'a`...
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459
+>>     <http://slice.rs:1459> pub struct MutChunks<'a, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1460
+>>     <http://slice.rs:1460>     v: &'a mut [T],
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1461
+>>     <http://slice.rs:1461> chunk_size: uint
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1462
+>>     <http://slice.rs:1462> }
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459:1: 1462:2
+>>     note: ...so that the reference type `&'a mut [T]` does not
+>>     outlive the data it points at
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1459
+>>     <http://slice.rs:1459> pub struct MutChunks<'a, T> {
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1460
+>>     <http://slice.rs:1460>     v: &'a mut [T],
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1461
+>>     <http://slice.rs:1461> chunk_size: uint
+>>     /home/nodakai/src/rust-HEAD/src/libcore/slice.rs:1462
+>>     <http://slice.rs:1462> }
+>>     error: aborting due to 9 previous errors
+>>     make: ***
+>>     [x86_64-unknown-linux-gnu/stage0/lib/rustlib/x86_64-unknown-linux-gnu/lib/stamp.core]
+>>     Error 101
+>>
+>>
+>>     _______________________________________________
+>>     Rust-dev mailing list
+>>     Rust-dev at mozilla.org  <mailto:Rust-dev at mozilla.org>
+>>     https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+>     _______________________________________________
+>     Rust-dev mailing list
+>     Rust-dev at mozilla.org <mailto:Rust-dev at mozilla.org>
+>     https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140830/50105c1d/attachment.html>
+
+From nodakai at gmail.com  Sat Aug 30 01:52:00 2014
+From: nodakai at gmail.com (Kai Noda)
+Date: Sat, 30 Aug 2014 16:52:00 +0800
+Subject: [rust-dev] Bug in lifetime inference?
+Message-ID: <CAHx8SrmBbA2wurXAR48xK9k_nHJRdZzoJLR2KPkXkLQCsMN20Q@mail.gmail.com>
+
+Hi Rusters,
+
+I'm very new to Rust, so I'd like you to check if this is really a compiler
+bug or not.
+
+fn main() {
+    let s1 = &[0i];
+    {
+        let s2 = &[0i];
+        let s3 = if true { s1 } else { s2 };
+    };
+}
+
+http://is.gd/NCeGpl
+
+<anon>:5:19: 5:23 error: borrowed value does not live long enough
+<anon>:5         let s2 = &[0i];
+                           ^~~~
+<anon>:2:11: 8:2 note: reference must be valid for the block at 2:10...
+<anon>:2 fn main() {
+<anon>:3     let s1 = &[0i];
+<anon>:4     {
+<anon>:5         let s2 = &[0i];
+<anon>:6         let s3 = if true { s1 } else { s2 };
+<anon>:7     };
+         ...
+<anon>:4:5: 7:6 note: ...but borrowed value is only valid for the block at 4:4
+<anon>:4     {
+<anon>:5         let s2 = &[0i];
+<anon>:6         let s3 = if true { s1 } else { s2 };
+<anon>:7     };
+error: aborting due to previous error
+
+
+Seems like s1 and s2 are inferred as &[int, ..1] and when I manually type
+them as &[int], it successfully compiles.
+
+fn main() {
+    let s1: &[int] = &[0i];
+    {
+        let s2: &[int] = &[0i];
+        let s3 = if true { s1 } else { s2 };
+    };
+}
+
+Putting s1 and s2 into a single block also satisfies the compiler.
+
+fn main() {
+    let s1 = &[0i];
+
+    let s2 = &[0i];
+    let s3 = if true { s1 } else { s2 };
+}
+
+I came from C++ and I think the way I take reference of a fixed vector
+literal is correct.
+http://doc.rust-lang.org/rust.html#pointer-types
+
+I was originally trying to fix this line which doesn't compile with the
+nightly build of Rust:
+https://github.com/servo/rust-url/blob/master/src/form_urlencoded.rs#L55
+
+No similar issue is filed here:
+https://github.com/rust-lang/rust/labels/A-lifetimes
+
+Best regards,
+Kai
+
+??  ? <nodakai at gmail.com>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140830/f2445fa2/attachment.html>
+
+From cflowers at gmail.com  Sat Aug 30 06:25:13 2014
+From: cflowers at gmail.com (Charlie Flowers)
+Date: Sat, 30 Aug 2014 06:25:13 -0700
+Subject: [rust-dev] Important typo in Rust Guide
+Message-ID: <CAL8dZ6hG0SpxR_L53uHmySPJvZVXfS8zfW5BDYdfEQPENQYy=Q@mail.gmail.com>
+
+There's a particularly harmful typo in the Rust Guide. Not sure the best
+way to point it out, so I thought I'd drop it in an email to the list.
+
+In this text: "There's one big difference between a closure and named
+functions, and it's in the name: a function "closes over its environment."
+
+Of course, it should say "a CLOSURE closes over its environment". To
+someone just learning about closures, this typo will confuse them to no end
+:)
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20140830/f54dc119/attachment.html>
+
+From corey at octayn.net  Sat Aug 30 09:41:11 2014
+From: corey at octayn.net (Corey Richardson)
+Date: Sat, 30 Aug 2014 12:41:11 -0400
+Subject: [rust-dev] Important typo in Rust Guide
+In-Reply-To: <CAL8dZ6hG0SpxR_L53uHmySPJvZVXfS8zfW5BDYdfEQPENQYy=Q@mail.gmail.com>
+References: <CAL8dZ6hG0SpxR_L53uHmySPJvZVXfS8zfW5BDYdfEQPENQYy=Q@mail.gmail.com>
+Message-ID: <CA++BO6RDS21fbBkB-GobtAp6U0aJyQfoUGH8wWT9ePbCQ-GRTA@mail.gmail.com>
+
+In the future, all issues related to Rust should go on the issue
+tracker: https://github.com/rust-lang/rust/issues
+
+Or, you can just open a pull request :)
+https://github.com/rust-lang/rust/pull/16881
+
+On Sat, Aug 30, 2014 at 9:25 AM, Charlie Flowers <cflowers at gmail.com> wrote:
+> There's a particularly harmful typo in the Rust Guide. Not sure the best way
+> to point it out, so I thought I'd drop it in an email to the list.
+>
+> In this text: "There's one big difference between a closure and named
+> functions, and it's in the name: a function "closes over its environment."
+>
+> Of course, it should say "a CLOSURE closes over its environment". To someone
+> just learning about closures, this typo will confuse them to no end :)
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+
+
+-- 
+http://octayn.net/
+

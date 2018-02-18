@@ -1,0 +1,3056 @@
+From federico.luna at gmail.com  Thu Mar  1 15:24:37 2012
+From: federico.luna at gmail.com (Federico Luna)
+Date: Thu, 1 Mar 2012 20:24:37 -0300
+Subject: [rust-dev]  how to let x = fn....
+Message-ID: <CAN06zLdHcbnN+VCb4vrsfJqh=V7wh-UqgE+kPb_a2HWxr5xVRw@mail.gmail.com>
+
+hi,
+i learning rust-lang and i need some help of you.
+In following example, test0() and test1() don't compile.
+
+How should I write test0 () and test1() correctly?
+
+(sorry my bad english).
+saludos
+-f
+
+------------------
+[fedel at fedel ~/src/rust-0.1]$ cat ask1.rs
+use std;
+
+fn naux(n : int) -> int { n + 1 }
+
+fn test0(l : [int]) -> [int] {
+    ret vec::map(l, naux);
+}
+
+fn test1(l : [int]) -> [int] {
+    let baux = fn@(n : int) -> int { n + 1 };
+    ret vec::map(l, baux);
+}
+
+fn test3(l : [int]) -> [int] {
+    ret vec::map(l, {|n| n + 1});
+}
+
+fn main(args: [str]) {
+    test0([0,1,2,3,4]);
+    test1([0,1,2,3,4]);
+    test3([0,1,2,3,4]);
+}
+[fedel at fedel ~/src/rust-0.1]$ rustc ask1.rs
+ask1.rs:6:20: 6:24 error: mismatched types: expected `fn&(<T1>) ->
+<T2>` but found `native fn(int) -> int` (expected argument mode && but
+found ++)
+ask1.rs:6     ret vec::map(l, naux);
+                              ^~~~
+ask1.rs:11:20: 11:24 error: mismatched types: expected `fn&(<T5>) ->
+<T6>` but found `fn@(int) -> int` (expected argument mode ++ but found
+&&)
+ask1.rs:11     ret vec::map(l, baux);
+                               ^~~~
+error: aborting due to previous errors
+[fedel at fedel ~/src/rust-0.1]$ rustc -v
+rustc 0.1
+host: x86_64-unknown-linux-gnu
+
+From niko at alum.mit.edu  Thu Mar  1 15:40:08 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Thu, 01 Mar 2012 15:40:08 -0800
+Subject: [rust-dev] how to let x = fn....
+In-Reply-To: <CAN06zLdHcbnN+VCb4vrsfJqh=V7wh-UqgE+kPb_a2HWxr5xVRw@mail.gmail.com>
+References: <CAN06zLdHcbnN+VCb4vrsfJqh=V7wh-UqgE+kPb_a2HWxr5xVRw@mail.gmail.com>
+Message-ID: <4F5008D8.1090409@alum.mit.edu>
+
+On 3/1/12 3:24 PM, Federico Luna wrote:
+> hi,
+> i learning rust-lang and i need some help of you.
+> In following example, test0() and test1() don't compile.
+>
+> How should I write test0 () and test1() correctly?
+
+Hi!
+
+Your problem is that `naux()` has the wrong argument mode.  You need to 
+write:
+
+     fn naux(&&n: int) -> int { n + 1 }
+
+The reasons why are discussed in sec 8.6 of the tutorial:
+
+     
+http://doc.rust-lang.org/doc/tutorial.html#generic-functions-and-argument-passing
+
+Let us know if you have any more questions.
+
+
+regards,
+Niko
+
+From federico.luna at gmail.com  Thu Mar  1 15:59:20 2012
+From: federico.luna at gmail.com (Federico Luna)
+Date: Thu, 1 Mar 2012 20:59:20 -0300
+Subject: [rust-dev] how to let x = fn....
+In-Reply-To: <4F5008D8.1090409@alum.mit.edu>
+References: <CAN06zLdHcbnN+VCb4vrsfJqh=V7wh-UqgE+kPb_a2HWxr5xVRw@mail.gmail.com>
+	<4F5008D8.1090409@alum.mit.edu>
+Message-ID: <CAN06zLct-N7yAtfEXqPk=ghHXfqsvASmJ1U6VH2TcJtx1R1s2w@mail.gmail.com>
+
+I see there.
+
+I'm sorry, I missed this part of the tutorial.
+
+thank for your reply.
+
+saludos
+-f
+
+On 3/1/12, Niko Matsakis <niko at alum.mit.edu> wrote:
+> On 3/1/12 3:24 PM, Federico Luna wrote:
+>> hi,
+>> i learning rust-lang and i need some help of you.
+>> In following example, test0() and test1() don't compile.
+>>
+>> How should I write test0 () and test1() correctly?
+>
+> Hi!
+>
+> Your problem is that `naux()` has the wrong argument mode.  You need to
+> write:
+>
+>      fn naux(&&n: int) -> int { n + 1 }
+>
+> The reasons why are discussed in sec 8.6 of the tutorial:
+>
+>
+> http://doc.rust-lang.org/doc/tutorial.html#generic-functions-and-argument-passing
+>
+> Let us know if you have any more questions.
+>
+>
+> regards,
+> Niko
+>
+
+From tav at espians.com  Sat Mar  3 10:34:11 2012
+From: tav at espians.com (tav)
+Date: Sat, 3 Mar 2012 18:34:11 +0000
+Subject: [rust-dev] How suitable is Rust for a Distributed Datastore?
+Message-ID: <CAJThFW7cJHk_qqC7ooTKQWOGCeX8ykY52PeitLpeDqJx5E_ozw@mail.gmail.com>
+
+Hey all,
+
+Congrats on the development of Rust. It seems to have really matured
+since I last looked at it in 2010.
+
+I was wondering how suitable Rust would be for a distributed
+datastore? In particular, a distributed in-memory datastore similar to
+Redis if any of you are familiar with it.
+
+My language of choice for systems development in recent times has been
+Go. However, whilst it has excellent networking support, Go's
+stop-the-world garbage collector gets in the way of the needs of an
+in-memory datastore.
+
+I understand that Rust would be give me better control over the memory
+use and layout without interruption by a garbage collector. Is this
+the case? Sorry, I've only managed to find
+http://doc.rust-lang.org/doc/rust.html#memory-and-concurrency-models
+as far as documentation. Is there a page on the wiki I should be
+reading?
+
+Also, insights into Rust's networking support would be extremely
+welcome. http://doc.rust-lang.org/doc/std/files/net-rs.html wasn't
+what I expected. And I understand that bindings to libuv are in the
+works?
+
+My apologies if I've missed documentation on the site.
+
+-- 
+Thanks in advance, tav
+
+plex:espians/tav | tav at espians.com | +44 (0) 7809 569 369
+http://tav.espians.com | http://twitter.com/tav | skype:tavespian
+
+From pwalton at mozilla.com  Sat Mar  3 11:21:55 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 03 Mar 2012 11:21:55 -0800
+Subject: [rust-dev] How suitable is Rust for a Distributed Datastore?
+In-Reply-To: <CAJThFW7cJHk_qqC7ooTKQWOGCeX8ykY52PeitLpeDqJx5E_ozw@mail.gmail.com>
+References: <CAJThFW7cJHk_qqC7ooTKQWOGCeX8ykY52PeitLpeDqJx5E_ozw@mail.gmail.com>
+Message-ID: <4F526F53.4040702@mozilla.com>
+
+On 03/03/2012 10:34 AM, tav wrote:
+> My language of choice for systems development in recent times has been
+> Go. However, whilst it has excellent networking support, Go's
+> stop-the-world garbage collector gets in the way of the needs of an
+> in-memory datastore.
+>
+> I understand that Rust would be give me better control over the memory
+> use and layout without interruption by a garbage collector. Is this
+> the case? Sorry, I've only managed to find
+> http://doc.rust-lang.org/doc/rust.html#memory-and-concurrency-models
+> as far as documentation. Is there a page on the wiki I should be
+> reading?
+
+Your tasks can still get interrupted by a garbage collector (right now, 
+a cycle collector), but it's never a *concurrent* garbage collector. 
+Other tasks can still run while one task is collecting garbage. This was 
+one of the most important design goals of Rust.
+
+I would definitely like to make the GC incremental in the future. This 
+is nontrivial (mostly because of LLVM's poor support for GC at the 
+moment), but it's a whole lot easier than writing an incremental 
+concurrent garbage collector.
+
+Patrick
+
+From stefan.plantikow at googlemail.com  Sun Mar  4 04:46:33 2012
+From: stefan.plantikow at googlemail.com (Stefan Plantikow)
+Date: Sun, 4 Mar 2012 13:46:33 +0100
+Subject: [rust-dev] a proposal for break, ret, and cont
+In-Reply-To: <4F4ECCBB.80908@alum.mit.edu>
+References: <4F4E46EE.4020609@alum.mit.edu> <4F4E9189.5000905@alum.mit.edu>
+	<CAJnHWXsntY4WwdLKZX2QdG-Zt13NkxyighViUpawz+jrsutXXg@mail.gmail.com>
+	<4F4EA028.9030900@mozilla.com> <4F4EC5A6.3040905@alum.mit.edu>
+	<4F4EC70E.5090808@mozilla.com> <4F4ECCBB.80908@alum.mit.edu>
+Message-ID: <2CB31074110247AA89EC7B1F7CAC9ABB@googlemail.com>
+
+
+
+
+Am Donnerstag, 1. M?rz 2012 um 02:11 schrieb Niko Matsakis:
+
+> While we're on the topic, what about changing the keyword `cont` to
+> `next` (or `continue`, although it is long)? To be perfectly frank, I  
+> find the current name rather suggestive of another word that ought not  
+> to be uttered in polite company, particularly when spoken out loud.  
+> Kind of silly I know, but there it is.
+>  
+
+I definitely prefer 'continue'. Using 'next' will make it unavailable as an identifier name for linked lists and the like, and worse, there is no good substitute. I think this is why many language choose 'continue' as the keyword for this. It may be a bit longer to type but then again it is not typed that often.
+
+
+Greetings,
+
+
+Stefan.
+
+
+PS: Currently busy on a new job, hope to come back to hacking on rust later this year.  
+
+
+
+From grahame at angrygoats.net  Wed Mar  7 06:28:13 2012
+From: grahame at angrygoats.net (Grahame Bowland)
+Date: Wed, 7 Mar 2012 22:28:13 +0800
+Subject: [rust-dev] Compiling rust programs
+Message-ID: <CADg2TKRaz9eik3yy39Q7VXekQfF4estXsTgP3qiiABTM63o4Mw@mail.gmail.com>
+
+Hi all
+
+I've been wondering what the plan is in terms of build infrastructure for
+rust programmers. I'm working on a project using rust, and am using a shell
+script to compile. I've considered using a makefile, but the name of the
+output file for a crate isn't constant.
+
+I don't mind working on this if nobody else has looked at it. If it's
+already a solved problem but just isn't in the tutorial, I'll summarise
+responses and add a chapter to the tutorial :-)
+
+Cheers
+Grahame
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120307/f1939c97/attachment.html>
+
+From banderson at mozilla.com  Thu Mar  8 11:51:45 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Thu, 08 Mar 2012 11:51:45 -0800
+Subject: [rust-dev] Compiling rust programs
+In-Reply-To: <CADg2TKRaz9eik3yy39Q7VXekQfF4estXsTgP3qiiABTM63o4Mw@mail.gmail.com>
+References: <CADg2TKRaz9eik3yy39Q7VXekQfF4estXsTgP3qiiABTM63o4Mw@mail.gmail.com>
+Message-ID: <4F590DD1.4070706@mozilla.com>
+
+On 03/07/2012 06:28 AM, Grahame Bowland wrote:
+> Hi all
+>
+> I've been wondering what the plan is in terms of build infrastructure 
+> for rust programmers. I'm working on a project using rust, and am 
+> using a shell script to compile. I've considered using a makefile, but 
+> the name of the output file for a crate isn't constant.
+>
+> I don't mind working on this if nobody else has looked at it. If it's 
+> already a solved problem but just isn't in the tutorial, I'll 
+> summarise responses and add a chapter to the tutorial :-)
+
+It's not solved. There's some discussion about cargo's relationship to 
+the build system here: https://github.com/mozilla/rust/issues/1861. I 
+kind of think that cargo+rustc is intended to be 'the build system', but 
+I'm not sure. Possibly you and thoughtpolice are in the best position to 
+know what we need to do in this area as you are actually building out of 
+tree rust projects.
+
+rustc deals with the library naming issue in its makefiles by using globs.
+
+
+From graydon at mozilla.com  Thu Mar  8 12:48:27 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 08 Mar 2012 12:48:27 -0800
+Subject: [rust-dev] Compiling rust programs
+In-Reply-To: <CADg2TKRaz9eik3yy39Q7VXekQfF4estXsTgP3qiiABTM63o4Mw@mail.gmail.com>
+References: <CADg2TKRaz9eik3yy39Q7VXekQfF4estXsTgP3qiiABTM63o4Mw@mail.gmail.com>
+Message-ID: <4F591B1B.9070304@mozilla.com>
+
+On 3/7/2012 6:28 AM, Grahame Bowland wrote:
+> Hi all
+>
+> I've been wondering what the plan is in terms of build infrastructure
+> for rust programmers. I'm working on a project using rust, and am using
+> a shell script to compile. I've considered using a makefile, but the
+> name of the output file for a crate isn't constant.
+>
+> I don't mind working on this if nobody else has looked at it. If it's
+> already a solved problem but just isn't in the tutorial, I'll summarise
+> responses and add a chapter to the tutorial :-)
+
+There are a few possibilities.
+
+   - Add a flag to rustc like --print-lib-filename that asks it to
+     construct the filename it _would_ produce for a given crate, and
+     echo that back. This is not terribly hard; the hash you see in the
+     output filename is calculated from the crate linkage metadata,
+     not the compiled bits themselves. So it can be calculated quickly
+     just be parsing the crate file.
+
+   - Modify your project, as rust's build system currently does, to touch
+     a stamp-file with a similar name in the output directory. When we
+     currently build we do "rustc ... foo.rc && touch libfoo.so". The
+     actual output will be libfoo-<hash>-<vers>.so, but it sits next to
+     the empty file libfoo.so we touched, and this seems to work ok in
+     practice. We then carefully use globs to pick up the versioned
+     files elsewhere.
+
+   - Pass an explicit output filename. Mangling the hash and version
+     string into the filename is something rustc does as a convenience
+     to avoid name collision in installation directories. Multiple libs
+     with the same symbolic name can coexist; the compiler searches them
+     all for a metadata match when you 'use' a library. But it works
+     (or should work!) just as well if you set the output name explicitly
+     using -o to a filename that happens to have the right symbolic name
+     prefix: "rustc -o libfoo.so foo.rc" ought to work.
+
+The latter two work today. The first doesn't, but I'd be happy to see a 
+patch that implements it. Might do so myself, it's clearly helpful to 
+making robust makefiles.
+
+Longer term, Brian's right, we have to decide how to balance 
+responsibilities between cargo and rustc. That's a conversation we 
+haven't spent much time on lately, but it will have to happen eventually.
+
+-Graydon
+
+From jws at csse.unimelb.edu.au  Thu Mar  8 14:15:32 2012
+From: jws at csse.unimelb.edu.au (Jeff Schultz)
+Date: Fri, 9 Mar 2012 09:15:32 +1100
+Subject: [rust-dev] Compiling rust programs
+In-Reply-To: <4F591B1B.9070304@mozilla.com>
+References: <CADg2TKRaz9eik3yy39Q7VXekQfF4estXsTgP3qiiABTM63o4Mw@mail.gmail.com>
+	<4F591B1B.9070304@mozilla.com>
+Message-ID: <20120308221532.GA9595@mulga.csse.unimelb.edu.au>
+
+On Thu, Mar 08, 2012 at 12:48:27PM -0800, Graydon Hoare wrote:
+>   - Pass an explicit output filename. Mangling the hash and version
+>     string into the filename is something rustc does as a convenience
+>     to avoid name collision in installation directories. Multiple libs
+
+Couldn't that be viewed as back-to-front?  Wouldn't it work better to
+not mangle the output filename during build, but mangle it during some
+form of "install" process instead?
+
+
+    Jeff Schultz
+
+From graydon at mozilla.com  Thu Mar  8 14:39:10 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 08 Mar 2012 14:39:10 -0800
+Subject: [rust-dev] Compiling rust programs
+In-Reply-To: <20120308221532.GA9595@mulga.csse.unimelb.edu.au>
+References: <CADg2TKRaz9eik3yy39Q7VXekQfF4estXsTgP3qiiABTM63o4Mw@mail.gmail.com>
+	<4F591B1B.9070304@mozilla.com>
+	<20120308221532.GA9595@mulga.csse.unimelb.edu.au>
+Message-ID: <4F59350E.7090603@mozilla.com>
+
+On 3/8/2012 2:15 PM, Jeff Schultz wrote:
+> On Thu, Mar 08, 2012 at 12:48:27PM -0800, Graydon Hoare wrote:
+>>    - Pass an explicit output filename. Mangling the hash and version
+>>      string into the filename is something rustc does as a convenience
+>>      to avoid name collision in installation directories. Multiple libs
+>
+> Couldn't that be viewed as back-to-front?  Wouldn't it work better to
+> not mangle the output filename during build, but mangle it during some
+> form of "install" process instead?
+
+Plausibly. But this makes versioning and collision-avoidance an extra 
+step that can be omitted, and omitting it will cause problems. Generally 
+I've tried to guide "rustc foo.rc" (with no other options or environment 
+prerequisites) to do the most useful possible thing by default, and 
+require options to select less-useful or less-common behavior.
+
+Having it on by default also helps to make sure the versioning and 
+collision-avoidance mechanisms get solid and ongoing field use, and keep 
+working. Similar to why we version all symbols by default. Such things 
+are horribly delicate, and IME when not in the default-behavior path, 
+they quickly bitrot and get abandoned as "too much effort".
+
+-Graydon
+
+From niko at alum.mit.edu  Thu Mar  8 15:18:52 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Thu, 08 Mar 2012 15:18:52 -0800
+Subject: [rust-dev] Compiling rust programs
+In-Reply-To: <4F591B1B.9070304@mozilla.com>
+References: <CADg2TKRaz9eik3yy39Q7VXekQfF4estXsTgP3qiiABTM63o4Mw@mail.gmail.com>
+	<4F591B1B.9070304@mozilla.com>
+Message-ID: <4F593E5C.7040301@alum.mit.edu>
+
+On 3/8/12 12:48 PM, Graydon Hoare wrote:
+>
+>   - Pass an explicit output filename. Mangling the hash and version
+>     string into the filename is something rustc does as a convenience
+>     to avoid name collision in installation directories. Multiple libs
+>     with the same symbolic name can coexist; the compiler searches them
+>     all for a metadata match when you 'use' a library. But it works
+>     (or should work!) just as well if you set the output name explicitly
+>     using -o to a filename that happens to have the right symbolic name
+>     prefix: "rustc -o libfoo.so foo.rc" ought to work. 
+
+I *think* the code currently ignores the name you give for -o when 
+compiling libraries. Well, rather, it uses the name to find the 
+directory, but decides on its own output filename.
+
+
+Niko
+
+From grahame at angrygoats.net  Mon Mar 12 06:47:32 2012
+From: grahame at angrygoats.net (Grahame Bowland)
+Date: Mon, 12 Mar 2012 21:47:32 +0800
+Subject: [rust-dev] Compiling rust programs
+In-Reply-To: <4F591B1B.9070304@mozilla.com>
+References: <CADg2TKRaz9eik3yy39Q7VXekQfF4estXsTgP3qiiABTM63o4Mw@mail.gmail.com>
+	<4F591B1B.9070304@mozilla.com>
+Message-ID: <CADg2TKTeLg+1PAG78QQ=E9aAQOoA+EOPJhDJFJ3eBuYLpz9iyg@mail.gmail.com>
+
+On 9 March 2012 04:48, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> On 3/7/2012 6:28 AM, Grahame Bowland wrote:
+>
+>> Hi all
+>>
+>> I've been wondering what the plan is in terms of build infrastructure
+>> for rust programmers. I'm working on a project using rust, and am using
+>> a shell script to compile. I've considered using a makefile, but the
+>> name of the output file for a crate isn't constant.
+>>
+>> I don't mind working on this if nobody else has looked at it. If it's
+>> already a solved problem but just isn't in the tutorial, I'll summarise
+>> responses and add a chapter to the tutorial :-)
+>>
+>
+> There are a few possibilities.
+>
+>  - Add a flag to rustc like --print-lib-filename that asks it to
+>    construct the filename it _would_ produce for a given crate, and
+>    echo that back. This is not terribly hard; the hash you see in the
+>    output filename is calculated from the crate linkage metadata,
+>    not the compiled bits themselves. So it can be calculated quickly
+>    just be parsing the crate file.
+>
+>  - Modify your project, as rust's build system currently does, to touch
+>    a stamp-file with a similar name in the output directory. When we
+>    currently build we do "rustc ... foo.rc && touch libfoo.so". The
+>    actual output will be libfoo-<hash>-<vers>.so, but it sits next to
+>    the empty file libfoo.so we touched, and this seems to work ok in
+>    practice. We then carefully use globs to pick up the versioned
+>    files elsewhere.
+>
+>  - Pass an explicit output filename. Mangling the hash and version
+>    string into the filename is something rustc does as a convenience
+>    to avoid name collision in installation directories. Multiple libs
+>    with the same symbolic name can coexist; the compiler searches them
+>    all for a metadata match when you 'use' a library. But it works
+>    (or should work!) just as well if you set the output name explicitly
+>    using -o to a filename that happens to have the right symbolic name
+>    prefix: "rustc -o libfoo.so foo.rc" ought to work.
+>
+> The latter two work today. The first doesn't, but I'd be happy to see a
+> patch that implements it. Might do so myself, it's clearly helpful to
+> making robust makefiles.
+>
+> Longer term, Brian's right, we have to decide how to balance
+> responsibilities between cargo and rustc. That's a conversation we haven't
+> spent much time on lately, but it will have to happen eventually.
+
+
+Hi Graydon and everyone
+
+Sorry I didn't reply earlier, have been quite busy.
+
+I think what I'll do then is pinch the rules rustc's build system is using,
+and see if I can come up with a simple "getting started" skeleton rust
+project Makefile. That should be helpful to get developers started. I'll
+email back the results once I'm done.
+
+Cheers
+Grahame
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120312/197df506/attachment.html>
+
+From graydon at mozilla.com  Tue Mar 13 19:18:51 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 13 Mar 2012 19:18:51 -0700
+Subject: [rust-dev] Some reductions
+Message-ID: <4F60000B.4090905@mozilla.com>
+
+Hi,
+
+I'm posting this to rust-dev as well to solicit help from anyone who 
+might smell a "familiar bug" lurking. We've been hunting a somewhat 
+mysterious win32-specific crash lately, when monomorphization is turned 
+on, it seems that the stage2 librustc.dll we generate has ... something 
+broken in its exports. Client code that links against it just randomly 
+jumps into heap poison (0xbaadf00d) rather than the correct target 
+symbols. It seems to do with binary size. Maybe. Marijn left me with 
+this today, so this is a summary of what I found so far:
+
+-- snip --
+
+It appears that the windows crash we're seeing is -- or may be! -- 
+related to binary size, as you suggested. Somehow. I started playing 
+around with synthetic tests (10,000 functions each of which does 
+#error("hi")) and found I could reproduce the bug in isolation from the 
+rustc build process. Here is what I have discovered:
+
+    text    data     bss  filename
+2093961  412701     116  large.dll    ok (3000 syms)
+2790301  550701     116  large.dll    ok (4000 syms)
+3138473  619701     116  large.dll    ok (4500 syms)
+3216465  635157     116  large.dll    ok (4612 syms)
+3255461  642885     116  large.dll    ok (4668 syms)
+3260332  643847     116  large.dll    ok (4675 syms)
+3262419  644265     116  large.dll    ok (4678 syms)
+3116452  644399     116  large.dll   bad (4679 syms)  <-- whoops
+3117153  644541     116  large.dll   bad (4680 syms)
+3118543  644817     116  large.dll   bad (4682 syms)
+3128285  646749     116  large.dll   bad (4696 syms)
+3148482  650747     116  large.dll   bad (4725 syms)
+3339977  688701     116  large.dll   bad (5000 syms)
+
+That is, there's a threshold around the 3.2mb text segment mark where 
+"something goes wrong" and things stop working. I checked this with -O 
+to confirm it's "size" not "number of symbols"; with -O the symbol-count 
+threshold is a fair bit higher.
+
+What happens here is odd: the DLL _shrinks_, because it's losing 
+valuable material. Its .rdata section (and relocs) gets eviscerated:
+
+ok (4678 syms):
+
+section              size
+.text             2923576
+.data               18852
+.note.rustc        624221
+.rdata              56452 <-- a bunch of data
+.eh_frame             156
+.bss                  116
+.edata             191407
+.idata               1136
+.CRT                   24
+.tls                   32
+.reloc              90828 <-- a bunch of relocs
+.debug_aranges        192
+.debug_pubnames       709
+.debug_pubtypes      1034
+.debug_info          8451
+.debug_abbrev        1838
+.debug_line          1402
+.debug_frame          900
+.debug_str            192
+.debug_loc           2285
+.debug_ranges          48
+Total             3923851
+
+
+bad (4679 syms):
+
+section              size
+.text             2924200
+.data               18852
+.note.rustc        624355
+.rdata                316 <--- mostly gone
+.eh_frame             156
+.bss                  116
+.edata             191448
+.idata               1136
+.CRT                   24
+.tls                   32
+.reloc                332 <-- likewise
+.debug_aranges        192
+.debug_pubnames       709
+.debug_pubtypes      1034
+.debug_info          8451
+.debug_abbrev        1838
+.debug_line          1402
+.debug_frame          900
+.debug_str            192
+.debug_loc           2285
+.debug_ranges          48
+Total             3778018
+
+Further unfortunate details:
+
+   - Microsoft's link.exe can't process the DLLs we're making.
+   - Even the non-broken ones.
+   - It can't process the DLLs gcc makes either.
+   - It claims they're corrupt. #llvm hackers think this is common
+     for stuff generated by gnu tools on windows, and that clang
+     _might_ do better, but since it uses gnu ld for the final link,
+     it might do the same anyways.
+
+Attempting to reduce this to "not even rust's fault", I tried to 
+reproduce using straight C files of unusual size. Here I did run into a 
+bug -- a limit of 65535 symbols beyond which gcc starts silently 
+mis-assigning DLL-import ordinals -- but on further investigation I 
+_think_ that's just a design limit of the DLL import/export scheme. 
+Link.exe refuses to touch such a file, complaining. So I _think_ that's 
+an unrelated bug. Aside from that I haven't managed to reproduce it 
+outside of "stuff generated from rust" yet. I'll have a go with objcopy 
+tomorrow.
+
+Unfortunately in most other respects, the "good" and "bad" DLLs I have 
+sitting here look ... reasonably well-formed. They both have valid 
+PE/COFF headers and reasonably well-structured section tables. I've run 
+them through a number of diagnostic tools and even objdumped them and 
+fed that into kdiff3 for comparison. The bad one just, for unclear 
+reasons, has lost a big chunk of its midsection. The rest seems ok.
+
+I have a _hunch_ that the problem lies in bfd or ld, the gnu side of the 
+equation, and not in the stuff coming out of llvm-mc. The reason I say 
+this is that the .o files coming out of llvm-mc (if I use --save-temps 
+on rustc) both have "reasonable" sizes:
+
+large-ok.o  :
+section                                 size   addr
+.text                                2920967      0
+.data                                  18844      0
+.bss$linkonce__ZN5large9loglevel2E         4      0
+.note.rustc                           624221      0
+Total                                3564036
+
+large-bad.o  :
+section                                 size   addr
+.text                                2921591      0
+.data                                  18844      0
+.bss$linkonce__ZN5large9loglevel2E         4      0
+.note.rustc                           624355      0
+Total                                3564794
+
+That is, things only seem to go bad once we pass these through gcc (and 
+collect2, ld) for linkage into a DLL. Where _exactly_ it's going wrong, 
+however, remains a mystery to me. I'll look more tomorrow if you haven't 
+found it in the meantime. Suggestions welcome.
+
+-Graydon
+
+From marijnh at gmail.com  Tue Mar 13 23:37:00 2012
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 14 Mar 2012 07:37:00 +0100
+Subject: [rust-dev] Some reductions
+In-Reply-To: <4F60000B.4090905@mozilla.com>
+References: <4F60000B.4090905@mozilla.com>
+Message-ID: <CAJnHWXsrFfSoU1mv4yfScDHvzo2Ffdefj8sY+ZBDh=L=bMXFDw@mail.gmail.com>
+
+Hi Graydon,
+
+Thanks for digging into this so deeply. This probably also explains
+why the non-optimized build currently fails on Windows (#959) -- it
+simply generates binaries that are too big.
+
+The prospects are looking a little bleak, I guess. Debugging linkers
+sounds like it'll get hairy.
+
+Maybe, as a temporary workaround, we could try finally splitting off
+the syntax/ part of rustc into its own crate?
+
+Best,
+Marijn
+
+From graydon at mozilla.com  Wed Mar 14 20:28:48 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 14 Mar 2012 20:28:48 -0700
+Subject: [rust-dev] LLVM-MC PE/COFF overflow bug (was Re: Some reductions)
+In-Reply-To: <CAJnHWXsrFfSoU1mv4yfScDHvzo2Ffdefj8sY+ZBDh=L=bMXFDw@mail.gmail.com>
+References: <4F60000B.4090905@mozilla.com>
+	<CAJnHWXsrFfSoU1mv4yfScDHvzo2Ffdefj8sY+ZBDh=L=bMXFDw@mail.gmail.com>
+Message-ID: <4F6161F0.5020502@mozilla.com>
+
+On 3/13/2012 11:37 PM, Marijn Haverbeke wrote:
+
+> Thanks for digging into this so deeply. This probably also explains
+> why the non-optimized build currently fails on Windows (#959) -- it
+> simply generates binaries that are too big.
+
+Yeah, probably the same bug.
+
+> The prospects are looking a little bleak, I guess. Debugging linkers
+> sounds like it'll get hairy.
+
+In this case it turned out to be not so bad once I found something that 
+was actually hitting a power-of-two. 65536 relocs. Hello!
+
+While the nominal COFF section header field is a u16 for storing reloc 
+counts -- and overflow + corruption here is what was going wrong -- it 
+turns out PE/COFF has defined behavior for handling overflow: a header 
+bit and an extra synthetic reloc. Microsoft tools and GNU tools already 
+implement this and aren't bitten by it. LLVM-MC doesn't. Or didn't. I 
+implemented it (BFD shows how) and it all works fine. The change is here:
+
+https://github.com/brson/llvm/commit/4119fda4c6c4df372bd6edbbb08d48c7941577b5#diff-0
+
+With this change your code bootstraps on my machine, bots are cycling 
+currently. I've upgraded our LLVM to a version carrying this patch, so 
+if they're in a good mood, you should be good go now.
+
+CC'ing Bigcheese from LLVM-land. I imagine he'll want this.
+
+-Graydon
+
+From marijnh at gmail.com  Thu Mar 15 08:22:48 2012
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Thu, 15 Mar 2012 16:22:48 +0100
+Subject: [rust-dev] LLVM-MC PE/COFF overflow bug (was Re: Some
+	reductions)
+In-Reply-To: <4F6161F0.5020502@mozilla.com>
+References: <4F60000B.4090905@mozilla.com>
+	<CAJnHWXsrFfSoU1mv4yfScDHvzo2Ffdefj8sY+ZBDh=L=bMXFDw@mail.gmail.com>
+	<4F6161F0.5020502@mozilla.com>
+Message-ID: <CAJnHWXuavBxhvsBnbPZV-ouLMW+tvodG1NORAqDb_n8itDJB1g@mail.gmail.com>
+
+I can't thank you enough, Graydon! This would have taken me at least a
+week to figure out.
+
+I'm about to land the full monomorphization code, and finally get rid
+of the daily ritual of merging my hugely invasive branch with changes
+to master.
+
+From daniel at fdr.io  Mon Mar 19 03:59:31 2012
+From: daniel at fdr.io (Daniel Farina)
+Date: Mon, 19 Mar 2012 03:59:31 -0700
+Subject: [rust-dev] Confusion with regard to error handling
+Message-ID: <CACN56+OCrbzMZjaoK4a4_5DEdnegBVtsGxf+-Nf4sksxTBB1LA@mail.gmail.com>
+
+I have been reading Rust's introduction, and the one area where I feel
+pretty lost is with regard to the error handling.   Consider a simple
+program like "cat" that opens, reads a file, writing it chunk-by-chunk
+to standard output.  As we know, the syscalls for "open", "read", and
+"write" can all fail, and my understanding is that upon encountering
+such an error the entire task would abort, cleaning up resources. This
+is all fine, but what if I want to provide more detailed error
+messages of my own in failures for each situation?  What if numerous
+fine-grained parts of the program do, in fact, have sensible recovery
+options?
+
+Relatedly, and more complicated-ly, what is Rust idiom for dealing
+with cases where a high-level chunk of code wants to be able to
+dictate the error handling method in a lower-level function?
+
+I think a good example of this is given in a chapter of "Practical Common Lisp":
+
+  http://www.gigamonkeys.com/book/beyond-exception-handling-conditions-and-restarts.html
+
+CL's flavor of "exception" handling is probably the only one I've
+found gave me sufficient control comparable to rolling my own
+constructs in a C program, checking everything at the lowest levels of
+execution with maximum information without being as laborious.
+
+Thanks in advance for considering my questions.
+
+--
+fdr
+
+From graydon at mozilla.com  Mon Mar 19 10:28:43 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 19 Mar 2012 10:28:43 -0700
+Subject: [rust-dev] Confusion with regard to error handling
+In-Reply-To: <CACN56+OCrbzMZjaoK4a4_5DEdnegBVtsGxf+-Nf4sksxTBB1LA@mail.gmail.com>
+References: <CACN56+OCrbzMZjaoK4a4_5DEdnegBVtsGxf+-Nf4sksxTBB1LA@mail.gmail.com>
+Message-ID: <4F676CCB.1030109@mozilla.com>
+
+On 19/03/2012 3:59 AM, Daniel Farina wrote:
+
+> Relatedly, and more complicated-ly, what is Rust idiom for dealing
+> with cases where a high-level chunk of code wants to be able to
+> dictate the error handling method in a lower-level function?
+>
+> I think a good example of this is given in a chapter of "Practical Common Lisp":
+>
+>    http://www.gigamonkeys.com/book/beyond-exception-handling-conditions-and-restarts.html
+>
+> CL's flavor of "exception" handling is probably the only one I've
+> found gave me sufficient control comparable to rolling my own
+> constructs in a C program, checking everything at the lowest levels of
+> execution with maximum information without being as laborious.
+
+Hi,
+
+We get this question somewhat regularly and the short-short answer is 
+"we're still likely to revisit this, in the sense of adding new mechanisms".
+
+The longer answer is that we're familiar with the CL condition system as 
+well as a number of alternatives, and need to spend some time exploring 
+to find what "fits" the Rust semantics best. I spent quite a while 
+sketching, prototyping and researching this aspect of the language 
+before getting started, and wound up adopting a "wait and see" approach, 
+letting other language features mature first. It's a complicated topic 
+and there's a lot to say. To summarize where my thinking on it is _now_, 
+it's something like so:
+
+   - The CL system is overengineered (separated handle vs. restart)
+
+   - Try/catch is underengineered (no at-site handling)
+
+   - Rust's current system is an attempt to copy Joe Armstrong's advice
+     and the "crash only design" papers, that is, magnifying faults to
+     subsystem boundaries to make error handling uniform and testable.
+
+   - I acknowledge that even in Erlang this didn't _quite_ hold up and
+     they wound up growing 2 other not-great error handling systems.
+     Dogma often falls down in the face of pragmatics.
+
+   - We have a few reasons to want to keep unwinding-unwinding --
+     actually throwing away frames -- as idempotent and unrecoverable,
+     killing a task rather than "catching". But that's not to say that
+     we can't have at-error-site handler options.
+
+   - I'm interested, willing, and likely to experiment with some kind
+     of dynamic-scope handler scheme in the 0.3-0.4 timeframe.
+
+   - The last sketch of my current plan was "revive an earlier form
+     of a condition system Rust used to have based on Mesa's system",
+     as I discussed back in November, in the middle of this email:
+
+      https://mail.mozilla.org/pipermail/rust-dev/2011-November/000999.html
+
+I'm still slightly unsure if this is necessary -- nobody's modified the 
+os library to "take flags describing recovery options" yet -- nor am I 
+sure that this signal/handle system will be enough moving parts to 
+capture the 80-90% case of minor-error-handling. Nor am I sure that it's 
+best built on this primitive rather than, say, a more general concept of 
+a dynamically-scoped module-level global (like CL *special-variables*) 
+but I think a lot of the implementation machinery for the latter would 
+be recycled between features anyways, so I think I'll start with "just" 
+conditions and see how it goes.
+
+Hth, happy to talk more but recognize that it's a big design-space, 
+nobody's solved it "correctly" yet, each solution is somewhat 
+language-specific, and such threads tend to go on ad infinitum...
+
+-Graydon
+
+From masklinn at masklinn.net  Mon Mar 19 11:00:49 2012
+From: masklinn at masklinn.net (Masklinn)
+Date: Mon, 19 Mar 2012 19:00:49 +0100
+Subject: [rust-dev] Confusion with regard to error handling
+In-Reply-To: <4F676CCB.1030109@mozilla.com>
+References: <CACN56+OCrbzMZjaoK4a4_5DEdnegBVtsGxf+-Nf4sksxTBB1LA@mail.gmail.com>
+	<4F676CCB.1030109@mozilla.com>
+Message-ID: <8053A504-1584-4375-A9C9-717971572C30@masklinn.net>
+
+On 2012-03-19, at 18:28 , Graydon Hoare wrote:
+> 
+> The longer answer is that we're familiar with the CL condition system as well as a number of alternatives, and need to spend some time exploring to find what "fits" the Rust semantics best. I spent quite a while sketching, prototyping and researching this aspect of the language before getting started, and wound up adopting a "wait and see" approach, letting other language features mature first. It's a complicated topic and there's a lot to say. To summarize where my thinking on it is _now_, it's something like so:
+> 
+>  - The CL system is overengineered (separated handle vs. restart)
+
+What about Smalltalk? It also has conditions (in that the stack is *not*
+unwound before the handler is executed and execution can be resumed) but
+does not have all the formal complexity of CL's restarts. Instead, the
+error handler can just send `resume` or `resume:` to the error object,
+and execution will resume from the point having thrown the error,
+returning the value if any is provided[0].
+
+Smalltalk provides/d a few other neat handling strategies (most being
+linked to Smalltalk's error handling being bound to a block):
+
+* `retry` would re-execute the block
+* `return` & `return:` would just return (from the block)
+* `retryUsing:` would replace the original block with the one provided
+  and then execute *that* (with the error handler rebound there)
+* `pass` would just let the exception bubble up
+* `outer` would behave like `pass` but "wrap" the exception: in case of
+  `resume` (in an outer handler) execution would resume from this
+  handler instead of the original creator of the exception
+
+[0] there's a small caveat in that the exception needs to be resumable ? answer `true` to the message `isResumable`
+
+
+From arcata at gmail.com  Mon Mar 19 15:16:17 2012
+From: arcata at gmail.com (Joe Groff)
+Date: Mon, 19 Mar 2012 15:16:17 -0700
+Subject: [rust-dev] Confusion with regard to error handling
+In-Reply-To: <CALz=kuiNigg=8cSdC-0BvfVCt34r7F9xSpnj7ZYkOuyt-Z9WMw@mail.gmail.com>
+References: <CACN56+OCrbzMZjaoK4a4_5DEdnegBVtsGxf+-Nf4sksxTBB1LA@mail.gmail.com>
+	<CALz=kuiNigg=8cSdC-0BvfVCt34r7F9xSpnj7ZYkOuyt-Z9WMw@mail.gmail.com>
+Message-ID: <CALz=kugDrYccCkLuo=hodOEJK0T5W1_DsWqNy1YuALTU=Hvh=w@mail.gmail.com>
+
+On Mon, Mar 19, 2012 at 3:59 AM, Daniel Farina <daniel at fdr.io> wrote:
+> I think a good example of this is given in a chapter of "Practical Common Lisp":
+>
+> ?http://www.gigamonkeys.com/book/beyond-exception-handling-conditions-and-restarts.html
+>
+> CL's flavor of "exception" handling is probably the only one I've
+> found gave me sufficient control comparable to rolling my own
+> constructs in a C program, checking everything at the lowest levels of
+> execution with maximum information without being as laborious.
+
+A similar technique to restarts can be implemented using tasks and
+message passing. If a task handles failure by sending a message to a
+supervisor task and yielding until it receives a response, the
+supervisor can then tell the failing task either to recover in a given
+way or to abort.
+
+-Joe
+
+From cpeterson at mozilla.com  Mon Mar 19 18:33:02 2012
+From: cpeterson at mozilla.com (Chris Peterson)
+Date: Mon, 19 Mar 2012 18:33:02 -0700
+Subject: [rust-dev] relax type checking of ints and uints?
+Message-ID: <4F67DE4E.7070103@mozilla.com>
+
+Rust's type checking of ints and uints seems unnecessarily strict. The 
+following examples produce compilation errors, but their intent seems 
+perfectly safe within the range of the types:
+
+     let a:u8 = 1;   // error even though 1i fits in u8
+     let b:u16 = a;  // error even though u8 fits in u16
+     let c:i32 = b;  // error even though u16 fits in i32
+     let d:int = c;  // error even though i32 fits in int (assuming int 
+is 32 or 64 bits)
+     let e:i64 = d;  // no error because int is i64 (on my machine)
+
+Integer assignment may be a simple special case (compared to C's integer 
+promotion rules), but it would be convenient and simplify some code.
+
+
+chris
+
+
+From catamorphism at gmail.com  Mon Mar 19 18:56:32 2012
+From: catamorphism at gmail.com (Tim Chevalier)
+Date: Mon, 19 Mar 2012 18:56:32 -0700
+Subject: [rust-dev] relax type checking of ints and uints?
+In-Reply-To: <4F67DE4E.7070103@mozilla.com>
+References: <4F67DE4E.7070103@mozilla.com>
+Message-ID: <CADcg8=n2wjMRtO0J4UqpNoQkdLK_ajuFGYOtpa0BnJrfTzcMng@mail.gmail.com>
+
+On Mon, Mar 19, 2012 at 6:33 PM, Chris Peterson <cpeterson at mozilla.com> wrote:
+> Rust's type checking of ints and uints seems unnecessarily strict. The
+> following examples produce compilation errors, but their intent seems
+> perfectly safe within the range of the types:
+>
+> ? ?let a:u8 = 1; ? // error even though 1i fits in u8
+> ? ?let b:u16 = a; ?// error even though u8 fits in u16
+> ? ?let c:i32 = b; ?// error even though u16 fits in i32
+> ? ?let d:int = c; ?// error even though i32 fits in int (assuming int is 32
+> or 64 bits)
+> ? ?let e:i64 = d; ?// no error because int is i64 (on my machine)
+>
+
+IIRC, we agreed that we will allow overloaded integer literals,
+although that might or might not address line 1 in your code, since we
+only talked about overloading literals to allow them to be int or
+uint. (See https://github.com/mozilla/rust/issues/1425 )
+
+I don't think we have any plans to add implicit casts as implied by
+your other 4 examples. It seems too complex -- if any of the variables
+in your example were mutated after being initialized, the pass that
+would insert these casts would get pretty complicated.
+
+Cheers,
+Tim
+
+-- 
+Tim Chevalier * http://catamorphism.org/ * Often in error, never in doubt
+"There can be no deep disappointment where there is not deep love." --
+Martin Luther King, Jr.
+
+From pwalton at mozilla.com  Mon Mar 19 19:00:30 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Mon, 19 Mar 2012 19:00:30 -0700
+Subject: [rust-dev] relax type checking of ints and uints?
+In-Reply-To: <CADcg8=n2wjMRtO0J4UqpNoQkdLK_ajuFGYOtpa0BnJrfTzcMng@mail.gmail.com>
+References: <4F67DE4E.7070103@mozilla.com>
+	<CADcg8=n2wjMRtO0J4UqpNoQkdLK_ajuFGYOtpa0BnJrfTzcMng@mail.gmail.com>
+Message-ID: <4F67E4BE.6040204@mozilla.com>
+
+On 3/19/12 6:56 PM, Tim Chevalier wrote:
+> I don't think we have any plans to add implicit casts as implied by
+> your other 4 examples. It seems too complex -- if any of the variables
+> in your example were mutated after being initialized, the pass that
+> would insert these casts would get pretty complicated.
+
+Actually, I don't think Chris was suggesting having a pass that computes 
+the possible set of values for each local. I think he was getting at 
+more of a "must-be-wider-than" relation among numeric types. For 
+example, you know that every u8 value can be losslessly converted to an 
+i16 based on the types alone.
+
+Java has something similar.
+
+Patrick
+
+From graydon at mozilla.com  Mon Mar 19 19:22:35 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 19 Mar 2012 19:22:35 -0700
+Subject: [rust-dev] relax type checking of ints and uints?
+In-Reply-To: <4F67E4BE.6040204@mozilla.com>
+References: <4F67DE4E.7070103@mozilla.com>
+	<CADcg8=n2wjMRtO0J4UqpNoQkdLK_ajuFGYOtpa0BnJrfTzcMng@mail.gmail.com>
+	<4F67E4BE.6040204@mozilla.com>
+Message-ID: <4F67E9EB.7080501@mozilla.com>
+
+On 12-03-19 07:00 PM, Patrick Walton wrote:
+> On 3/19/12 6:56 PM, Tim Chevalier wrote:
+>> I don't think we have any plans to add implicit casts as implied by
+>> your other 4 examples. It seems too complex -- if any of the variables
+>> in your example were mutated after being initialized, the pass that
+>> would insert these casts would get pretty complicated.
+> 
+> Actually, I don't think Chris was suggesting having a pass that computes
+> the possible set of values for each local. I think he was getting at
+> more of a "must-be-wider-than" relation among numeric types. For
+> example, you know that every u8 value can be losslessly converted to an
+> i16 based on the types alone.
+> 
+> Java has something similar.
+
+Promoting unsigned values to wider values carries the risk of widening
+to a width you didn't expect, meaning you have an operation in the
+middle of an expression happen with fewer bits than where you were
+expecting. Say "(x << 8 | x & 0xff)". What's the temporary width for
+each expression node? Too subtle to guess. The existing rule is good
+here: "all the operands contributing bits need to be of the same width".
+
+Promoting signed values to wider ones risks unexpected sign extension,
+which is riskier still. "let i = 0xff;" .. did you mean -1 there?
+
+I believe the only place we're considering relaxing this is the
+following case (when all these conditions hold):
+
+   - Unadorned integer literal.
+   - Precise integer type context that unifies with it.
+   - Literal does not change sign when interpreted as the inferred
+     integer literal.
+
+Other cases remain errors (which you can disable by either turning off
+via the lint flags or adding literal suffixes).
+
+This means "let x : i8 = 0xff;" would be an error -- it changes sign --
+but "let x : i16 = 0xff;" would be ok.
+
+Beyond this, I think the widening rules or any form of in-expression
+promotion in general is too hazardous. Literals are the pain point.
+
+-Graydon
+
+From graydon at mozilla.com  Mon Mar 19 21:52:14 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 19 Mar 2012 21:52:14 -0700
+Subject: [rust-dev] Compiling rust programs
+In-Reply-To: <20120308224836.GA15108@mulga.csse.unimelb.edu.au>
+References: <CADg2TKRaz9eik3yy39Q7VXekQfF4estXsTgP3qiiABTM63o4Mw@mail.gmail.com>
+	<4F591B1B.9070304@mozilla.com>
+	<20120308221532.GA9595@mulga.csse.unimelb.edu.au>
+	<4F59350E.7090603@mozilla.com>
+	<20120308224836.GA15108@mulga.csse.unimelb.edu.au>
+Message-ID: <4F680CFE.1080905@mozilla.com>
+
+On 08/03/2012 2:48 PM, Jeff Schultz wrote:
+
+> Yes, I appreciate the motive.  Could the same goal be achieved by
+> refusing to introspect a library that *doesn't* have a mangled name in
+> any location where there are more than one "instances" of the library
+> name or which can otherwise be deduced to be an "install" location?
+> Hmm, how eager is the binding to libraries anyway?
+
+When you link, you embed the soname of the library in the target you're 
+building, which drives the runtime loader's search. I'd prefer not to 
+get into a game of "oh, you linked before you installed? oh, that won't 
+work" by default.
+
+I'm ok making an option for disabling the name mangling, but I don't 
+want it to the default behavior. I want the defaults to be safe(r).
+
+-Graydon
+
+From cpeterson at mozilla.com  Tue Mar 20 10:57:40 2012
+From: cpeterson at mozilla.com (Chris Peterson)
+Date: Tue, 20 Mar 2012 10:57:40 -0700
+Subject: [rust-dev] relax type checking of ints and uints?
+In-Reply-To: <4F67E9EB.7080501@mozilla.com>
+References: <4F67DE4E.7070103@mozilla.com>
+	<CADcg8=n2wjMRtO0J4UqpNoQkdLK_ajuFGYOtpa0BnJrfTzcMng@mail.gmail.com>
+	<4F67E4BE.6040204@mozilla.com> <4F67E9EB.7080501@mozilla.com>
+Message-ID: <4F68C514.6020407@mozilla.com>
+
+On 3/19/12 7:22 PM, Graydon Hoare wrote:
+> Beyond this, I think the widening rules or any form of in-expression
+> promotion in general is too hazardous. Literals are the pain point.
+Sounds good. Safely promoting literals would be a big help.
+
+chris
+
+
+From niko at alum.mit.edu  Tue Mar 20 12:01:43 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Tue, 20 Mar 2012 12:01:43 -0700
+Subject: [rust-dev] ACL proposal
+Message-ID: <4F68D417.6040002@alum.mit.edu>
+
+Along the lines of issue #1893, I wanted to propose a simple, 
+hierarchical system for access control.
+
+Conceptually, each item is assigned an access level describable as an enum:
+
+     enum access {
+         pub, priv(module_path)
+     }
+
+A `pub` item is accessible from outside the crate.  A `priv(M)` item is 
+accessible by module M and its submodules from within the crate.
+
+The notation would look like:
+
+     fn foo(...) { ... } // Default: private to the root path, i.e., 
+crate-private
+     pub fn foo(...) { ... } // Public
+     priv fn foo(...) { ... } // Default: private to current module
+     priv(::) fn foo(...) { ... } // Explicit: crate-private
+     priv(metadata) fn foo(...) { ... } // Private to the metadata 
+package of current root
+
+If you write `priv(M)` before an item, then M must resolve to the 
+current module or some supermodule of the current module (otherwise, the 
+module would be defining an item which it itself does not have access 
+to...or maybe this is ok, actually).
+
+The reason for this change is that it makes it relatively easy to 
+refactor.  An example where this has come up for me is that while 
+writing the astencode module, I needed access to non-exported items from 
+rustc::metadata::{encode, tyencode}.  I would have liked a way to easily 
+express "the items are used from other parts of the metadata module, but 
+not from the rest of the compiler".  It can be expressed today but 
+requires significant refactoring.
+
+In general, it'd be nice to be able to take a given module M and split 
+it into two submodules M.M0 and M.M1 such that M.M0 and M.M1 can easily 
+access each other's content without exporting it to the rest of the 
+world.  This is kind of annoying today.
+
+
+Niko
+
+
+From marijnh at gmail.com  Tue Mar 20 12:11:58 2012
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 20 Mar 2012 20:11:58 +0100
+Subject: [rust-dev] ACL proposal
+In-Reply-To: <4F68D417.6040002@alum.mit.edu>
+References: <4F68D417.6040002@alum.mit.edu>
+Message-ID: <CAJnHWXvMuo-zFOY0Kz56sWmhOQFOfY+i0LsmmMTsXNFCfDWC8g@mail.gmail.com>
+
+Looks good on the whole. I guess there'll also be a way to change the
+default visibility per-module? It might become tedious, when exporting
+a bunch of things to a specific submodule, to repeat the path for
+every item.
+
+From niko at alum.mit.edu  Tue Mar 20 13:22:37 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Tue, 20 Mar 2012 13:22:37 -0700
+Subject: [rust-dev] relax type checking of ints and uints?
+In-Reply-To: <4F67E9EB.7080501@mozilla.com>
+References: <4F67DE4E.7070103@mozilla.com>
+	<CADcg8=n2wjMRtO0J4UqpNoQkdLK_ajuFGYOtpa0BnJrfTzcMng@mail.gmail.com>
+	<4F67E4BE.6040204@mozilla.com> <4F67E9EB.7080501@mozilla.com>
+Message-ID: <4F68E70D.1060906@alum.mit.edu>
+
+On 3/19/12 7:22 PM, Graydon Hoare wrote:
+> Beyond this, I think the widening rules or any form of in-expression
+> promotion in general is too hazardous. Literals are the pain point.
+
+I've been working on a refactoring of the ty/typeck modules that should 
+make inference for literals relatively easy to achieve.
+
+
+Niko
+
+From graydon at mozilla.com  Fri Mar 23 13:42:36 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 23 Mar 2012 13:42:36 -0700
+Subject: [rust-dev] Arrays, vectors...
+Message-ID: <4F6CE03C.3000904@mozilla.com>
+
+I've been thinking and sketching a lot about vectors & arrays lately.
+There are a _lot_ of design pressures on this part of the language, but
+our current approach is clearly unsatisfactory:
+
+  - Existing vecs are always unique. Sometimes you want shared, but
+    boxing them as @[] causes double-indirection, feels awkward.
+
+  - Existing vecs are always in the heap. So:
+     - There's no way to alloca one (in stack)
+     - There's no way to allocate one in constant memory
+     - There's no way to allocate one inside another structure
+
+  - The latter is particularly egregious when it comes to C interop.
+    C has the idea of a dense block of fixed-size, int[10] is
+    10-ints-long. We have no way to model this in rust right now.
+
+I think we need to deal with this stew of disappointments in our vectors
+soon, probably in the 0.2 - 0.3 timeframe. I think with the appearance
+of region pointers we have a reasonable leg to stand on in terms of
+formulating lifecycles. Here's my proposal:
+
+  - [int] means (&int,len), it's a slice
+  - str means ((&u8,len) : is_utf8(*)), a textual slice
+
+  - the region system is used to relate the visibility of [t] and str
+    to their region-of-allocation, the same way it relates normal &t
+    values. The additional 'length' integer on a slice is used only
+    by unsafe code such as that implementing operator[] and iteration.
+
+  - [int/10] and str/10 mean "fixed-size, 10-elements long"
+    and are _interior values_. The number is part of the type.
+    The type's size is N * sizeof(T). We define const-expressions and
+    integer-const-expressions as part of this work, so that number
+    can in some cases be symbolic.
+
+  - [int/~] is a heap-resident unique vector, like [int] today
+  - [int/@] is a heap-resident shared vector, like old [int]
+  - str/~ and str/@ are the same for strings
+  - The compiler open-codes all of this
+
+  - [int] <: [int/10]
+    [int] <: [int/~]
+    [int] <: [int/@]
+    str <: str/10
+    str <: str/~
+    str <: str/@
+
+  - In other words, you can cast anything down to the "slice" form,
+    the same way you can cast any of the closures to fn() type
+
+  - Literals are subtle; assume p,q,r are dynamic vals:
+
+     - [1,2,3,4,5]    -- constant memory, type [int]
+     - [1,2,3,4,5]/5  -- constant memory, type [int/5]
+     - [1,2,3,4,5]/_  -- same, type [int/5], type-size inferred
+     - "hello"        -- constant memory, type str
+     - "hello"/5      -- constant memory, type str/5
+     - "hello"/_      -- same, type str/5, type-size inferred
+     - [p,q,r]        -- alloca'ed memory, type [int]
+     - [p,q,r]/3      -- alloca'ed memory, type [int/3]
+     - [p,q,r]/_      -- same, type [int/3], type-size inferred
+     - [p,q,r]/@      -- heap-resident shared, type [int/@]
+     - [p,q,r]/~      -- heap-resident unique, type [int/~]
+
+  - The compiler has to know about all these types. It's a bit of a
+    bestiary but it means all the use-cases are satisfied and I think
+    it composes well and is congruent with the rest of the language.
+
+  - Things like foo[i], +, += and such are pushed down to library code,
+    use operator overloading. The compiler only does lifecycle:
+    literals, allocation, casting, passing and destruction.
+
+Positives of this approach:
+
+  - The common representation is cheapest, is a subtype of all, and is
+    the default type of the easiest-to-write literal forms. Most people
+    will write 'let x = "hello";' and get x:str inferred. And it'll be
+    cheap to pass, and constant-memory. The next-most-common (vectors of
+    dynamic values) are alloca'ed, but also passed as slices, cheap.
+
+  - It's possible to denote the aggregate, not just a pointer-to-it,
+    iff you fix its size. If you can't commit to a size, you can't
+    denote the aggregate, can only get a pointer-to-it.
+
+  - In particular, you can now translate C array types directly to a
+    rust type. { x: int, y: [int/15], z: int } is a dense structure.
+
+  - Pointers-to-fixed-sized-types are still possible: &[int/1024] is
+    a pointer. As is *[int/1024]. Orthogonality is maintained.
+
+  - Prefix box operators ~ and @ still mean what they always mean; there
+    is no weirdness that arises by trying to make ~[] special and then
+    confront the inconsistency of ~T != ~[] when T == []. Like with
+    fn closures, we make the "how you manage your associated storage" a
+    syntactically distinct component of the tycon.
+
+  - Heap-resident versions exist; like in any data structure, you have
+    to discuss uniquieness or shared-ness to some extent. If you want a
+    record with 3 strings you can send over a channel, it has to be of
+    type {x:str/~, y:str/~, z:str/~}.
+
+So, thoughts, likes, dislikes?
+
+Are the semantics over-complex? I think we really have a large number of
+use-cases and there's no way we can hit them all with a single
+abstraction. Shared-heap != unique-heap != constant != alloca !=
+borrowed region, and fixed-size != variable-size.
+
+Is the trailing slash absolutely hideous? There are a few other unused
+ASCII symbols in the type grammar but this was the nicest-looking I
+could see (that didn't collide with something else). It's also possible
+to write them as str/10, str@ and str~, say, and similarly [int/10],
+[int]~ and [int]@. That's fewer slashes but a bit more visual ambiguity
+if you have a leading ~ or @ as well.
+
+-Graydon
+
+From pwalton at mozilla.com  Fri Mar 23 16:37:48 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 23 Mar 2012 16:37:48 -0700
+Subject: [rust-dev] Arrays, vectors...
+In-Reply-To: <4F6CE03C.3000904@mozilla.com>
+References: <4F6CE03C.3000904@mozilla.com>
+Message-ID: <4F6D094C.9030907@mozilla.com>
+
+I like all of this.
+
+On 3/23/12 1:42 PM, Graydon Hoare wrote:
+> Are the semantics over-complex? I think we really have a large number of
+> use-cases and there's no way we can hit them all with a single
+> abstraction. Shared-heap != unique-heap != constant != alloca !=
+> borrowed region, and fixed-size != variable-size.
+
+Yeah, that's my only concern, but I don't know how to make it simpler, 
+really.
+
+> Is the trailing slash absolutely hideous? There are a few other unused
+> ASCII symbols in the type grammar but this was the nicest-looking I
+> could see (that didn't collide with something else). It's also possible
+> to write them as str/10, str@ and str~, say, and similarly [int/10],
+> [int]~ and [int]@. That's fewer slashes but a bit more visual ambiguity
+> if you have a leading ~ or @ as well.
+
+LLVM uses "x"; [int x 10], [int x 30]. I think it's kind of cute. 
+There's precedent for "x" as an operator, in Perl, and I don't believe 
+it requires making "x" a keyword. It does require whitespace around the 
+"x", though.
+
+Patrick
+
+From giles at thaumas.net  Fri Mar 23 16:41:26 2012
+From: giles at thaumas.net (Ralph Giles)
+Date: Fri, 23 Mar 2012 16:41:26 -0700
+Subject: [rust-dev] Arrays, vectors...
+In-Reply-To: <4F6D094C.9030907@mozilla.com>
+References: <4F6CE03C.3000904@mozilla.com>
+	<4F6D094C.9030907@mozilla.com>
+Message-ID: <CAEW_RktQxGaUj9wewk4jZJw85rnB7Uz=BgGquyU5u-dQ_csKCA@mail.gmail.com>
+
+On 23 March 2012 16:37, Patrick Walton <pwalton at mozilla.com> wrote:
+
+> LLVM uses "x"; [int x 10], [int x 30]. I think it's kind of cute. There's
+> precedent for "x" as an operator, in Perl, and I don't believe it requires
+> making "x" a keyword. It does require whitespace around the "x", though.
+
+That is cute. Is [int*10] taken? That avoids the whitespace and has
+some precedent in python.
+
+ -r
+
+From graydon at mozilla.com  Fri Mar 23 17:40:42 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 23 Mar 2012 17:40:42 -0700
+Subject: [rust-dev] Arrays, vectors...
+In-Reply-To: <4F6D094C.9030907@mozilla.com>
+References: <4F6CE03C.3000904@mozilla.com> <4F6D094C.9030907@mozilla.com>
+Message-ID: <4F6D180A.6080203@mozilla.com>
+
+On 12-03-23 04:37 PM, Patrick Walton wrote:
+> I like all of this.
+
+Hooray!
+
+> LLVM uses "x"; [int x 10], [int x 30]. I think it's kind of cute.
+> There's precedent for "x" as an operator, in Perl, and I don't believe
+> it requires making "x" a keyword. It does require whitespace around the
+> "x", though.
+
+Thought about it -- and here we're just quibbling over syntax -- but I
+couldn't find a way to make it look any good when working through the
+notation, when it comes to:
+
+  - str type, which has no brackets but might have fixed size
+  - literals, where you are faced with expr ambiguity
+  - the other sigils ~ and @ for storage location
+  - differentiating the slice type from the fixed-inferred-size type
+
+A syntax choice ought to be reasonably uniform, unambiguous and
+decent-looking in as many of these cases as possible. Open a buffer up
+and see what you can get that covers all of 'em. Happy to look at other
+candidates :)
+
+-Graydon
+
+From sebastian.sylvan at gmail.com  Fri Mar 23 18:47:04 2012
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Fri, 23 Mar 2012 18:47:04 -0700
+Subject: [rust-dev] Arrays, vectors...
+In-Reply-To: <4F6CE03C.3000904@mozilla.com>
+References: <4F6CE03C.3000904@mozilla.com>
+Message-ID: <CAGZgfT5wMSi3CjveGVgTQX2N2QMMW5CVr+3LNDjvfyFGgA9KKg@mail.gmail.com>
+
+On Fri, Mar 23, 2012 at 1:42 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+> ? ? - [1,2,3,4,5] ? ?-- constant memory, type [int]
+> ? ? - [1,2,3,4,5]/5 ?-- constant memory, type [int/5]
+
+Hmm, why couldn't literals always be fixed-size? They get
+auto-promoted to slices when needed, right? That would remove the need
+for the /X part of the literal syntax at least.
+
+-- 
+Sebastian Sylvan
+
+From graydon at mozilla.com  Fri Mar 23 18:54:41 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 23 Mar 2012 18:54:41 -0700
+Subject: [rust-dev] Arrays, vectors...
+In-Reply-To: <CAGZgfT5wMSi3CjveGVgTQX2N2QMMW5CVr+3LNDjvfyFGgA9KKg@mail.gmail.com>
+References: <4F6CE03C.3000904@mozilla.com>
+	<CAGZgfT5wMSi3CjveGVgTQX2N2QMMW5CVr+3LNDjvfyFGgA9KKg@mail.gmail.com>
+Message-ID: <4F6D2961.6080101@mozilla.com>
+
+On 12-03-23 06:47 PM, Sebastian Sylvan wrote:
+> On Fri, Mar 23, 2012 at 1:42 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+>>     - [1,2,3,4,5]    -- constant memory, type [int]
+>>     - [1,2,3,4,5]/5  -- constant memory, type [int/5]
+> 
+> Hmm, why couldn't literals always be fixed-size? They get
+> auto-promoted to slices when needed, right? That would remove the need
+> for the /X part of the literal syntax at least.
+
+Compare:
+
+  let x = [1,2,3,4,5];   // x:[int], 5 words storage, 2 words for x
+  let y = x;             // y:[int], 2 words for y
+                         // total: 9 words, 1 array
+
+vs.
+
+  let x = [1,2,3,4,5]/5; // x:[int/5], 5 words for x
+  let y = x;             // y:[int/5], 5 words for y
+                         // total: 10 words, 2 arrays
+
+-Graydon
+
+From pwalton at mozilla.com  Fri Mar 23 18:59:31 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 23 Mar 2012 18:59:31 -0700
+Subject: [rust-dev] Arrays, vectors...
+In-Reply-To: <4F6D2961.6080101@mozilla.com>
+References: <4F6CE03C.3000904@mozilla.com>
+	<CAGZgfT5wMSi3CjveGVgTQX2N2QMMW5CVr+3LNDjvfyFGgA9KKg@mail.gmail.com>
+	<4F6D2961.6080101@mozilla.com>
+Message-ID: <4F6D2A83.5040006@mozilla.com>
+
+On 3/23/12 6:54 PM, Graydon Hoare wrote:
+> On 12-03-23 06:47 PM, Sebastian Sylvan wrote:
+>> On Fri, Mar 23, 2012 at 1:42 PM, Graydon Hoare<graydon at mozilla.com>  wrote:
+>>>      - [1,2,3,4,5]    -- constant memory, type [int]
+>>>      - [1,2,3,4,5]/5  -- constant memory, type [int/5]
+>>
+>> Hmm, why couldn't literals always be fixed-size? They get
+>> auto-promoted to slices when needed, right? That would remove the need
+>> for the /X part of the literal syntax at least.
+>
+> Compare:
+>
+>    let x = [1,2,3,4,5];   // x:[int], 5 words storage, 2 words for x
+>    let y = x;             // y:[int], 2 words for y
+>                           // total: 9 words, 1 array
+>
+> vs.
+>
+>    let x = [1,2,3,4,5]/5; // x:[int/5], 5 words for x
+>    let y = x;             // y:[int/5], 5 words for y
+>                           // total: 10 words, 2 arrays
+
+But if literals promoted to slices you could take advantage of that to 
+achieve the same effect:
+
+let x: [int] = [1,2,3,4,5]; // x:[int], 5 words storage, 2 words for x
+let y = x;		    // y:[int], 2 words for y
+                             // total: 9 words, 1 array
+
+vs.
+
+let x = [1,2,3,4,5];	    // x:[int/5], 5 words for x
+let y = x;		    // y:[int/5], 5 words for y
+			    // total: 10 words, 2 arrays
+
+Patrick
+
+From graydon at mozilla.com  Fri Mar 23 19:03:26 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 23 Mar 2012 19:03:26 -0700
+Subject: [rust-dev] Arrays, vectors...
+In-Reply-To: <4F6D2A83.5040006@mozilla.com>
+References: <4F6CE03C.3000904@mozilla.com>
+	<CAGZgfT5wMSi3CjveGVgTQX2N2QMMW5CVr+3LNDjvfyFGgA9KKg@mail.gmail.com>
+	<4F6D2961.6080101@mozilla.com> <4F6D2A83.5040006@mozilla.com>
+Message-ID: <4F6D2B6E.1040301@mozilla.com>
+
+On 12-03-23 06:59 PM, Patrick Walton wrote:
+
+> But if literals promoted to slices you could take advantage of that to
+> achieve the same effect:
+
+Via the type annotation on x? If so, that's true, but it means that if
+you're lazy and write the second case (and we know lazy is the normal
+case for programmers) you get two arrays, the expensive and
+not-pointing-at-the-same-array version. I think we don't want that to be
+the default.
+
+-Graydon
+
+From steven099 at gmail.com  Fri Mar 23 22:10:08 2012
+From: steven099 at gmail.com (Steven Blenkinsop)
+Date: Sat, 24 Mar 2012 01:10:08 -0400
+Subject: [rust-dev] Arrays, vectors...
+In-Reply-To: <4F6CE03C.3000904@mozilla.com>
+References: <4F6CE03C.3000904@mozilla.com>
+Message-ID: <CANjmGJsDWu5=HcGRBqjJbSrwfoD68Ln3Dz+-iDgXuBtYKADfuw@mail.gmail.com>
+
+On Fri, Mar 23, 2012 at 4:42 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> So, thoughts, likes, dislikes?
+>
+
+It's good to have the different modes as elsewhere in the language, as it
+makes it easier to reason about. As an outsider, I can't really comment
+much more in depth on the design. Syntax wise though, there's one concern I
+see ? and I'm only posting because I haven't seen it mentioned yet ? which
+is the following case:  [str/10]. What type is this? Of course you could
+make it a fixed size vector of 10 strings, and make [(str/10)] be a slice
+of fixed size string of 10 bytes, but I think the ambiguity is worth
+considering before introducing it.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120324/c41e4c17/attachment-0001.html>
+
+From graydon at mozilla.com  Sat Mar 24 09:40:52 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 24 Mar 2012 09:40:52 -0700
+Subject: [rust-dev] Arrays, vectors...
+In-Reply-To: <CANjmGJsDWu5=HcGRBqjJbSrwfoD68Ln3Dz+-iDgXuBtYKADfuw@mail.gmail.com>
+References: <4F6CE03C.3000904@mozilla.com>
+	<CANjmGJsDWu5=HcGRBqjJbSrwfoD68Ln3Dz+-iDgXuBtYKADfuw@mail.gmail.com>
+Message-ID: <4F6DF914.4090104@mozilla.com>
+
+On 23/03/2012 10:10 PM, Steven Blenkinsop wrote:
+
+> mentioned yet ? which is the following case:  [str/10]. What type is
+> this? Of course you could make it a fixed size vector of 10 strings, and
+> make [(str/10)] be a slice of fixed size string of 10 bytes, but I think
+> the ambiguity is worth considering before introducing it.
+
+Ah, good catch. I guess, to disambiguate, we'd need fixed-size vec types 
+to be [int]/10 then. Which is good, because it acquires symmetry with 
+the literal form; but it's getting less and less appealing-looking.
+
+Visual survey time:
+
+   disambiguated proposal:                [int]/10        str/10
+                                          [1,2,3]/_       "hi"/_
+
+   (still, I think, my preference)
+
+
+Other possibiltiies:
+
+   different suffixes for str vs. []:     [int x 10]      str/10
+                                          [int/10]        str[10]
+                                          [int x 10]      str[10]
+                                          [int * 10]      str<10>
+
+   same suffix, some other choice:        [int].10        str.10
+                                          [int]'10        str'10
+                                          [int]#10        str#10
+                                          [int]!10        str!10
+                                          [int]%10        str%10
+                                          [int]^10        str^10
+                                          [int]|10        str|10
+                                          [int]*10        str*10
+
+
+   ... or prefixes:                       10.[int]        10.str
+                                          10'[int]        10'str
+                                          10#[int]        10#str
+                                          10![int]        10!str
+                                          10%[int]        10%str
+                                          10^[int]        10^str
+                                          10|[int]        10|str
+                                          10*[int]        10*str
+
+
+   straight juxtaposition:                [int] 10        str 10
+                                          [int] _         str _
+                                          10 [int]        10 str
+
+   trailing brackets:                     [int]<10>       str<10>
+                                          [int]<_>        str<_>
+
+                                          [int](10)       str(10)
+                                          [int](_)        str(_)
+
+                                          [int][10]       str[10]
+                                          [int][_]        str[_]
+
+                                          [int]{10}       str{10}
+                                          [int]{_}        str{_}
+
+   C-style numbers in square brackets:    int[]           str
+                                          int[10]         str(10)
+
+   ... or as prefixes (Go-style):         []int           str
+                                          [10]int         (10)str
+
+   switch vec to a named tycon:           vec[10]<int>    str[10]
+                                          vec[_]<int>     str[_]
+                                          vec<int>        str
+
+
+Keep in mind, any such syntax needs to handle:
+
+   - 'Slice' case for type, literal and pattern syntaxes
+   - 'Referent' explicit fixed-size case for same
+   - 'Referent' implicit fixed-size (counting elements) literals
+
+Suggestions welcome. I still think the /N version offends my eyes the 
+least, but this whole page is a bit tragic to behold. Maybe the 
+trailing-() version is also .. tolerable?
+
+-Graydon
+
+
+
+From erick.tryzelaar at gmail.com  Sat Mar 24 12:35:29 2012
+From: erick.tryzelaar at gmail.com (Erick Tryzelaar)
+Date: Sat, 24 Mar 2012 12:35:29 -0700
+Subject: [rust-dev] Arrays, vectors...
+In-Reply-To: <4F6DF914.4090104@mozilla.com>
+References: <4F6CE03C.3000904@mozilla.com>
+	<CANjmGJsDWu5=HcGRBqjJbSrwfoD68Ln3Dz+-iDgXuBtYKADfuw@mail.gmail.com>
+	<4F6DF914.4090104@mozilla.com>
+Message-ID: <CALdfqQ+=eqEp14hZ1qyKfjUEcTqKRwOu3fSfypDAVJ0ZexGE3w@mail.gmail.com>
+
+On Sat, Mar 24, 2012 at 9:40 AM, Graydon Hoare <graydon at mozilla.com> wrote:
+> On 23/03/2012 10:10 PM, Steven Blenkinsop wrote:
+>
+> ?switch vec to a named tycon: ? ? ? ? ? vec[10]<int> ? ?str[10]
+> ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? vec[_]<int> ? ? str[_]
+> ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? vec<int> ? ? ? ?str
+
+One other alternative: C++ template style: vec<int, 10>.
+
+-----
+
+I'm not fond of overloading the division operator. I read [1,2,3]/3 as
+dividing a vector by a scalar. [1,2,3]#3 is a bit harsher to read, but
+the hash symbol use used to represent a count of items, so it's
+appropriate.
+
+If # is too ugly, what about expressing literals of a sized vector
+with a cast, as in:
+
+[1,2,3] as [int]/3
+
+That would avoid my issue with the operator ambiguity.
+
+From sebastian.sylvan at gmail.com  Sat Mar 24 13:57:04 2012
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Sat, 24 Mar 2012 13:57:04 -0700
+Subject: [rust-dev] Shapiro: BitC isn't going to work
+Message-ID: <CAGZgfT5t_c_HrB-DsbAPdNU5KbqZa7wK8u2kSeR16Qy-dPz0Yw@mail.gmail.com>
+
+Here's a note by Jonathan Shapiro saying that BitC is no longer going
+to work: http://www.coyotos.org/pipermail/bitc-dev/2012-March/003300.html
+
+It had many of the same goals as Rust, so it may be interesting to
+this mailing list to learn from BitC.
+
+
+-- 
+Sebastian Sylvan
+
+From me at kevincantu.org  Sat Mar 24 14:29:49 2012
+From: me at kevincantu.org (Kevin Cantu)
+Date: Sat, 24 Mar 2012 14:29:49 -0700
+Subject: [rust-dev] Shapiro: BitC isn't going to work
+In-Reply-To: <CAGZgfT5t_c_HrB-DsbAPdNU5KbqZa7wK8u2kSeR16Qy-dPz0Yw@mail.gmail.com>
+References: <CAGZgfT5t_c_HrB-DsbAPdNU5KbqZa7wK8u2kSeR16Qy-dPz0Yw@mail.gmail.com>
+Message-ID: <CABq6+af7J6WabAU0j9sba_gxGdPoCfghVU0bF8zGeUMncgAEVA@mail.gmail.com>
+
+That's a fascinating read. Thanks!
+On Mar 24, 2012 1:57 PM, "Sebastian Sylvan" <sebastian.sylvan at gmail.com>
+wrote:
+
+> Here's a note by Jonathan Shapiro saying that BitC is no longer going
+> to work: http://www.coyotos.org/pipermail/bitc-dev/2012-March/003300.html
+>
+> It had many of the same goals as Rust, so it may be interesting to
+> this mailing list to learn from BitC.
+>
+>
+> --
+> Sebastian Sylvan
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120324/059c73bb/attachment.html>
+
+From niko at alum.mit.edu  Sat Mar 24 14:39:35 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Sat, 24 Mar 2012 14:39:35 -0700
+Subject: [rust-dev] Shapiro: BitC isn't going to work
+In-Reply-To: <CAGZgfT5t_c_HrB-DsbAPdNU5KbqZa7wK8u2kSeR16Qy-dPz0Yw@mail.gmail.com>
+References: <CAGZgfT5t_c_HrB-DsbAPdNU5KbqZa7wK8u2kSeR16Qy-dPz0Yw@mail.gmail.com>
+Message-ID: <4F6E3F17.9000502@alum.mit.edu>
+
+On 3/24/12 1:57 PM, Sebastian Sylvan wrote:
+> Here's a note by Jonathan Shapiro saying that BitC is no longer going
+> to work: http://www.coyotos.org/pipermail/bitc-dev/2012-March/003300.html
+>
+> It had many of the same goals as Rust, so it may be interesting to
+> this mailing list to learn from BitC.
+
+There's no doubt that a number of the issues he raises are things that 
+we either have wrestled with or will be wrestling with soon.  Off the 
+top of my head based on a quick read--
+
+1. By ref vs regions (they started with by ref parameters, realized that 
+they need regions, though the particular reasons they mention I think we 
+avoided just by making the mode part of the type of a function)
+2. Subtyping and inheritance (tried to avoid subtyping, realized that it 
+was inevitable, particularly around regions)
+3. Type class instance coherence (what I was calling the Hashtable 
+Problem)---we've still got some work to do here.
+4. Code generation for generic types ("monomorphization" vs other 
+approaches)
+5. Link-time inlining and optimization ("cross-crate inlining")
+
+I think we've got a compelling story on most of these issues, though in 
+some cases the story is mostly in our heads and has yet to be realized.
+
+Anyway, thanks for forwarding.
+
+
+Niko
+
+From pwalton at mozilla.com  Sat Mar 24 15:19:31 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 24 Mar 2012 15:19:31 -0700
+Subject: [rust-dev] Shapiro: BitC isn't going to work
+In-Reply-To: <CAGZgfT5t_c_HrB-DsbAPdNU5KbqZa7wK8u2kSeR16Qy-dPz0Yw@mail.gmail.com>
+References: <CAGZgfT5t_c_HrB-DsbAPdNU5KbqZa7wK8u2kSeR16Qy-dPz0Yw@mail.gmail.com>
+Message-ID: <4F6E4873.1070401@mozilla.com>
+
+On 03/24/2012 01:57 PM, Sebastian Sylvan wrote:
+> Here's a note by Jonathan Shapiro saying that BitC is no longer going
+> to work: http://www.coyotos.org/pipermail/bitc-dev/2012-March/003300.html
+>
+> It had many of the same goals as Rust, so it may be interesting to
+> this mailing list to learn from BitC.
+>
+>
+
+Very interesting. I posted my thoughts on Hacker News (along with some 
+comparisons to Go):
+
+http://news.ycombinator.com/item?id=3750882
+
+Patrick
+
+From garethdanielsmith at gmail.com  Sun Mar 25 02:16:01 2012
+From: garethdanielsmith at gmail.com (Gareth Smith)
+Date: Sun, 25 Mar 2012 10:16:01 +0100
+Subject: [rust-dev] Arrays, vectors...
+In-Reply-To: <4F6CE03C.3000904@mozilla.com>
+References: <4F6CE03C.3000904@mozilla.com>
+Message-ID: <4F6EE251.90508@gmail.com>
+
+On 23/03/12 20:42, Graydon Hoare wrote:
+>    - Existing vecs are always unique. Sometimes you want shared, but
+>      boxing them as @[] causes double-indirection, feels awkward.
+
+Apologies if I am missing the point here, but how about using some sort 
+of copy-on-write mechanism instead of unique pointers? So:
+
+let x = [1, 2, 3];
+let y = x;             // increments the reference count of the vec 
+referenced to by x
+let x += [4];        // since [the vec referenced to by] x has more then 
+one reference, it cant be appended in-place, so this is a 
+copy-and-then-append operation
+let x += [5];        // since x only has one reference now, it can be 
+appended-in-place
+
+I believe Tcl does something like this.
+
+-Gareth
+
+From pwalton at mozilla.com  Sun Mar 25 07:52:28 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sun, 25 Mar 2012 07:52:28 -0700
+Subject: [rust-dev] Arrays, vectors...
+In-Reply-To: <4F6EE251.90508@gmail.com>
+References: <4F6CE03C.3000904@mozilla.com> <4F6EE251.90508@gmail.com>
+Message-ID: <4F6F312C.5040808@mozilla.com>
+
+On 03/25/2012 02:16 AM, Gareth Smith wrote:
+> On 23/03/12 20:42, Graydon Hoare wrote:
+>> - Existing vecs are always unique. Sometimes you want shared, but
+>> boxing them as @[] causes double-indirection, feels awkward.
+>
+> Apologies if I am missing the point here, but how about using some sort
+> of copy-on-write mechanism instead of unique pointers? So:
+
+For sending purposes. We need to make sure that data is uniquely owned 
+to avoid atomic reference counting and data races when sending data 
+between tasks.
+
+Also, we used to rely on that optimization in earlier versions of Rust, 
+and it turned out to be hard to predict when there were outstanding 
+references. It was a bit of a performance footgun...
+
+Patrick
+
+From grahame at angrygoats.net  Tue Mar 27 03:45:28 2012
+From: grahame at angrygoats.net (Grahame Bowland)
+Date: Tue, 27 Mar 2012 18:45:28 +0800
+Subject: [rust-dev] Return in block functions
+Message-ID: <CADg2TKQ+9e9UbXKu09=nrXnz3XGkJ4NotCguq5xHToN5SA4iYg@mail.gmail.com>
+
+Hi everyone
+
+I was just wondering why returns from block functions have been banned?
+Possibly I'm writing code in an unusual style, but I have some fairly long
+block functions - being able to use 'ret' to immediately return feels quite
+a bit nicer than having to arrange things so that the block itself
+evaluates as an expression.
+
+Cheers
+Grahame
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120327/004dafc7/attachment.html>
+
+From marijnh at gmail.com  Tue Mar 27 03:52:40 2012
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 27 Mar 2012 12:52:40 +0200
+Subject: [rust-dev] Return in block functions
+In-Reply-To: <CADg2TKQ+9e9UbXKu09=nrXnz3XGkJ4NotCguq5xHToN5SA4iYg@mail.gmail.com>
+References: <CADg2TKQ+9e9UbXKu09=nrXnz3XGkJ4NotCguq5xHToN5SA4iYg@mail.gmail.com>
+Message-ID: <CAJnHWXvgLmkLL8yyW=5cf_rnovq1C8Sn9nEBwLbVk69QOGa-Eg@mail.gmail.com>
+
+See issue [1] for some discussion. The reason was that A) people are
+bound to expect ret to return from the outer function, which we don't
+support in most cases, and B) I am in the process of adding a case
+(for loops on top of blocks) where we *do* support returning out of
+the outer function from a block, and treating ret differently in
+different kinds of blocks seems like a bad idea.
+
+When going over the existing code that was using ret in blocks, I did
+find two cases that had to be transformed with a big, right-drifting
+if, but the rest were loops that would have benefited from proper
+ret/cont/break support. So yeah, it's not all roses, but I'd argue
+that huge blocks aren't very good style, and they might benefit from
+being factored into a few top-level functions.
+
+[1]: https://github.com/mozilla/rust/issues/1619
+
+Best,
+Marijn
+
+From grahame at angrygoats.net  Tue Mar 27 04:04:47 2012
+From: grahame at angrygoats.net (Grahame Bowland)
+Date: Tue, 27 Mar 2012 19:04:47 +0800
+Subject: [rust-dev] Return in block functions
+In-Reply-To: <CAJnHWXvgLmkLL8yyW=5cf_rnovq1C8Sn9nEBwLbVk69QOGa-Eg@mail.gmail.com>
+References: <CADg2TKQ+9e9UbXKu09=nrXnz3XGkJ4NotCguq5xHToN5SA4iYg@mail.gmail.com>
+	<CAJnHWXvgLmkLL8yyW=5cf_rnovq1C8Sn9nEBwLbVk69QOGa-Eg@mail.gmail.com>
+Message-ID: <CADg2TKRqy2rqhH+L-0DKG9uMht9f86ArHX9pmR4un6qxQ=AnRA@mail.gmail.com>
+
+Hi Marijn
+
+Thanks, that all makes sense.
+
+Apart from "complicated" blocks, the other case I've got is
+
+some_iter_func(..) {
+  if (some_condition) { ret; } // meaning 'cont'
+  ...
+}
+
+Where my block is returning (). It sounds like that case will be handled
+nicely when 'cont' starts behaving as if you were in a loop, so that's
+great.
+
+Cheers
+Grahame
+
+On 27 March 2012 18:52, Marijn Haverbeke <marijnh at gmail.com> wrote:
+
+> See issue [1] for some discussion. The reason was that A) people are
+> bound to expect ret to return from the outer function, which we don't
+> support in most cases, and B) I am in the process of adding a case
+> (for loops on top of blocks) where we *do* support returning out of
+> the outer function from a block, and treating ret differently in
+> different kinds of blocks seems like a bad idea.
+>
+> When going over the existing code that was using ret in blocks, I did
+> find two cases that had to be transformed with a big, right-drifting
+> if, but the rest were loops that would have benefited from proper
+> ret/cont/break support. So yeah, it's not all roses, but I'd argue
+> that huge blocks aren't very good style, and they might benefit from
+> being factored into a few top-level functions.
+>
+> [1]: https://github.com/mozilla/rust/issues/1619
+>
+> Best,
+> Marijn
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120327/47af7e52/attachment.html>
+
+From niko at alum.mit.edu  Tue Mar 27 07:07:22 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Tue, 27 Mar 2012 07:07:22 -0700
+Subject: [rust-dev] Return in block functions
+In-Reply-To: <CADg2TKRqy2rqhH+L-0DKG9uMht9f86ArHX9pmR4un6qxQ=AnRA@mail.gmail.com>
+References: <CADg2TKQ+9e9UbXKu09=nrXnz3XGkJ4NotCguq5xHToN5SA4iYg@mail.gmail.com>
+	<CAJnHWXvgLmkLL8yyW=5cf_rnovq1C8Sn9nEBwLbVk69QOGa-Eg@mail.gmail.com>
+	<CADg2TKRqy2rqhH+L-0DKG9uMht9f86ArHX9pmR4un6qxQ=AnRA@mail.gmail.com>
+Message-ID: <4F71C99A.9010000@alum.mit.edu>
+
+Hi,
+
+Also, I believe it is still possible to write:
+
+     some_func(..., fn&(x:T) -> R {
+        if foo { ret; }
+        ..
+     })
+
+I plan to make the parameter and return types for fn() expressions 
+inferable as well, which would remove the last annoyance barrier between 
+"fn&" and "{||".
+
+
+Niko
+
+On 3/27/12 4:04 AM, Grahame Bowland wrote:
+> Hi Marijn
+>
+> Thanks, that all makes sense.
+>
+> Apart from "complicated" blocks, the other case I've got is
+>
+> some_iter_func(..) {
+>   if (some_condition) { ret; } // meaning 'cont'
+>   ...
+> }
+>
+> Where my block is returning (). It sounds like that case will be 
+> handled nicely when 'cont' starts behaving as if you were in a loop, 
+> so that's great.
+>
+> Cheers
+> Grahame
+>
+> On 27 March 2012 18:52, Marijn Haverbeke <marijnh at gmail.com 
+> <mailto:marijnh at gmail.com>> wrote:
+>
+>     See issue [1] for some discussion. The reason was that A) people are
+>     bound to expect ret to return from the outer function, which we don't
+>     support in most cases, and B) I am in the process of adding a case
+>     (for loops on top of blocks) where we *do* support returning out of
+>     the outer function from a block, and treating ret differently in
+>     different kinds of blocks seems like a bad idea.
+>
+>     When going over the existing code that was using ret in blocks, I did
+>     find two cases that had to be transformed with a big, right-drifting
+>     if, but the rest were loops that would have benefited from proper
+>     ret/cont/break support. So yeah, it's not all roses, but I'd argue
+>     that huge blocks aren't very good style, and they might benefit from
+>     being factored into a few top-level functions.
+>
+>     [1]: https://github.com/mozilla/rust/issues/1619
+>
+>     Best,
+>     Marijn
+>
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From rick.richardson at gmail.com  Tue Mar 27 10:08:35 2012
+From: rick.richardson at gmail.com (Rick Richardson)
+Date: Tue, 27 Mar 2012 13:08:35 -0400
+Subject: [rust-dev] Arrays, vectors...
+Message-ID: <CA+kMGwCH3DM382VkpH-dNkiv1mtgvCMtO6DU2UJu7Xs9e8r0CQ@mail.gmail.com>
+
+This is my first post to the dev mailing list, so please take with a
+grain of salt.
+
+Three things:
+
+First, regarding syntax, couldn't we just leverage the existing
+semantics an allocated vector implies mutability, for which Rust
+already expresses via 'mut'
+
+Could one simply just:
+
+let mut x = [1,2,3,4,5]    // alloca'd
+let x = [1,2,3,4,5]           // constant mem
+
+and the rest:
+let x = @[p,q,r]              //heap-resident shared, type [int/@]
+let x = ~[p,q,r]               // -- heap-resident unique, type [int/~]
+
+In the first case, this obviously means that we're inferring the
+storage type of the vector based on the binding, I'm not sure if this
+is easily accomplished.
+
+In my experience, looking at my code,  when I statically initialize a
+list/vector, I generally intend it to be constant.
+If I don't initialize, then the intent is obvious.
+So the default case for static initialization is const mem, then I see
+no problem with :
+  1. having to provide special syntax which indicates that I want
+dynamic mem for the statically init'd vector.
+  2.  Some mechanism for copying my const vector to dynamic allocation
+if I change my mind later.
+
+With regards to fixed sized arrays and slices I mostly agree with
+Sebastian Sylvan,  I would like the default operations on
+arrays/vectors be slices.
+If we need to "copy-on-write", it can be explicit. The compiler will
+detect that I am about to touch the vector in improper ways and error.
+
+e.g. let x = [1,2,3,4,5]
+x[5] = 6;                      // Errors for one of two reasons,  the
+handle x to the vector is const, and the vector itself is const.
+
+so I have to
+let y = @clone(x)
+or
+let y = mut x              //  these would create a copy of the vector
+pointed to by x on the heap and creates y as slice that references the
+new vector.
+
+The way I prefer to view slices are as some sort of first-class
+thick-pointer which contains
+1. A pointer to the beginning vector in mem
+2. The size of the slice
+3. The offset at which it begins.
+
+I am not familiar enough with the implementation of Rust to comment on
+the feasibility of this, but I have this handy bucket of shed paint
+here so I had to chime in.
+
+From rick.richardson at gmail.com  Tue Mar 27 10:26:48 2012
+From: rick.richardson at gmail.com (Rick Richardson)
+Date: Tue, 27 Mar 2012 13:26:48 -0400
+Subject: [rust-dev] Arrays, vectors...
+Message-ID: <CA+kMGwAC4a513Cqrt3+BgPrH12QN3uUV=5qn_kG5HXZ12DRdTA@mail.gmail.com>
+
+I just realized that my suggestions have a serious functional bent.
+I don't address the need to create an array on the stack then fill it
+in later, obviously necessary for performance in certain cases as well
+as C interop.
+
+In this case,  I prefer the a mutation on the initial suggestion:
+
+let x = [int]'10
+or
+    x =  [int]#10
+
+I think I prefer  ` because it's less syntactically busy in monospace
+font. Failing that, I still prefer # over  /
+
+From marijnh at gmail.com  Tue Mar 27 11:37:09 2012
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 27 Mar 2012 20:37:09 +0200
+Subject: [rust-dev] Update: break/cont/ret in blocks
+Message-ID: <CAJnHWXv5BqWLwg8H69d87E7083yUDVyUTDfO10813iOn7knJVQ@mail.gmail.com>
+
+Hi list,
+
+I've pushed a series of patches that implement an alternate `for` loop
+syntax -- when the `for` keyword is followed by a block-style call
+({||}-block as last argument, outside the parentheses), the block is
+treated specially: it must return (), but the function argument that
+it is passed to must be a function type that returns bool. The idea is
+that this is used to call iterators that stop iterating when their
+block returns false. An implicit return value of true will be wired
+into the block, and any instances of `cont` will make the block return
+true, break will make the block return false. See [1] for some
+test/example code.
+
+I've added vec::each, str::each, and list::each functions for use with
+this construct. They are expected to be replaced by something more
+refined (the iter library, probably) down the line.
+
+When the block in a `for` loop like this contains a `ret` statement
+(which are now disallowed in regular blocks), it will cause a return
+from the outer function. It does this by closing over its parent's
+return pointer and a flag that it sets when returning, which the outer
+function checks when the call returns. All this only happens when an
+actual return is present, so you don't pay for it when you don't use
+it.
+
+I've replaced a big chunk of the for loops in the codebase with `for
+vec::each(v) {|elt| ... }` constructs. This produced a small slowdown
+in our cycle times (a little over 1%), which is expected, since more
+inlining and optimization will be needed on the side of LLVM to pummel
+these into tight loops. Small benchmarks show that the performance of
+these new-style for loops in the same ballpark, but not the same as,
+the performance of the primitive for construct (~30% slower for tight,
+long loops). I expect we'll be able to squeeze out a bit more by
+making vec::each more optimizable.
+
+This was all more or less foreshadowed in the discussion of bug #1619
+[2], but (as usual) I took some liberty in the implementation. Comment
+here if you feel something should be done differently. If there are no
+serious objections, I'd like to remove support for the old for syntax
+soon.
+
+[1]: https://github.com/mozilla/rust/blob/master/src/test/run-pass/ret-break-cont-in-block.rs
+[2]: https://github.com/mozilla/rust/issues/1619
+
+Best,
+Marijn
+
+From graydon at mozilla.com  Tue Mar 27 12:32:04 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 27 Mar 2012 12:32:04 -0700
+Subject: [rust-dev] Update: break/cont/ret in blocks
+In-Reply-To: <CAJnHWXv5BqWLwg8H69d87E7083yUDVyUTDfO10813iOn7knJVQ@mail.gmail.com>
+References: <CAJnHWXv5BqWLwg8H69d87E7083yUDVyUTDfO10813iOn7knJVQ@mail.gmail.com>
+Message-ID: <4F7215B4.7030805@mozilla.com>
+
+On 12-03-27 11:37 AM, Marijn Haverbeke wrote:
+
+> This was all more or less foreshadowed in the discussion of bug #1619
+> [2], but (as usual) I took some liberty in the implementation. Comment
+> here if you feel something should be done differently. If there are no
+> serious objections, I'd like to remove support for the old for syntax
+> soon.
+
+>From my perspective: great! Sounds like it all went according to plan :)
+
+-Graydon
+
+From niko at alum.mit.edu  Tue Mar 27 13:15:52 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Tue, 27 Mar 2012 13:15:52 -0700
+Subject: [rust-dev] Update: break/cont/ret in blocks
+In-Reply-To: <CAJnHWXv5BqWLwg8H69d87E7083yUDVyUTDfO10813iOn7knJVQ@mail.gmail.com>
+References: <CAJnHWXv5BqWLwg8H69d87E7083yUDVyUTDfO10813iOn7knJVQ@mail.gmail.com>
+Message-ID: <4F721FF8.4090601@alum.mit.edu>
+
+Marijn,
+
+At first glance, this looks great.  One question: does the for loop 
+generate a return value?  Is it just whatever the function itself 
+returns?  I like how the `for` keyword became a kind of prefix on a 
+normal method call.  It's both less different (good) and more flexible 
+(even better) than I originally envisioned.
+
+
+Niko
+
+On 3/27/12 11:37 AM, Marijn Haverbeke wrote:
+> Hi list,
+>
+> I've pushed a series of patches that implement an alternate `for` loop
+> syntax -- when the `for` keyword is followed by a block-style call
+> ({||}-block as last argument, outside the parentheses), the block is
+> treated specially: it must return (), but the function argument that
+> it is passed to must be a function type that returns bool. The idea is
+> that this is used to call iterators that stop iterating when their
+> block returns false. An implicit return value of true will be wired
+> into the block, and any instances of `cont` will make the block return
+> true, break will make the block return false. See [1] for some
+> test/example code.
+>
+> I've added vec::each, str::each, and list::each functions for use with
+> this construct. They are expected to be replaced by something more
+> refined (the iter library, probably) down the line.
+>
+> When the block in a `for` loop like this contains a `ret` statement
+> (which are now disallowed in regular blocks), it will cause a return
+> from the outer function. It does this by closing over its parent's
+> return pointer and a flag that it sets when returning, which the outer
+> function checks when the call returns. All this only happens when an
+> actual return is present, so you don't pay for it when you don't use
+> it.
+>
+> I've replaced a big chunk of the for loops in the codebase with `for
+> vec::each(v) {|elt| ... }` constructs. This produced a small slowdown
+> in our cycle times (a little over 1%), which is expected, since more
+> inlining and optimization will be needed on the side of LLVM to pummel
+> these into tight loops. Small benchmarks show that the performance of
+> these new-style for loops in the same ballpark, but not the same as,
+> the performance of the primitive for construct (~30% slower for tight,
+> long loops). I expect we'll be able to squeeze out a bit more by
+> making vec::each more optimizable.
+>
+> This was all more or less foreshadowed in the discussion of bug #1619
+> [2], but (as usual) I took some liberty in the implementation. Comment
+> here if you feel something should be done differently. If there are no
+> serious objections, I'd like to remove support for the old for syntax
+> soon.
+>
+> [1]: https://github.com/mozilla/rust/blob/master/src/test/run-pass/ret-break-cont-in-block.rs
+> [2]: https://github.com/mozilla/rust/issues/1619
+>
+> Best,
+> Marijn
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From marijnh at gmail.com  Tue Mar 27 13:56:22 2012
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 27 Mar 2012 22:56:22 +0200
+Subject: [rust-dev] Update: break/cont/ret in blocks
+In-Reply-To: <4F721FF8.4090601@alum.mit.edu>
+References: <CAJnHWXv5BqWLwg8H69d87E7083yUDVyUTDfO10813iOn7knJVQ@mail.gmail.com>
+	<4F721FF8.4090601@alum.mit.edu>
+Message-ID: <CAJnHWXsjCiNBCuQES=Hu2kmx8SkveizWu_Pb+t3Ewq-ZRQo1uw@mail.gmail.com>
+
+>?One question: does the for loop generate
+> a return value? ?Is it just whatever the function itself returns?
+
+Correct. I'm not 100% sure this is desirable yet -- it's more
+flexible, which is good, but it also means that if you, for example,
+use vec::all as your iterator, you'll need a semicolon after the loop,
+or you get a type error.
+
+From niko at alum.mit.edu  Tue Mar 27 17:09:42 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Tue, 27 Mar 2012 17:09:42 -0700
+Subject: [rust-dev] Update: break/cont/ret in blocks
+In-Reply-To: <CAJnHWXsjCiNBCuQES=Hu2kmx8SkveizWu_Pb+t3Ewq-ZRQo1uw@mail.gmail.com>
+References: <CAJnHWXv5BqWLwg8H69d87E7083yUDVyUTDfO10813iOn7knJVQ@mail.gmail.com>
+	<4F721FF8.4090601@alum.mit.edu>
+	<CAJnHWXsjCiNBCuQES=Hu2kmx8SkveizWu_Pb+t3Ewq-ZRQo1uw@mail.gmail.com>
+Message-ID: <4F7256C6.4020800@alum.mit.edu>
+
+On 3/27/12 1:56 PM, Marijn Haverbeke wrote:
+>>   One question: does the for loop generate
+>> a return value?  Is it just whatever the function itself returns?
+> Correct. I'm not 100% sure this is desirable yet -- it's more
+> flexible, which is good, but it also means that if you, for example,
+> use vec::all as your iterator, you'll need a semicolon after the loop,
+> or you get a type error.
+
+True.  But it's not clear to me why you would use vec::all() for the 
+loop function unless you wanted to know whether you broke out of the 
+loop or not (in other words, if you don't want to see the result, don't 
+use vec::all()).  This is a very common thing to want to know.
+
+Anyway, nice work.
+
+
+Niko
+
+
+From graydon at mozilla.com  Tue Mar 27 23:50:09 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 27 Mar 2012 23:50:09 -0700
+Subject: [rust-dev] wrapping up 0.2
+Message-ID: <4F72B4A1.7080403@mozilla.com>
+
+Hi,
+
+There are 4 bugs left open on 0.2. The first two (1439 and 1649) I'm not 
+clear if we're actually waiting on anything; if everyone's comfortable 
+with pushing the residue of those to 0.3 (if there even remains 
+things-to-do on them) I will do so.
+
+The second-last (1345) I believe I've completed but need someone with an 
+RHEL5 install to test. Just see if you can get the compiler to build at 
+all (from source). Wilsonkk reported this but anyone with a RHEL5 
+machine will do. I can spin up a VM if need be, but it'll take a while. 
+CentOS installs ... so ... slowly.
+
+The last (2060) just appeared now and seems to do with pretty printing 
+some cci tests. I assigned to Niko but really I suspect anyone could fix 
+it. I'll look tomorrow if nobody else has picked it off by then.
+
+After that, release candidate artifacts!
+
+-Graydon
+
+(There's already a 0.2 windows installer candidate up, if you want to 
+play with http://dl.rust-lang.org/dist/rust-0.2-install.exe , let me 
+know how well it works. This is not an "official" -- signed -- release, 
+we're likely to overwrite that with a new image before making an 
+announcement, but it was produced from the infrastructure and seems to 
+work ok for me.)
+
+From marijnh at gmail.com  Wed Mar 28 00:55:25 2012
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 28 Mar 2012 09:55:25 +0200
+Subject: [rust-dev] Update: break/cont/ret in blocks
+In-Reply-To: <4F7256C6.4020800@alum.mit.edu>
+References: <CAJnHWXv5BqWLwg8H69d87E7083yUDVyUTDfO10813iOn7knJVQ@mail.gmail.com>
+	<4F721FF8.4090601@alum.mit.edu>
+	<CAJnHWXsjCiNBCuQES=Hu2kmx8SkveizWu_Pb+t3Ewq-ZRQo1uw@mail.gmail.com>
+	<4F7256C6.4020800@alum.mit.edu>
+Message-ID: <CAJnHWXttGqWw7O3a73wg0QCdS_4SDyN_TW=9kdUazEEv+HWcOQ@mail.gmail.com>
+
+> True. ?But it's not clear to me why you would use vec::all() for the loop
+> function unless you wanted to know whether you broke out of the loop or not
+> (in other words, if you don't want to see the result, don't use vec::all()).
+
+Sure. But now we have three variants for almost the same thing --
+`vec::iter` to iterate without breaking, `vec::each` to be able to
+break but not return a result, and `vec::all` to get a result value.
+This seems excessive.
+
+Anyway, the current implementation does what you wanted, and I'm not
+about to change it, so rest easy.
+
+From grahame at angrygoats.net  Wed Mar 28 02:11:36 2012
+From: grahame at angrygoats.net (Grahame Bowland)
+Date: Wed, 28 Mar 2012 17:11:36 +0800
+Subject: [rust-dev] wrapping up 0.2
+In-Reply-To: <4F72B4A1.7080403@mozilla.com>
+References: <4F72B4A1.7080403@mozilla.com>
+Message-ID: <CADg2TKT5J1HKaVWA5bG-JEuETAxD8rqBM9u6_3sR6iPM6ppP2g@mail.gmail.com>
+
+Hi Graydon
+
+toula::~/code/rust $ cat /etc/redhat-release
+CentOS release 5.7 (Final)
+toula::~/code/rust $ make
+cfg: shell host triple i686-unknown-linux-gnu
+cfg: host for i686-unknown-linux-gnu is i386
+cfg: unix-y environment
+cfg: using gcc
+cfg: no pandoc found, omitting doc/rust.pdf
+cfg: no llnextgen found, omitting grammar-verification
+cfg: no pandoc found, omitting library doc build
+fetch: i686-unknown-linux-gnu/stage0/bin/rustc
+Traceback (most recent call last):
+  File "./src/etc/get-snapshot.py", line 3, in ?
+    import os, tarfile, hashlib, re, shutil, sys
+ImportError: No module named hashlib
+make: *** [i686-unknown-linux-gnu/stage0/bin/rustc] Error 1
+zsh: 5500 etoula::~/code/rust $ python
+Python 2.4.3 (#1, Sep 21 2011, 20:06:00)
+[GCC 4.1.2 20080704 (Red Hat 4.1.2-51)] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>>
+
+That's at least one problem - it seems we need a Python newer than is on
+the system. I'll have a go at fixing that up tonight and send a pull
+request through.
+
+Cheers
+Grahame
+
+On 28 March 2012 14:50, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> Hi,
+>
+> There are 4 bugs left open on 0.2. The first two (1439 and 1649) I'm not
+> clear if we're actually waiting on anything; if everyone's comfortable with
+> pushing the residue of those to 0.3 (if there even remains things-to-do on
+> them) I will do so.
+>
+> The second-last (1345) I believe I've completed but need someone with an
+> RHEL5 install to test. Just see if you can get the compiler to build at all
+> (from source). Wilsonkk reported this but anyone with a RHEL5 machine will
+> do. I can spin up a VM if need be, but it'll take a while. CentOS installs
+> ... so ... slowly.
+>
+> The last (2060) just appeared now and seems to do with pretty printing
+> some cci tests. I assigned to Niko but really I suspect anyone could fix
+> it. I'll look tomorrow if nobody else has picked it off by then.
+>
+> After that, release candidate artifacts!
+>
+> -Graydon
+>
+> (There's already a 0.2 windows installer candidate up, if you want to play
+> with http://dl.rust-lang.org/dist/**rust-0.2-install.exe<http://dl.rust-lang.org/dist/rust-0.2-install.exe>, let me know how well it works. This is not an "official" -- signed --
+> release, we're likely to overwrite that with a new image before making an
+> announcement, but it was produced from the infrastructure and seems to work
+> ok for me.)
+> ______________________________**_________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/**listinfo/rust-dev<https://mail.mozilla.org/listinfo/rust-dev>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20120328/704a72a9/attachment-0001.html>
+
+From niko at alum.mit.edu  Wed Mar 28 07:32:38 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Wed, 28 Mar 2012 07:32:38 -0700
+Subject: [rust-dev] Update: break/cont/ret in blocks
+In-Reply-To: <CAJnHWXttGqWw7O3a73wg0QCdS_4SDyN_TW=9kdUazEEv+HWcOQ@mail.gmail.com>
+References: <CAJnHWXv5BqWLwg8H69d87E7083yUDVyUTDfO10813iOn7knJVQ@mail.gmail.com>
+	<4F721FF8.4090601@alum.mit.edu>
+	<CAJnHWXsjCiNBCuQES=Hu2kmx8SkveizWu_Pb+t3Ewq-ZRQo1uw@mail.gmail.com>
+	<4F7256C6.4020800@alum.mit.edu>
+	<CAJnHWXttGqWw7O3a73wg0QCdS_4SDyN_TW=9kdUazEEv+HWcOQ@mail.gmail.com>
+Message-ID: <4F732106.4090708@alum.mit.edu>
+
+On 3/28/12 12:55 AM, Marijn Haverbeke wrote:
+> Sure. But now we have three variants for almost the same thing --
+> `vec::iter` to iterate without breaking, `vec::each` to be able to
+> break but not return a result, and `vec::all` to get a result value.
+> This seems excessive.
+
+Yes, I think vec::iter() should be removed eventually.
+
+
+Niko
+
+From marijnh at gmail.com  Wed Mar 28 07:54:37 2012
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 28 Mar 2012 16:54:37 +0200
+Subject: [rust-dev] Update: break/cont/ret in blocks
+In-Reply-To: <4F732106.4090708@alum.mit.edu>
+References: <CAJnHWXv5BqWLwg8H69d87E7083yUDVyUTDfO10813iOn7knJVQ@mail.gmail.com>
+	<4F721FF8.4090601@alum.mit.edu>
+	<CAJnHWXsjCiNBCuQES=Hu2kmx8SkveizWu_Pb+t3Ewq-ZRQo1uw@mail.gmail.com>
+	<4F7256C6.4020800@alum.mit.edu>
+	<CAJnHWXttGqWw7O3a73wg0QCdS_4SDyN_TW=9kdUazEEv+HWcOQ@mail.gmail.com>
+	<4F732106.4090708@alum.mit.edu>
+Message-ID: <CAJnHWXu6SQdxzdrdQ_U8mOETB1yixQPeRVMA=MYA0oQ-OYwh6A@mail.gmail.com>
+
+> Yes, I think vec::iter() should be removed eventually.
+
+Say you happen to have a top-level function that you want to apply to
+all elements in a vector. It doesn't return bool, so vec::each can't
+be applied to it. vec::iter is useful there.
+
+Though maybe this could be some adaptor function built on top of the
+iter library instead, so that we only have to write it once, rather
+than for every iterable type.
+
+From niko at alum.mit.edu  Wed Mar 28 08:15:16 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Wed, 28 Mar 2012 08:15:16 -0700
+Subject: [rust-dev] Update: break/cont/ret in blocks
+In-Reply-To: <CAJnHWXu6SQdxzdrdQ_U8mOETB1yixQPeRVMA=MYA0oQ-OYwh6A@mail.gmail.com>
+References: <CAJnHWXv5BqWLwg8H69d87E7083yUDVyUTDfO10813iOn7knJVQ@mail.gmail.com>
+	<4F721FF8.4090601@alum.mit.edu>
+	<CAJnHWXsjCiNBCuQES=Hu2kmx8SkveizWu_Pb+t3Ewq-ZRQo1uw@mail.gmail.com>
+	<4F7256C6.4020800@alum.mit.edu>
+	<CAJnHWXttGqWw7O3a73wg0QCdS_4SDyN_TW=9kdUazEEv+HWcOQ@mail.gmail.com>
+	<4F732106.4090708@alum.mit.edu>
+	<CAJnHWXu6SQdxzdrdQ_U8mOETB1yixQPeRVMA=MYA0oQ-OYwh6A@mail.gmail.com>
+Message-ID: <4F732B04.7050406@alum.mit.edu>
+
+On 3/28/12 7:54 AM, Marijn Haverbeke wrote:
+> Say you happen to have a top-level function that you want to apply to
+> all elements in a vector. It doesn't return bool, so vec::each can't
+> be applied to it. vec::iter is useful there.
+
+True.
+
+> Though maybe this could be some adaptor function built on top of the
+> iter library instead, so that we only have to write it once, rather
+> than for every iterable type.
+
+Yes.  For that matter, `each()` can be built on top of `all()` once we 
+have traits and so forth.
+
+
+
+Niko
+
+From graydon at mozilla.com  Wed Mar 28 12:58:35 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 28 Mar 2012 12:58:35 -0700
+Subject: [rust-dev] wrapping up 0.2
+In-Reply-To: <CAGZgfT4KyLgYvXdQSWYqg0V_DOiE77-c+PG=Yage0RMbGm16pQ@mail.gmail.com>
+References: <4F72B4A1.7080403@mozilla.com>
+	<CAGZgfT4KyLgYvXdQSWYqg0V_DOiE77-c+PG=Yage0RMbGm16pQ@mail.gmail.com>
+Message-ID: <4F736D6B.6000505@mozilla.com>
+
+On 12-03-28 12:15 AM, Sebastian Sylvan wrote:
+
+> This seems to work fine for me *if* I have MinGW\bin on the path.
+
+Glad to hear the first part! And, yes, mingw. Thanks for reminding me, I
+need to highlight this fact in release notes. A few people have stumbled
+into it, and I forget that it's not a reliable assumption.
+
+> I guess MinGW is still required to run rustc right now? Would
+> be good if it was maybe installed by the installer.
+
+Running mingw as a sub-installer is possible but it's outside the scope
+of what we can engineer in this timeframe. For now it'll be release notes.
+
+> Is it possible to link in gcc statically into the compiler on windows?
+> I think I heard something about switching to MSVC in the long run, but
+> as an intermediate step it would be good to get rid of fairly obscure
+> (on windows) binaries as dependencies.
+
+Nope. We might wind up taking a dependency on libclang at some point,
+but I don't think gcc really enjoys being packaged up as a component of
+another program that way. I certainly don't know how to do it; it'd be a
+lot of work. Mingw is a requirement for using rust on windows right now.
+
+-Graydon
+
+From graydon at mozilla.com  Wed Mar 28 13:53:33 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 28 Mar 2012 13:53:33 -0700
+Subject: [rust-dev] wrapping up 0.2
+In-Reply-To: <CADg2TKT5J1HKaVWA5bG-JEuETAxD8rqBM9u6_3sR6iPM6ppP2g@mail.gmail.com>
+References: <4F72B4A1.7080403@mozilla.com>
+	<CADg2TKT5J1HKaVWA5bG-JEuETAxD8rqBM9u6_3sR6iPM6ppP2g@mail.gmail.com>
+Message-ID: <4F737A4D.3090604@mozilla.com>
+
+On 12-03-28 02:11 AM, Grahame Bowland wrote:
+
+> Traceback (most recent call last):
+>   File "./src/etc/get-snapshot.py", line 3, in ?
+>     import os, tarfile, hashlib, re, shutil, sys
+
+Ok, I took your patch for older pythons. Thanks.
+
+The gcc-4.4-isms you pointed out took a bit more work, but I think I
+have it cleaned up to build with 4.1 and 4.4, and pushed now.
+
+Can you pull and re-test?
+
+-Graydon
+
+From graydon at mozilla.com  Wed Mar 28 21:37:08 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 28 Mar 2012 21:37:08 -0700
+Subject: [rust-dev] wrapping up 0.2
+In-Reply-To: <4F737A4D.3090604@mozilla.com>
+References: <4F72B4A1.7080403@mozilla.com>
+	<CADg2TKT5J1HKaVWA5bG-JEuETAxD8rqBM9u6_3sR6iPM6ppP2g@mail.gmail.com>
+	<4F737A4D.3090604@mozilla.com>
+Message-ID: <4F73E6F4.3000703@mozilla.com>
+
+Ok, I've posted "real" release candidates after deciding what to do with
+the residual bugs. Here they are:
+
+http://dl.rust-lang.org/dist/rust-0.2.tar.gz
+http://dl.rust-lang.org/dist/rust-0.2-install.exe
+
+The rev that those are built from was all-green in our test farm and
+seems to work on any machines I have access to (except RHEL5; turned out
+a full fix there is prohibitive in this timeframe).
+
+If I can get a show of hands from users here that these seem to work for
+you too (the first builds and passes make check, the second does basic
+hello-world-ish tests on win32 machines with mingw installed) then I'll
+sign those artifacts and send a release announcement tomorrow.
+
+Anyone feel like burning a little CPU time?
+
+-Graydon
+
+From giles at thaumas.net  Wed Mar 28 21:59:38 2012
+From: giles at thaumas.net (Ralph Giles)
+Date: Wed, 28 Mar 2012 21:59:38 -0700
+Subject: [rust-dev] wrapping up 0.2
+In-Reply-To: <4F73E6F4.3000703@mozilla.com>
+References: <4F72B4A1.7080403@mozilla.com>
+	<CADg2TKT5J1HKaVWA5bG-JEuETAxD8rqBM9u6_3sR6iPM6ppP2g@mail.gmail.com>
+	<4F737A4D.3090604@mozilla.com> <4F73E6F4.3000703@mozilla.com>
+Message-ID: <4F73EC3A.6050108@thaumas.net>
+
+On 28/03/12 09:37 PM, Graydon Hoare wrote:
+
+> http://dl.rust-lang.org/dist/rust-0.2.tar.gz
+
+INSTALL.txt refers to 0.1.
+
+  -r
+
+From rick.richardson at gmail.com  Wed Mar 28 22:06:38 2012
+From: rick.richardson at gmail.com (Rick Richardson)
+Date: Thu, 29 Mar 2012 01:06:38 -0400
+Subject: [rust-dev] wrapping up 0.2
+In-Reply-To: <4F73E6F4.3000703@mozilla.com>
+References: <4F72B4A1.7080403@mozilla.com>
+	<CADg2TKT5J1HKaVWA5bG-JEuETAxD8rqBM9u6_3sR6iPM6ppP2g@mail.gmail.com>
+	<4F737A4D.3090604@mozilla.com> <4F73E6F4.3000703@mozilla.com>
+Message-ID: <CA+kMGwB=ZnsCqjkPwF7QQEsqAiBk9K1pwPrpNJdBOjk_r7sK-w@mail.gmail.com>
+
+I dug up a windows VM (win7 64 bit) with msys/Mingw.  I had never
+built or installed rust on this box before.
+Everything installed without a hitch.  I was able to build and run
+https://github.com/brson/rustray  with no trouble at all.
+
+I am currently running make check on my fedora 16 64bit box,  I'm
+about 50% of the way through, I would guess.
+So far, so good, but I'm not going to stay awake for the results.
+
+
+On Thu, Mar 29, 2012 at 12:37 AM, Graydon Hoare <graydon at mozilla.com> wrote:
+> Ok, I've posted "real" release candidates after deciding what to do with
+> the residual bugs. Here they are:
+>
+> http://dl.rust-lang.org/dist/rust-0.2.tar.gz
+> http://dl.rust-lang.org/dist/rust-0.2-install.exe
+>
+> The rev that those are built from was all-green in our test farm and
+> seems to work on any machines I have access to (except RHEL5; turned out
+> a full fix there is prohibitive in this timeframe).
+>
+> If I can get a show of hands from users here that these seem to work for
+> you too (the first builds and passes make check, the second does basic
+> hello-world-ish tests on win32 machines with mingw installed) then I'll
+> sign those artifacts and send a release announcement tomorrow.
+>
+> Anyone feel like burning a little CPU time?
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+From rick.richardson at gmail.com  Thu Mar 29 04:43:03 2012
+From: rick.richardson at gmail.com (Rick Richardson)
+Date: Thu, 29 Mar 2012 07:43:03 -0400
+Subject: [rust-dev] wrapping up 0.2
+In-Reply-To: <CA+kMGwB=ZnsCqjkPwF7QQEsqAiBk9K1pwPrpNJdBOjk_r7sK-w@mail.gmail.com>
+References: <4F72B4A1.7080403@mozilla.com>
+	<CADg2TKT5J1HKaVWA5bG-JEuETAxD8rqBM9u6_3sR6iPM6ppP2g@mail.gmail.com>
+	<4F737A4D.3090604@mozilla.com> <4F73E6F4.3000703@mozilla.com>
+	<CA+kMGwB=ZnsCqjkPwF7QQEsqAiBk9K1pwPrpNJdBOjk_r7sK-w@mail.gmail.com>
+Message-ID: <CA+kMGwDyPpjTNT5OJGT06M=Uv-axwwBUAdh=RJ__miyN+Xz4uA@mail.gmail.com>
+
+result: ok. 71 passed; 0 failed; 11 ignored
+
+On Thu, Mar 29, 2012 at 1:06 AM, Rick Richardson
+<rick.richardson at gmail.com> wrote:
+> I dug up a windows VM (win7 64 bit) with msys/Mingw. ?I had never
+> built or installed rust on this box before.
+> Everything installed without a hitch. ?I was able to build and run
+> https://github.com/brson/rustray ?with no trouble at all.
+>
+> I am currently running make check on my fedora 16 64bit box, ?I'm
+> about 50% of the way through, I would guess.
+> So far, so good, but I'm not going to stay awake for the results.
+>
+>
+> On Thu, Mar 29, 2012 at 12:37 AM, Graydon Hoare <graydon at mozilla.com> wrote:
+>> Ok, I've posted "real" release candidates after deciding what to do with
+>> the residual bugs. Here they are:
+>>
+>> http://dl.rust-lang.org/dist/rust-0.2.tar.gz
+>> http://dl.rust-lang.org/dist/rust-0.2-install.exe
+>>
+>> The rev that those are built from was all-green in our test farm and
+>> seems to work on any machines I have access to (except RHEL5; turned out
+>> a full fix there is prohibitive in this timeframe).
+>>
+>> If I can get a show of hands from users here that these seem to work for
+>> you too (the first builds and passes make check, the second does basic
+>> hello-world-ish tests on win32 machines with mingw installed) then I'll
+>> sign those artifacts and send a release announcement tomorrow.
+>>
+>> Anyone feel like burning a little CPU time?
+>>
+>> -Graydon
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+
+From erick.tryzelaar at gmail.com  Thu Mar 29 08:43:42 2012
+From: erick.tryzelaar at gmail.com (Erick Tryzelaar)
+Date: Thu, 29 Mar 2012 08:43:42 -0700
+Subject: [rust-dev] wrapping up 0.2
+In-Reply-To: <4F73E6F4.3000703@mozilla.com>
+References: <4F72B4A1.7080403@mozilla.com>
+	<CADg2TKT5J1HKaVWA5bG-JEuETAxD8rqBM9u6_3sR6iPM6ppP2g@mail.gmail.com>
+	<4F737A4D.3090604@mozilla.com> <4F73E6F4.3000703@mozilla.com>
+Message-ID: <CALdfqQJ0a9_hsJpXYv_diMLNJ66dvj7Ur_0pPb22ddtWmoL_DA@mail.gmail.com>
+
+Installs fine with homebrew on OSX 10.6. I'm running into an issue
+with cargo though:
+
+$ cargo install uuid
+info: Installing with git from https://github.com/erickt/rust-uuid...
+Cloning into '/Users/etryzelaar/.cargo/work/lhsPUagfi6I3tg2g'...
+remote: Counting objects: 15, done.
+remote: Compressing objects: 100% (11/11), done.
+remote: Total 15 (delta 4), reused 13 (delta 2)
+Unpacking objects: 100% (15/15), done.
+cp: /Users/etryzelaar/.cargo/work/lhsPUagfi6I3tg2g/build/libuuid-fc76a51f4a50eba2-0.1pre.dylib.dSYM
+is a directory (not copied).
+
+
+
+On Wed, Mar 28, 2012 at 9:37 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+> Ok, I've posted "real" release candidates after deciding what to do with
+> the residual bugs. Here they are:
+>
+> http://dl.rust-lang.org/dist/rust-0.2.tar.gz
+> http://dl.rust-lang.org/dist/rust-0.2-install.exe
+>
+> The rev that those are built from was all-green in our test farm and
+> seems to work on any machines I have access to (except RHEL5; turned out
+> a full fix there is prohibitive in this timeframe).
+>
+> If I can get a show of hands from users here that these seem to work for
+> you too (the first builds and passes make check, the second does basic
+> hello-world-ish tests on win32 machines with mingw installed) then I'll
+> sign those artifacts and send a release announcement tomorrow.
+>
+> Anyone feel like burning a little CPU time?
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+From erick.tryzelaar at gmail.com  Thu Mar 29 08:47:02 2012
+From: erick.tryzelaar at gmail.com (Erick Tryzelaar)
+Date: Thu, 29 Mar 2012 08:47:02 -0700
+Subject: [rust-dev] wrapping up 0.2
+In-Reply-To: <CALdfqQJ0a9_hsJpXYv_diMLNJ66dvj7Ur_0pPb22ddtWmoL_DA@mail.gmail.com>
+References: <4F72B4A1.7080403@mozilla.com>
+	<CADg2TKT5J1HKaVWA5bG-JEuETAxD8rqBM9u6_3sR6iPM6ppP2g@mail.gmail.com>
+	<4F737A4D.3090604@mozilla.com> <4F73E6F4.3000703@mozilla.com>
+	<CALdfqQJ0a9_hsJpXYv_diMLNJ66dvj7Ur_0pPb22ddtWmoL_DA@mail.gmail.com>
+Message-ID: <CALdfqQL=giKrBxVRfGhwspcMR0coVZAOjLh-Qs03N_i30zKBDA@mail.gmail.com>
+
+On Thu, Mar 29, 2012 at 8:43 AM, Erick Tryzelaar
+<erick.tryzelaar at gmail.com> wrote:
+>
+> cp: /Users/etryzelaar/.cargo/work/lhsPUagfi6I3tg2g/build/libuuid-fc76a51f4a50eba2-0.1pre.dylib.dSYM
+> is a directory (not copied).
+
+Turns out this error is ignorable and the package still works. We
+should probably change cargo to do a "cp -r" though.
+
+From giles at thaumas.net  Thu Mar 29 10:09:19 2012
+From: giles at thaumas.net (Ralph Giles)
+Date: Thu, 29 Mar 2012 10:09:19 -0700
+Subject: [rust-dev] wrapping up 0.2
+In-Reply-To: <CA+kMGwDyPpjTNT5OJGT06M=Uv-axwwBUAdh=RJ__miyN+Xz4uA@mail.gmail.com>
+References: <4F72B4A1.7080403@mozilla.com>
+	<CADg2TKT5J1HKaVWA5bG-JEuETAxD8rqBM9u6_3sR6iPM6ppP2g@mail.gmail.com>
+	<4F737A4D.3090604@mozilla.com> <4F73E6F4.3000703@mozilla.com>
+	<CA+kMGwB=ZnsCqjkPwF7QQEsqAiBk9K1pwPrpNJdBOjk_r7sK-w@mail.gmail.com>
+	<CA+kMGwDyPpjTNT5OJGT06M=Uv-axwwBUAdh=RJ__miyN+Xz4uA@mail.gmail.com>
+Message-ID: <4F74973F.90200@thaumas.net>
+
+On 29/03/12 04:43 AM, Rick Richardson wrote:
+> result: ok. 71 passed; 0 failed; 11 ignored
+
+I get all green on my Fedora 16 x86_64 system.
+
+Stage 1 fails on my Fedora 17 i686 system:
+
+compile_and_link: 
+i686-unknown-linux-gnu/stage1/lib/rustc/i686-unknown-linux-gnu/lib/libcore.so
+/bin/sh: line 1: 31683 Segmentation fault 
+i686-unknown-linux-gnu/stage1/bin/rustc -O 
+--target=i686-unknown-linux-gnu -o 
+i686-unknown-linux-gnu/stage1/lib/rustc/i686-unknown-linux-ngu/lib/libcore.so 
+src/libcore/core.rc
+
+FWIW,
+  -r
+
+From graydon at mozilla.com  Thu Mar 29 11:57:47 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 29 Mar 2012 11:57:47 -0700
+Subject: [rust-dev] wrapping up 0.2
+In-Reply-To: <4F74973F.90200@thaumas.net>
+References: <4F72B4A1.7080403@mozilla.com>
+	<CADg2TKT5J1HKaVWA5bG-JEuETAxD8rqBM9u6_3sR6iPM6ppP2g@mail.gmail.com>
+	<4F737A4D.3090604@mozilla.com> <4F73E6F4.3000703@mozilla.com>
+	<CA+kMGwB=ZnsCqjkPwF7QQEsqAiBk9K1pwPrpNJdBOjk_r7sK-w@mail.gmail.com>
+	<CA+kMGwDyPpjTNT5OJGT06M=Uv-axwwBUAdh=RJ__miyN+Xz4uA@mail.gmail.com>
+	<4F74973F.90200@thaumas.net>
+Message-ID: <4F74B0AB.6080800@mozilla.com>
+
+On 12-03-29 10:09 AM, Ralph Giles wrote:
+
+> I get all green on my Fedora 16 x86_64 system.
+> 
+> Stage 1 fails on my Fedora 17 i686 system:
+> 
+> compile_and_link:
+> i686-unknown-linux-gnu/stage1/lib/rustc/i686-unknown-linux-gnu/lib/libcore.so
+> 
+> /bin/sh: line 1: 31683 Segmentation fault
+> i686-unknown-linux-gnu/stage1/bin/rustc -O
+> --target=i686-unknown-linux-gnu -o
+> i686-unknown-linux-gnu/stage1/lib/rustc/i686-unknown-linux-ngu/lib/libcore.so
+> src/libcore/core.rc
+
+Weird. So this morning I built an Fedora 17 (alpha) i686 VM and did a
+complete build there, stock components after the install, worked fine.
+
+Can anyone else on Fedora 17 reproduce what Ralph was seeing?
+
+Ralph, is the error transient? If you clean and redo it, it fails the
+same way consistently? Are there any other rust artifacts in the build
+dir or local install path?
+
+(I'll fix the text in INSTALL.txt, of course, sigh)
+
+-Graydon
+
+From graydon at mozilla.com  Thu Mar 29 16:44:43 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 29 Mar 2012 16:44:43 -0700
+Subject: [rust-dev] Rust 0.2 released
+Message-ID: <4F74F3EB.4060409@mozilla.com>
+
+Mozilla and the Rust community are pleased to announce version 0.2 of
+the Rust compiler and associated tools.
+
+Version 0.2 should still be considered an alpha release, suitable for
+early adopters and language enthusiasts. Please file bugs at
+http://github.com/mozilla/rust/issues
+
+This release is available as both a tarball and a windows installer:
+
+   * http://dl.rust-lang.org/dist/rust-0.2.tar.gz
+     http://dl.rust-lang.org/dist/rust-0.2.tar.gz.asc
+     SHA256:
+     cedf679fd6bf46b63b9d754496920cbaa8c9ba4187d40f5f78fc28e775820f0d
+
+   * http://dl.rust-lang.org/dist/rust-0.2-install.exe
+     http://dl.rust-lang.org/dist/rust-0.2-install.exe.asc
+     SHA256:
+     568677f078fea9a1d3e4fb1b26a297157ce861f28b64f4a9cf9eaafb8db04b6b
+
+Thanks to everybody who has contributed[1].
+
+Regards,
+The Rust Team
+
+Version 0.2  (March 2012)
+-------------------------
+
+   * >1500 changes, numerous bugfixes
+
+   * New docs and doc tooling
+
+   * New port: FreeBSD x86_64
+
+   * Compilation model enhancements
+      * Generics now specialized, multiply instantiated
+      * Functions now inlined across separate crates
+
+   * Scheduling, stack and threading fixes
+      * Noticeably improved message-passing performance
+      * Explicit schedulers
+      * Callbacks from C
+      * Helgrind clean
+
+   * Experimental new language features
+      * Operator overloading
+      * Region pointers
+      * Classes
+
+   * Various language extensions
+      * C-callback function types: 'crust fn ...'
+      * Infinite-loop construct: 'loop { ... }'
+      * Shorten 'mutable' to 'mut'
+      * Required mutable-local qualifier: 'let mut ...'
+      * Basic glob-exporting: 'export foo::*;'
+      * Alt now exhaustive, 'alt check' for runtime-checked
+      * Block-function form of 'for' loop, with 'break' and 'ret'.
+
+   * New library code
+      * AST quasi-quote syntax extension
+      * Revived libuv interface
+      * New modules: core::{future, iter}, std::arena
+      * Merged per-platform std::{os*, fs*} to core::{libc, os}
+      * Extensive cleanup, regularization in libstd, libcore
+
+
+[1] Contributors to Rust 0.2:
+
+Aleksander Balicki
+Austin Seipp
+Brian Anderson
+Chris Peterson
+Damien Grassart
+Daniel Brooks
+Daniel Luz
+Donovan Preston
+Elly Fong-Jones
+Erick Tryzelaar
+Graham Fawcett
+Grahame Bowland
+Graydon Hoare
+Haitao Li
+Ian D. Bollinger
+Jacob Parker
+Jeff Olson
+Jesse Ruderman
+Joe Pletcher
+Josh Matthews
+Joshua Clark
+Jyun-Yan You
+Kevin Atkinson
+Kevin Cantu
+Lindsey Kuper
+Magnus Auvinen
+Marijn Haverbeke
+Matt Brubeck
+Matthew O'Connor
+Niko Matsakis
+Patrick Walton
+Paul Woolcock
+Rick Waldron
+Roland Tanglao
+Taras Shpot
+Ted Horst
+Tim Chevalier
+Tom Lee
+Tomoki Aonuma
+Tycho Sci
+
+From graydon at mozilla.com  Thu Mar 29 17:26:44 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 29 Mar 2012 17:26:44 -0700
+Subject: [rust-dev] wrapping up 0.2
+In-Reply-To: <4F74B0AB.6080800@mozilla.com>
+References: <4F72B4A1.7080403@mozilla.com>
+	<CADg2TKT5J1HKaVWA5bG-JEuETAxD8rqBM9u6_3sR6iPM6ppP2g@mail.gmail.com>
+	<4F737A4D.3090604@mozilla.com> <4F73E6F4.3000703@mozilla.com>
+	<CA+kMGwB=ZnsCqjkPwF7QQEsqAiBk9K1pwPrpNJdBOjk_r7sK-w@mail.gmail.com>
+	<CA+kMGwDyPpjTNT5OJGT06M=Uv-axwwBUAdh=RJ__miyN+Xz4uA@mail.gmail.com>
+	<4F74973F.90200@thaumas.net> <4F74B0AB.6080800@mozilla.com>
+Message-ID: <4F74FDC4.4050303@mozilla.com>
+
+On 12-03-29 11:57 AM, Graydon Hoare wrote:
+
+> Ralph, is the error transient? If you clean and redo it, it fails the
+> same way consistently? Are there any other rust artifacts in the build
+> dir or local install path?
+
+After some diagnosis this seems to be an atom-specific bug in the
+optimizer. This is filed as https://github.com/mozilla/rust/issues/2078
+now. I think it's likely just
+https://github.com/mozilla/rust/issues/1879 in different clothing, but
+either way, atom-specific and with a --disable-optimize workaround makes
+for "not a showstopper" to me.
+
+> (I'll fix the text in INSTALL.txt, of course, sigh)
+
+Fixed on trunk, not in that tarball. But I think users will figure it out :)
+
+Thanks for all the diagnostic help! At some point maybe we'll get a
+reasonable array of subtargets into our build farm. Mmm, combinatorial
+explosion...
+
+-Graydon
+
+From banderson at mozilla.com  Thu Mar 29 21:50:08 2012
+From: banderson at mozilla.com (Brian  Anderson)
+Date: Thu, 29 Mar 2012 21:50:08 -0700 (PDT)
+Subject: [rust-dev] New static extension methods for str, vec, and option
+In-Reply-To: <2122032199.692105.1333082820989.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+Message-ID: <2000754204.692392.1333083008181.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+This is just a note that I checked in new static extension methods for commonly used functions on the str, vec and option types. These are implemented as impls called 'extensions' in their respective core mods and reexported at the top level of core, so they are available everywhere by default. So far the docs haven't materialized on the web site, but here's an example of what they're like:
+
+fn main() {
+    let a = some("hello, world");
+    if a.is_some() {
+        let b = a.get().split_char(',');
+        let c = b.map { |d| d.trim() };
+        let d = c.foldl("") {|e, f| e + "\n" + f };
+        io::println(d);
+    }
+}
+
+From niko at alum.mit.edu  Fri Mar 30 06:19:45 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Fri, 30 Mar 2012 06:19:45 -0700
+Subject: [rust-dev] New static extension methods for str, vec, and option
+In-Reply-To: <2000754204.692392.1333083008181.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+References: <2000754204.692392.1333083008181.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+Message-ID: <4F75B2F1.2080006@alum.mit.edu>
+
+This is great.
+
+
+On 3/29/12 9:50 PM, Brian Anderson wrote:
+> This is just a note that I checked in new static extension methods for commonly used functions on the str, vec and option types. These are implemented as impls called 'extensions' in their respective core mods and reexported at the top level of core, so they are available everywhere by default. So far the docs haven't materialized on the web site, but here's an example of what they're like:
+>
+> fn main() {
+>      let a = some("hello, world");
+>      if a.is_some() {
+>          let b = a.get().split_char(',');
+>          let c = b.map { |d| d.trim() };
+>          let d = c.foldl("") {|e, f| e + "\n" + f };
+>          io::println(d);
+>      }
+> }
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From graydon at mozilla.com  Fri Mar 30 17:23:26 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 30 Mar 2012 17:23:26 -0700
+Subject: [rust-dev] RFC: taking libclang
+Message-ID: <4F764E7E.6040205@mozilla.com>
+
+RFC about libclang. Comments?
+
+https://github.com/mozilla/rust/issues/2084
+
+-Graydon
+
+

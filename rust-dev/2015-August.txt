@@ -1,0 +1,771 @@
+From simon.flynn at financejobs.co  Tue Aug 11 14:12:46 2015
+From: simon.flynn at financejobs.co (Simon Flynn)
+Date: Tue, 11 Aug 2015 14:12:46 +0000
+Subject: [rust-dev] Rustaceans - Rust User Groups
+Message-ID: <20150811141245.GP22511@d1stkfactory>
+
+Hi Rustaceans,
+
+With the rust-dev mailing list in a semi-abanandonded state, we have decided to
+create a new place where people can gather to talk all thing Rust, but in
+particular to help organize local meetups and other gatherings (e.g.
+conferences, open days etc).
+
+Rust on,
+Simon
+
+-- 
+Simon Flynn
+https://www.financejobs.co
+
+From qmx at qmx.me  Tue Aug 11 14:22:49 2015
+From: qmx at qmx.me (Douglas Campos)
+Date: Tue, 11 Aug 2015 11:22:49 -0300
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <20150811141245.GP22511@d1stkfactory>
+References: <20150811141245.GP22511@d1stkfactory>
+Message-ID: <CAN-DfD7xK-am1POcERtTYMKfw=+JjVBakx3dPqQ2zUm=nagqvg@mail.gmail.com>
+
+and where is this place you mention?
+
+On Tue, Aug 11, 2015 at 11:12 AM, Simon Flynn <simon.flynn at financejobs.co>
+wrote:
+
+> Hi Rustaceans,
+>
+> With the rust-dev mailing list in a semi-abanandonded state, we have
+> decided to
+> create a new place where people can gather to talk all thing Rust, but in
+> particular to help organize local meetups and other gatherings (e.g.
+> conferences, open days etc).
+>
+> Rust on,
+> Simon
+>
+> --
+> Simon Flynn
+> https://www.financejobs.co
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150811/f200089e/attachment.html>
+
+From manishsmail at gmail.com  Tue Aug 11 18:17:33 2015
+From: manishsmail at gmail.com (Manish Goregaokar)
+Date: Tue, 11 Aug 2015 23:47:33 +0530
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <CAN-DfD7xK-am1POcERtTYMKfw=+JjVBakx3dPqQ2zUm=nagqvg@mail.gmail.com>
+References: <20150811141245.GP22511@d1stkfactory>
+	<CAN-DfD7xK-am1POcERtTYMKfw=+JjVBakx3dPqQ2zUm=nagqvg@mail.gmail.com>
+Message-ID: <CACpkpxkWP8JoL9Us9qsbgtU80gGc7qn+Fz=w3k59eY_rGoAP4Q@mail.gmail.com>
+
+users.rust-lang.org is usually good enough for this. You can also email
+rust-community at googlegroups.com if you want to contact the community team
+(we may set up a separate forum for event organizers &c)
+
+
+Thanks,
+
+-Manish Goregaokar
+
+On Tue, Aug 11, 2015 at 7:52 PM, Douglas Campos <qmx at qmx.me> wrote:
+
+> and where is this place you mention?
+>
+> On Tue, Aug 11, 2015 at 11:12 AM, Simon Flynn <simon.flynn at financejobs.co>
+> wrote:
+>
+>> Hi Rustaceans,
+>>
+>> With the rust-dev mailing list in a semi-abanandonded state, we have
+>> decided to
+>> create a new place where people can gather to talk all thing Rust, but in
+>> particular to help organize local meetups and other gatherings (e.g.
+>> conferences, open days etc).
+>>
+>> Rust on,
+>> Simon
+>>
+>> --
+>> Simon Flynn
+>> https://www.financejobs.co
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150811/e23210d9/attachment.html>
+
+From eg1290 at gmail.com  Tue Aug 11 18:51:05 2015
+From: eg1290 at gmail.com (Evan G)
+Date: Tue, 11 Aug 2015 18:51:05 +0000
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <CACpkpxkWP8JoL9Us9qsbgtU80gGc7qn+Fz=w3k59eY_rGoAP4Q@mail.gmail.com>
+References: <20150811141245.GP22511@d1stkfactory>
+	<CAN-DfD7xK-am1POcERtTYMKfw=+JjVBakx3dPqQ2zUm=nagqvg@mail.gmail.com>
+	<CACpkpxkWP8JoL9Us9qsbgtU80gGc7qn+Fz=w3k59eY_rGoAP4Q@mail.gmail.com>
+Message-ID: <CAJY4u8FWsydKoajz5As-iNrWz98OFg2kJ+3ZV85MMbEdx2+stg@mail.gmail.com>
+
+I think what Douglas was trying to say is that Simon forgot to include
+whatever link he was going to put in the email.
+
+On Tue, Aug 11, 2015 at 1:18 PM Manish Goregaokar <manishsmail at gmail.com>
+wrote:
+
+> users.rust-lang.org is usually good enough for this. You can also email
+> rust-community at googlegroups.com if you want to contact the community team
+> (we may set up a separate forum for event organizers &c)
+>
+>
+> Thanks,
+>
+> -Manish Goregaokar
+>
+> On Tue, Aug 11, 2015 at 7:52 PM, Douglas Campos <qmx at qmx.me> wrote:
+>
+>> and where is this place you mention?
+>>
+>> On Tue, Aug 11, 2015 at 11:12 AM, Simon Flynn <simon.flynn at financejobs.co
+>> > wrote:
+>>
+>>> Hi Rustaceans,
+>>>
+>>> With the rust-dev mailing list in a semi-abanandonded state, we have
+>>> decided to
+>>> create a new place where people can gather to talk all thing Rust, but in
+>>> particular to help organize local meetups and other gatherings (e.g.
+>>> conferences, open days etc).
+>>>
+>>> Rust on,
+>>> Simon
+>>>
+>>> --
+>>> Simon Flynn
+>>> https://www.financejobs.co
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150811/9153e3e8/attachment.html>
+
+From simon.flynn at financejobs.co  Tue Aug 11 19:25:40 2015
+From: simon.flynn at financejobs.co (Simon Flynn)
+Date: Tue, 11 Aug 2015 19:25:40 +0000
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <CAN-DfD7xK-am1POcERtTYMKfw=+JjVBakx3dPqQ2zUm=nagqvg@mail.gmail.com>
+References: <20150811141245.GP22511@d1stkfactory>
+	<CAN-DfD7xK-am1POcERtTYMKfw=+JjVBakx3dPqQ2zUm=nagqvg@mail.gmail.com>
+Message-ID: <20150811192539.GQ22511@d1stkfactory>
+
+On Tue, Aug 11, 2015 at 11:22:49AM -0300, Douglas Campos wrote:
+> and where is this place you mention?
+
+Hi,
+
+Can't believe I forgot the link!
+
+  https://www.rustaceans.com/
+
+Simon
+
+> 
+> On Tue, Aug 11, 2015 at 11:12 AM, Simon Flynn <simon.flynn at financejobs.co>
+> wrote:
+> 
+> > Hi Rustaceans,
+> >
+> > With the rust-dev mailing list in a semi-abanandonded state, we have
+> > decided to
+> > create a new place where people can gather to talk all thing Rust, but in
+> > particular to help organize local meetups and other gatherings (e.g.
+> > conferences, open days etc).
+> >
+> > Rust on,
+> > Simon
+> >
+> > --
+> > Simon Flynn
+> > https://www.financejobs.co
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org
+> > https://mail.mozilla.org/listinfo/rust-dev
+> >
+
+-- 
+Simon Flynn
+https://www.financejobs.co
+
+From simon.sapin at exyr.org  Tue Aug 11 20:11:10 2015
+From: simon.sapin at exyr.org (Simon Sapin)
+Date: Tue, 11 Aug 2015 22:11:10 +0200
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <20150811141245.GP22511@d1stkfactory>
+References: <20150811141245.GP22511@d1stkfactory>
+Message-ID: <55CA56DE.30809@exyr.org>
+
+On 11/08/15 16:12, Simon Flynn wrote:
+> Hi Rustaceans,
+>
+> With the rust-dev mailing list in a semi-abanandonded state,
+
+Hi Simon,
+
+Are you aware of https://users.rust-lang.org/ ?
+
+
+> we have decided
+
+Who is "we"?
+
+
+> to create a new place where people can gather to talk all thing Rust,
+> but in particular to help organize local meetups and other gatherings
+> (e.g. conferences, open days etc).
+
+> https://www.rustaceans.com/
+
+I regularly attend the meetups in Paris. They are organized on 
+meetup.com/Rust-Paris and on #rust-fr IRC. I don?t remember hearing of a 
+desire for yet another communication channel. Did someone ask for 
+paris-rustaceans at rustaceans.com?
+
+-- 
+Simon Sapin
+
+From simon.flynn at financejobs.co  Tue Aug 11 20:38:25 2015
+From: simon.flynn at financejobs.co (Simon Flynn)
+Date: Tue, 11 Aug 2015 20:38:25 +0000
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <55CA56DE.30809@exyr.org>
+References: <20150811141245.GP22511@d1stkfactory>
+ <55CA56DE.30809@exyr.org>
+Message-ID: <20150811203825.GR22511@d1stkfactory>
+
+On Tue, Aug 11, 2015 at 10:11:10PM +0200, Simon Sapin wrote:
+> On 11/08/15 16:12, Simon Flynn wrote:
+> Are you aware of https://users.rust-lang.org/ ?
+
+Yes, I'm aware. However, the focus of rustaceans.com will be fostering small,
+tight knit communities akin to what Perl Mongers is to Perl, whereas
+users.rust-lang.org is more for discussions of Rust itself.
+
+> >we have decided
+> 
+> Who is "we"?
+
+The small team at Finance Jobs.
+
+> I regularly attend the meetups in Paris. They are organized on
+> meetup.com/Rust-Paris and on #rust-fr IRC. I don?t remember hearing
+> of a desire for yet another communication channel. Did someone ask
+> for paris-rustaceans at rustaceans.com?
+
+The initial list of existing mailing lists where taken from the list of
+Rust 1.0 Launch Party events. Paris was one of them :)
+
+Simon
+
+-- 
+Simon Flynn
+https://www.financejobs.co
+
+From smcarthur at mozilla.com  Tue Aug 11 22:50:12 2015
+From: smcarthur at mozilla.com (Sean McArthur)
+Date: Tue, 11 Aug 2015 22:50:12 +0000
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <20150811203825.GR22511@d1stkfactory>
+References: <20150811141245.GP22511@d1stkfactory> <55CA56DE.30809@exyr.org>
+	<20150811203825.GR22511@d1stkfactory>
+Message-ID: <CAHrH6bOpoOdC6nWmHOadnshU8h4nMgNPHm1P2SB5WdMfEMsFBQ@mail.gmail.com>
+
+I'd be wary of some of the lists, such as rust-core, rust-bugs,
+rust-announce, etc, that some may think are official.
+
+On Tue, Aug 11, 2015 at 1:38 PM Simon Flynn <simon.flynn at financejobs.co>
+wrote:
+
+> On Tue, Aug 11, 2015 at 10:11:10PM +0200, Simon Sapin wrote:
+> > On 11/08/15 16:12, Simon Flynn wrote:
+> > Are you aware of https://users.rust-lang.org/ ?
+>
+> Yes, I'm aware. However, the focus of rustaceans.com will be fostering
+> small,
+> tight knit communities akin to what Perl Mongers is to Perl, whereas
+> users.rust-lang.org is more for discussions of Rust itself.
+>
+> > >we have decided
+> >
+> > Who is "we"?
+>
+> The small team at Finance Jobs.
+>
+> > I regularly attend the meetups in Paris. They are organized on
+> > meetup.com/Rust-Paris and on #rust-fr IRC. I don?t remember hearing
+> > of a desire for yet another communication channel. Did someone ask
+> > for paris-rustaceans at rustaceans.com?
+>
+> The initial list of existing mailing lists where taken from the list of
+> Rust 1.0 Launch Party events. Paris was one of them :)
+>
+> Simon
+>
+> --
+> Simon Flynn
+> https://www.financejobs.co
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150811/67f9e155/attachment.html>
+
+From emil at fuse.pl  Tue Aug 11 22:52:30 2015
+From: emil at fuse.pl (Emil Oppeln-Bronikowski)
+Date: Wed, 12 Aug 2015 00:52:30 +0200
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <CAHrH6bOpoOdC6nWmHOadnshU8h4nMgNPHm1P2SB5WdMfEMsFBQ@mail.gmail.com>
+References: <20150811141245.GP22511@d1stkfactory>
+	<55CA56DE.30809@exyr.org>	<20150811203825.GR22511@d1stkfactory>
+	<CAHrH6bOpoOdC6nWmHOadnshU8h4nMgNPHm1P2SB5WdMfEMsFBQ@mail.gmail.com>
+Message-ID: <55CA7CAE.8020609@fuse.pl>
+
+I'm sad this list is inactive, I like my mailing lists and don't really 
+love web forums. I was very surprised when today I got first e-mail, I 
+forgot I subscribed. :-)
+
+From bascule at gmail.com  Tue Aug 11 22:57:56 2015
+From: bascule at gmail.com (Tony Arcieri)
+Date: Tue, 11 Aug 2015 15:57:56 -0700
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <55CA7CAE.8020609@fuse.pl>
+References: <20150811141245.GP22511@d1stkfactory> <55CA56DE.30809@exyr.org>
+	<20150811203825.GR22511@d1stkfactory>
+	<CAHrH6bOpoOdC6nWmHOadnshU8h4nMgNPHm1P2SB5WdMfEMsFBQ@mail.gmail.com>
+	<55CA7CAE.8020609@fuse.pl>
+Message-ID: <CAHOTMVK1QhT0_xf=K0-yr=cr1ebYs=u6wNFRder7+6mR=_FAcw@mail.gmail.com>
+
+On Tue, Aug 11, 2015 at 3:52 PM, Emil Oppeln-Bronikowski <emil at fuse.pl>
+wrote:
+
+> I'm sad this list is inactive, I like my mailing lists and don't really
+> love web forums. I was very surprised when today I got first e-mail, I
+> forgot I subscribed. :-)
+
+
+If rustaceans.com were to host a general Rust discussion email list (e.g.
+rust-talk), I'd subscribe
+
+-- 
+Tony Arcieri
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150811/20bb6872/attachment.html>
+
+From emil at fuse.pl  Tue Aug 11 23:00:33 2015
+From: emil at fuse.pl (Emil Oppeln-Bronikowski)
+Date: Wed, 12 Aug 2015 01:00:33 +0200
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <CAHOTMVK1QhT0_xf=K0-yr=cr1ebYs=u6wNFRder7+6mR=_FAcw@mail.gmail.com>
+References: <20150811141245.GP22511@d1stkfactory> <55CA56DE.30809@exyr.org>
+	<20150811203825.GR22511@d1stkfactory>
+	<CAHrH6bOpoOdC6nWmHOadnshU8h4nMgNPHm1P2SB5WdMfEMsFBQ@mail.gmail.com>
+	<55CA7CAE.8020609@fuse.pl>
+	<CAHOTMVK1QhT0_xf=K0-yr=cr1ebYs=u6wNFRder7+6mR=_FAcw@mail.gmail.com>
+Message-ID: <55CA7E91.5080902@fuse.pl>
+
+
+
+W dniu 12.08.2015 o 00:57, Tony Arcieri pisze:
+> If rustaceans.com <http://rustaceans.com> were to host a general Rust 
+> discussion email list (e.g. rust-talk), I'd subscribe
+
+I see they have rust-users, but the archives are empty. Well, I guess 
+that's the world we're living. I might as well stick to /r/rust for now.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150812/97ac5a39/attachment.html>
+
+From simon.flynn at financejobs.co  Tue Aug 11 23:42:25 2015
+From: simon.flynn at financejobs.co (Simon Flynn)
+Date: Tue, 11 Aug 2015 23:42:25 +0000
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <CAHrH6bOpoOdC6nWmHOadnshU8h4nMgNPHm1P2SB5WdMfEMsFBQ@mail.gmail.com>
+References: <20150811141245.GP22511@d1stkfactory> <55CA56DE.30809@exyr.org>
+	<20150811203825.GR22511@d1stkfactory>
+	<CAHrH6bOpoOdC6nWmHOadnshU8h4nMgNPHm1P2SB5WdMfEMsFBQ@mail.gmail.com>
+Message-ID: <20150811234225.GJ666@debian>
+
+Hi Sean,
+
+On Tue, Aug 11, 2015 at 10:50:12PM +0000, Sean McArthur wrote:
+> I'd be wary of some of the lists, such as rust-core, rust-bugs,
+> rust-announce, etc, that some may think are official.
+
+Mozilla having semi-closed their rust-dev mailing list was the
+motivation for hosting the rust-* lists.
+
+Simon
+
+--
+Simon Flynn
+https://www.financejobs.co
+
+From simon.flynn at financejobs.co  Tue Aug 11 23:44:28 2015
+From: simon.flynn at financejobs.co (Simon Flynn)
+Date: Tue, 11 Aug 2015 23:44:28 +0000
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <55CA7E91.5080902@fuse.pl>
+References: <20150811141245.GP22511@d1stkfactory> <55CA56DE.30809@exyr.org>
+	<20150811203825.GR22511@d1stkfactory>
+	<CAHrH6bOpoOdC6nWmHOadnshU8h4nMgNPHm1P2SB5WdMfEMsFBQ@mail.gmail.com>
+	<55CA7CAE.8020609@fuse.pl>
+	<CAHOTMVK1QhT0_xf=K0-yr=cr1ebYs=u6wNFRder7+6mR=_FAcw@mail.gmail.com>
+	<55CA7E91.5080902@fuse.pl>
+Message-ID: <20150811234428.GS22511@d1stkfactory>
+
+Hi Emil,
+
+On Wed, Aug 12, 2015 at 01:00:33AM +0200, Emil Oppeln-Bronikowski wrote:
+> W dniu 12.08.2015 o 00:57, Tony Arcieri pisze:
+> >If rustaceans.com <http://rustaceans.com> were to host a general
+> >Rust discussion email list (e.g. rust-talk), I'd subscribe
+> 
+> I see they have rust-users, but the archives are empty. Well, I
+> guess that's the world we're living. I might as well stick to
+> /r/rust for now.
+
+I hope that was in jest - rustaceans.com has only been live for 9 hours.
+
+Simon
+
+-- 
+Simon Flynn
+https://www.financejobs.co
+
+From emil at fuse.pl  Tue Aug 11 23:45:51 2015
+From: emil at fuse.pl (Emil Oppeln-Bronikowski)
+Date: Wed, 12 Aug 2015 01:45:51 +0200
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <20150811234428.GS22511@d1stkfactory>
+References: <20150811141245.GP22511@d1stkfactory> <55CA56DE.30809@exyr.org>
+	<20150811203825.GR22511@d1stkfactory>
+	<CAHrH6bOpoOdC6nWmHOadnshU8h4nMgNPHm1P2SB5WdMfEMsFBQ@mail.gmail.com>
+	<55CA7CAE.8020609@fuse.pl>
+	<CAHOTMVK1QhT0_xf=K0-yr=cr1ebYs=u6wNFRder7+6mR=_FAcw@mail.gmail.com>
+	<55CA7E91.5080902@fuse.pl> <20150811234428.GS22511@d1stkfactory>
+Message-ID: <55CA892F.90502@fuse.pl>
+
+
+> I hope that was in jest - rustaceans.com has only been live for 9 hours.
+
+Uh oh! I'm sorry, I didn't read the whole thread and that's what I get, 
+being a fool! :)
+
+From smcarthur at mozilla.com  Wed Aug 12 01:58:51 2015
+From: smcarthur at mozilla.com (Sean McArthur)
+Date: Wed, 12 Aug 2015 01:58:51 +0000
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <20150811234225.GJ666@debian>
+References: <20150811141245.GP22511@d1stkfactory> <55CA56DE.30809@exyr.org>
+	<20150811203825.GR22511@d1stkfactory>
+	<CAHrH6bOpoOdC6nWmHOadnshU8h4nMgNPHm1P2SB5WdMfEMsFBQ@mail.gmail.com>
+	<20150811234225.GJ666@debian>
+Message-ID: <CAHrH6bMq4P+3s-mThzONWmb9unTnGNz0WepujYTd85cqT_MLSg@mail.gmail.com>
+
+Yes I know. Even just adding `Unofficial' in the description of those lists
+would help prevent confusion, I think.
+
+The 'official' rust-core is https://internals.rust-lang.org
+
+On Tue, Aug 11, 2015 at 4:42 PM Simon Flynn <simon.flynn at financejobs.co>
+wrote:
+
+> Mozilla having semi-closed their rust-dev mailing list was the
+> motivation for hosting the rust-* lists.
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150812/29342ec4/attachment.html>
+
+From bascule at gmail.com  Wed Aug 12 02:02:17 2015
+From: bascule at gmail.com (Tony Arcieri)
+Date: Tue, 11 Aug 2015 19:02:17 -0700
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <CAHrH6bMq4P+3s-mThzONWmb9unTnGNz0WepujYTd85cqT_MLSg@mail.gmail.com>
+References: <20150811141245.GP22511@d1stkfactory> <55CA56DE.30809@exyr.org>
+	<20150811203825.GR22511@d1stkfactory>
+	<CAHrH6bOpoOdC6nWmHOadnshU8h4nMgNPHm1P2SB5WdMfEMsFBQ@mail.gmail.com>
+	<20150811234225.GJ666@debian>
+	<CAHrH6bMq4P+3s-mThzONWmb9unTnGNz0WepujYTd85cqT_MLSg@mail.gmail.com>
+Message-ID: <CAHOTMVJU37TrCx6ZnW8SDJjyHda7755D_G8jr9o6RYtu9Nt+MQ@mail.gmail.com>
+
+On Tue, Aug 11, 2015 at 6:58 PM, Sean McArthur <smcarthur at mozilla.com>
+wrote:
+
+> Yes I know. Even just adding `Unofficial' in the description of those
+> lists would help prevent confusion, I think.
+>
+
+To me "Rustaceans" implies unofficial/community organized, all the way down
+to Ferris.
+
+-- 
+Tony Arcieri
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150811/6973e2cb/attachment.html>
+
+From lists at dhardy.name  Wed Aug 12 11:00:20 2015
+From: lists at dhardy.name (Diggory Hardy)
+Date: Wed, 12 Aug 2015 12:00:20 +0100
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <CAHOTMVJU37TrCx6ZnW8SDJjyHda7755D_G8jr9o6RYtu9Nt+MQ@mail.gmail.com>
+References: <20150811141245.GP22511@d1stkfactory>
+	<CAHrH6bMq4P+3s-mThzONWmb9unTnGNz0WepujYTd85cqT_MLSg@mail.gmail.com>
+	<CAHOTMVJU37TrCx6ZnW8SDJjyHda7755D_G8jr9o6RYtu9Nt+MQ@mail.gmail.com>
+Message-ID: <1439379029.xo8WZ96EWI@tph-l13071>
+
+Hey, Rust is community-owned[1]. Mozilla are driving a lot of the development and paying several 
+developers, but they don't /own/ it, so the only thing 'official' can mean is 'endorsed by key 
+developers'; thus I don't see much point worrying about the 'unofficial' part.
+
+That said, I don't see much value to a 'rust-core' list in addition to the forum. Also, rust-help and rust-
+users look a little bit like the same thing.
+
+[1]: https://github.com/rust-lang/rust/blob/master/AUTHORS.txt
+
+
+On Tue, Aug 11, 2015 at 6:58 PM, Sean McArthur <smcarthur at mozilla.com[1]> wrote:
+
+
+Yes I know. Even just adding `Unofficial' in the description of those lists would help prevent confusion, 
+I think.
+
+
+To me "Rustaceans" implies unofficial/community organized, all the way down to Ferris.
+
+
+-- 
+
+
+Tony Arcieri
+
+
+
+
+
+--------
+[1] mailto:smcarthur at mozilla.com
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150812/a9ba2960/attachment.html>
+
+From aturon at mozilla.com  Fri Aug 14 16:33:34 2015
+From: aturon at mozilla.com (Aaron Turon)
+Date: Fri, 14 Aug 2015 09:33:34 -0700
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <1439379029.xo8WZ96EWI@tph-l13071>
+References: <20150811141245.GP22511@d1stkfactory>
+	<CAHrH6bMq4P+3s-mThzONWmb9unTnGNz0WepujYTd85cqT_MLSg@mail.gmail.com>
+	<CAHOTMVJU37TrCx6ZnW8SDJjyHda7755D_G8jr9o6RYtu9Nt+MQ@mail.gmail.com>
+	<1439379029.xo8WZ96EWI@tph-l13071>
+Message-ID: <CADjVELow-7sbKFAxm7fOXE8==ADO7SSuX0htRvHytS7zh2y-zw@mail.gmail.com>
+
+Just to clarify a bit: Rust has a governance structure [1] that includes a
+core team and several area-specific subteams drawn from the entire Rust
+community. The core team is generally responsible for cross-cutting and
+policy decisions, as well as Rust's official web presence.
+
+The core team made a deliberate decision, many months ago, to "shut down"
+the mailing list (which had largely died out) in favor of our discourse
+forums [2] [3], which have many advantages and which are seeing strong use
+every day, and which can be used like traditional mailing lists if you
+prefer.
+
+As Diggory said, Mozilla has sponsored development but does not "own" the
+project. However, Mozilla does own the trademark for Rust on behalf of the
+core team. The core team has been actively hammering out some guidelines
+about exactly what this thread is discussing -- when it's appropriate to
+use the Rust logo/trademarks in association with a commercial product --
+that we hope to make public very soon. But in the meantime, would you
+consider somehow changing the site to appear less official, perhaps by
+adding "Unofficial" prominently on the site as was earlier suggested? It's
+of course fine to create your own mailing lists, but our discourse forums
+are currently the official place for open-ended discussion.
+
+Thanks,
+Aaron Turon
+
+[1]: https://github.com/rust-lang/rfcs/pull/1068
+[2]: http://internals.rust-lang.org/
+[3]: http://users.rust-lang.org/ <http://users.rust-lang.org/>
+
+On Wed, Aug 12, 2015 at 4:00 AM, Diggory Hardy <lists at dhardy.name> wrote:
+
+> Hey, Rust is community-owned[1]. Mozilla are driving a lot of the
+> development and paying several developers, but they don't own it, so the
+> only thing 'official' can mean is 'endorsed by key developers'; thus I
+> don't see much point worrying about the 'unofficial' part.
+>
+>
+>
+> That said, I don't see much value to a 'rust-core' list in addition to the
+> forum. Also, rust-help and rust-users look a little bit like the same thing.
+>
+>
+>
+> [1]: https://github.com/rust-lang/rust/blob/master/AUTHORS.txt
+>
+>
+>
+> On Tuesday 11 August 2015 19:02:17 Tony Arcieri wrote:
+>
+> On Tue, Aug 11, 2015 at 6:58 PM, Sean McArthur <smcarthur at mozilla.com>
+> wrote:
+>
+> Yes I know. Even just adding `Unofficial' in the description of those
+> lists would help prevent confusion, I think.
+>
+>
+> To me "Rustaceans" implies unofficial/community organized, all the way
+> down to Ferris.
+>
+>
+> --
+>
+> Tony Arcieri
+>
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150814/1694d2f9/attachment.html>
+
+From simon.flynn at financejobs.co  Mon Aug 17 13:11:05 2015
+From: simon.flynn at financejobs.co (Simon Flynn)
+Date: Mon, 17 Aug 2015 13:11:05 +0000
+Subject: [rust-dev] Rustaceans - Rust User Groups
+In-Reply-To: <CADjVELow-7sbKFAxm7fOXE8==ADO7SSuX0htRvHytS7zh2y-zw@mail.gmail.com>
+References: <20150811141245.GP22511@d1stkfactory>
+	<CAHrH6bMq4P+3s-mThzONWmb9unTnGNz0WepujYTd85cqT_MLSg@mail.gmail.com>
+	<CAHOTMVJU37TrCx6ZnW8SDJjyHda7755D_G8jr9o6RYtu9Nt+MQ@mail.gmail.com>
+	<1439379029.xo8WZ96EWI@tph-l13071>
+	<CADjVELow-7sbKFAxm7fOXE8==ADO7SSuX0htRvHytS7zh2y-zw@mail.gmail.com>
+Message-ID: <20150817131105.GT22511@d1stkfactory>
+
+On Fri, Aug 14, 2015 at 09:33:34AM -0700, Aaron Turon wrote:
+> As Diggory said, Mozilla has sponsored development but does not "own" the
+> project. However, Mozilla does own the trademark for Rust on behalf of the
+> core team. The core team has been actively hammering out some guidelines
+> about exactly what this thread is discussing -- when it's appropriate to
+> use the Rust logo/trademarks in association with a commercial product --
+> that we hope to make public very soon. But in the meantime, would you
+> consider somehow changing the site to appear less official, perhaps by
+> adding "Unofficial" prominently on the site as was earlier suggested?
+
+Happily just changed the logo to Ferris The Crab, courtesy of Karen Rustad. The
+intention was never to be or mimic an official channel. Apologies if it ever
+came out that way.
+
+> It's of course fine to create your own mailing lists, but our discourse
+> forums are currently the official place for open-ended discussion.
+
+That's totally fine but I honestly think that separate mailing lists per
+locality would serve the community better. That's my entire rationale for
+building Rustaceans.com - I'm scratching my own itch, trying to follow the
+example of what the Perl Monger's user groups have done to build Perl's great
+community.
+
+At the moment the Discourse forum is flat with only four categories. Finding
+and organising a local group is getting lost in between the sea of people
+looking for help with Rust. There's too much noise-to-signal happening. I don't
+thing anyone can disagree with me here.
+
+Other's will say that Meetup.com fills this gap. However if you have ever tried
+to have a conversation within it's comments, you will find they are next to
+useless.
+
+Simon
+
+-- 
+Simon Flynn
+https://www.financejobs.co
+
+From mk.bangalore.ramaiah at intel.com  Tue Aug 25 08:47:39 2015
+From: mk.bangalore.ramaiah at intel.com (Bangalore Ramaiah, Mk)
+Date: Tue, 25 Aug 2015 08:47:39 +0000
+Subject: [rust-dev] =?windows-1252?q?_Implementing_an_application_in_Rust_?=
+	=?windows-1252?q?for_=91C=92_RTOS?=
+Message-ID: <ED2069A36BCDA446BEA1B41BD8865C1C16CEAB40@IRSMSX101.ger.corp.intel.com>
+
+Greetings..!
+
+I am relatively new to rust and planning on building an application in Rust for Contiki RTOS (implemented in C).
+
+As of now I am able to write a Rust lib containing code that will be called from other Contiki applications.
+But I am finding it bit tricky (with current Rust version) to create processes in an application and making OS to call it. i.e I would need to access OS's data structures in Rust app, modify it and export it. Currently though the program can be successfully compiled, it crashes during run-time due to segmentation failure.
+
+I need advice on how to approach the implementation of Rust app for an C RTOS. Are there any project examples doing the same/similar (Online search wasn't so helpful).
+
+Thanks.
+Madhu
+Intel GmbH
+Dornacher Strasse 1
+85622 Feldkirchen/Muenchen, Deutschland
+Sitz der Gesellschaft: Feldkirchen bei Muenchen
+Geschaeftsfuehrer: Christian Lamprechter, Hannes Schwaderer, Douglas Lusk
+Registergericht: Muenchen HRB 47456
+Ust.-IdNr./VAT Registration No.: DE129385895
+Citibank Frankfurt a.M. (BLZ 502 109 00) 600119052
+Intel Deutschland GmbH
+Registered Address: Am Campeon 10-12, 85579 Neubiberg, Germany
+Tel: +49 89 99 8853-0, www.intel.de
+Managing Directors: Christin Eisenschmid, Prof. Dr. Hermann Eul
+Chairperson of the Supervisory Board: Tiffany Doon Silva
+Registered Office: Munich
+Commercial Register: Amtsgericht Muenchen HRB 186928
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150825/d3fd80a8/attachment.html>
+

@@ -1,0 +1,2055 @@
+From jim at uazu.net  Wed Oct  5 08:53:44 2011
+From: jim at uazu.net (Jim Peters)
+Date: Wed, 5 Oct 2011 10:53:44 -0500
+Subject: [rust-dev] Task scheduling and optimisation
+Message-ID: <20111005155343.GA2083@uazu.net>
+
+As a newcomer to Rust, it seems to me that it would be a
+simplification to express an iterator using a port, channel and task,
+to re-use existing parts of the compiler instead of making an iterator
+a special case.  So the iterator code (notionally) runs as a task and
+passes back values over the channel, and the foreach loop pulls in
+those values one by one from the port.  (The task creation could be
+hidden behind the 'iter' calling syntax.)
+
+However, this would force the compiler to do quite a lot of
+optimisation if this was going to work efficiently (e.g. as
+efficiently as a conventional for loop).
+
+But it makes sense to consider this because there are other uses of
+port/channels/tasks which aren't iterators but which could also use
+this optimisation.
+
+I have thought for a while about tasklet style implementations
+(Erlang/Go/whatever), and the big problem I still don't have a clear
+answer to is about scheduling and optimising all those tasks.
+Hopefully Rust has some kind of a rough plan for dealing with this?
+
+It seems to me there are several options:
+
+- Statically optimise the task to run tightly-coupled alongside the
+  spawning task, like the iterator example above.
+
+- Run the task within the same thread, but independent and managed by
+  the runtime scheduler.  (Message passing is cheaper inside one
+  thread.)
+
+- Run the task on this thread or possibly another thread, again
+  managed by the runtime scheduler.  (But needs inter-thread
+  synchronization.)
+
+I see the whole task/port/channel thing as just notation, and how that
+is translated is up to the compiler.  It doesn't actually have to run
+as an independent task, it could be optimised down to inline code.
+
+The minimum implementation of a called task -- with one outgoing
+channel, one calling task and only local (scoped) use of the called
+task -- could be a single pointer variable for the channel buffer, a
+nested stack for the called task allocated on the caller's stack, and
+switching between the two tasks as coroutines.  This would take care
+of the iterator.
+
+I think if tasks and channels/etc can't be optimised down like this
+they're not going to be fast enough for widespread use in algorithms,
+and programmers will have to ask themselves at each point whether they
+are a good choice or not.
+
+For example, let's say I have a loop from 1 to 100,000, and there is a
+small chunk of work I need to do for each value.  The obvious approach
+is to spawn a task for each of these 100,000 values in order to make
+use of all my cores.  How is Rust going to deal with this?
+
+- Allocate 100,000 stack frames for all the tasks in a global pool,
+  and work through them in parallel on N cores?  (Memory explosion)
+
+- Allow the loop to only spawn 100 or so, and wait for those to finish
+  executing before letting more be spawned?
+
+- Inline the sub-task execution into the loop, and then fork the loop
+  over my N cores (for example) so that 100,000/N of those tasks are
+  run on each core.  This would be very hard for a compiler to do, but
+  it is what I might implement if I was hand-coding it.
+
+- Or: recommend to the programmer that they don't create so many
+  tasks, and split their work-load over max 100 or so tasks to ensure
+  that the inefficiencies of scheduling so many tasks doesn't
+  overwhelm the processing time.
+
+The final option is like giving up, though, saying that the task
+scheduling/optimisation problem can't be solved by the compiler.  It
+would be better if the compiler could take full charge of this
+problem, because if you ask the programmer to optimise this, they are
+not likely to do a good job.  For example:
+
+Say my top-level task A spawns 10 parallel B tasks, each of which
+spawns 10 C tasks, each of which spawns 10 D tasks.  In total we have
+potentially 1000+ concurrent tasks.  The level C tasks don't know that
+there are 100 of them already running in parallel, already saturating
+all the cores.  Their 10 D tasks each could be run inline (tightly
+coupled) very much more efficiently than adding more tasks to the
+pool.  However, if there was only one level C task running, then
+spawning 10 D tasks might be a good idea to make use of parallelism
+across the cores.
+
+This is an example where the programmer can't optimise this for us,
+because the programmer doesn't know in what context task C will be
+called.  Only the runtime knows.
+
+So should there be two compiled versions of each task, one that
+inlines everything possible, and the other that spawns as many tasks
+as possible?  (Or maybe a single version with more fine-grained
+switches.)  If so, the version to run could be selected by the runtime
+according to how saturated the cores are with existing work.
+
+What kind of plan does Rust have regarding these questions?  This
+seems like the hardest part of the design to me.
+
+Reading the Wiki, it suggests that the task/port/channel-related stuff
+was being moved out to a library, which means the compiler can't
+optimise it -- or was that just the old design?
+
+Maybe I am imagining a level of optimisation and abstraction of tasks
+far beyond what is realistically feasible, though.  Maybe this really
+is a problem that has to be pushed back to the programmer.
+
+Maybe we can say: tasks are too expensive for implementing an
+iterator, but cheap compared to something that will take 1ms or more
+of processing time?  So the programmer has to judge that for
+themselves.  Is that the approach?
+
+Jim
+
+P.S.  I'm interested in Rust because the design decisions make a lot
+of sense to me.  However, having a ASM/Forth/C/Java background, the
+ML-inspired parts of Rust are giving me trouble, so I think I'm going
+to learn OCaml first to get a better grounding in that before going
+much further.
+
+-- 
+ Jim Peters                  (_)/=\~/_(_)                 jim at uazu.net
+                          (_)  /=\  ~/_  (_)
+ Uaz?                  (_)    /=\    ~/_    (_)                http://
+ in Peru            (_) ____ /=\ ____ ~/_ ____ (_)            uazu.net
+
+From eric.holk at gmail.com  Wed Oct  5 09:32:34 2011
+From: eric.holk at gmail.com (Eric Holk)
+Date: Wed, 5 Oct 2011 12:32:34 -0400
+Subject: [rust-dev] Removing ty_native
+In-Reply-To: <4E864DCF.8050906@mozilla.com>
+References: <4E864DCF.8050906@mozilla.com>
+Message-ID: <8C7F4CA7-0E51-42CA-B38D-7927CA7675D9@gmail.com>
+
+I'd say go ahead and remove them. For most of the native modules I've written, I use unsafe pointers instead of ty_native, and that seems to work better for me.
+
+-Eric
+
+On Sep 30, 2011, at 7:16 PM, Patrick Walton wrote:
+
+> I think native types might have outlived their usefulness at this point. We can represent them as ints, and their type safety can be achieved via tags.
+> 
+> So
+> 
+> native mod ... { type ModuleRef; }
+> 
+> becomes
+> 
+> tag ModuleRef = int;
+> 
+> This has the nice benefit of being able to use sizes other than words; e.g. u64. (This was the use case that motivated this post.)
+> 
+> Thoughts on removing them?
+> 
+> Patrick
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From marijnh at gmail.com  Wed Oct  5 11:24:19 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 5 Oct 2011 20:24:19 +0200
+Subject: [rust-dev] Removing ty_native
+In-Reply-To: <4E864DCF.8050906@mozilla.com>
+References: <4E864DCF.8050906@mozilla.com>
+Message-ID: <CAJnHWXvrcXpwPkx+7L_754anENjSX3PnA6ncLk4=2_+mC_CmCQ@mail.gmail.com>
+
+One thing that might make using nominal tags like this awkward is that
+tags are, currently, always structural, so that they will always be
+passed by reference. I'm hard at work on making immediates be passed
+by value again, and I think we really want such natives to also be
+immediate.
+
+Looking into the content of tags to decide whether to make them
+immediate seems kludgy. Maybe we do need a nominal type that's not a
+tag after all.
+
+From banderson at mozilla.com  Thu Oct  6 11:37:15 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Thu, 06 Oct 2011 11:37:15 -0700
+Subject: [rust-dev] Task scheduling and optimisation
+In-Reply-To: <20111005155343.GA2083@uazu.net>
+References: <20111005155343.GA2083@uazu.net>
+Message-ID: <4E8DF55B.8090200@mozilla.com>
+
+Hi Jim,
+
+You have a lot of good observations here, of which I may be qualified to 
+respond to a few.
+
+On 10/05/2011 08:53 AM, Jim Peters wrote:
+> As a newcomer to Rust, it seems to me that it would be a
+> simplification to express an iterator using a port, channel and task,
+> to re-use existing parts of the compiler instead of making an iterator
+> a special case.  So the iterator code (notionally) runs as a task and
+> passes back values over the channel, and the foreach loop pulls in
+> those values one by one from the port.  (The task creation could be
+> hidden behind the 'iter' calling syntax.)
+
+Expressing iteration with tasks is very attractive.
+
+> However, this would force the compiler to do quite a lot of
+> optimisation if this was going to work efficiently (e.g. as
+> efficiently as a conventional for loop).
+
+It would definitely require a lot of compiler magic, which is somewhat 
+contrary to Rust's goal of making everything have a well-defined cost-model.
+
+> I have thought for a while about tasklet style implementations
+> (Erlang/Go/whatever), and the big problem I still don't have a clear
+> answer to is about scheduling and optimising all those tasks.
+> Hopefully Rust has some kind of a rough plan for dealing with this?
+
+Honestly, I don't think there's a solid plan for this yet. The short 
+term goal for tasks has been to get something useful working.
+
+> I think if tasks and channels/etc can't be optimised down like this
+> they're not going to be fast enough for widespread use in algorithms,
+> and programmers will have to ask themselves at each point whether they
+> are a good choice or not.
+
+Making task communication fast is a big concern. Programmers should 
+definitely be comfortable writing rust programs in a task-oriented way 
+by default, but I think it is probably the case that programmers will 
+have to consider which abstractions will provide the appropriate 
+performance for their use case. In general, Rust prefers to provide 
+multiple abstractions with clear performance costs, than one abstraction 
+with a clever implementation.
+
+> For example, let's say I have a loop from 1 to 100,000, and there is a
+> small chunk of work I need to do for each value.  The obvious approach
+> is to spawn a task for each of these 100,000 values in order to make
+> use of all my cores.  How is Rust going to deal with this?
+>
+> - Allocate 100,000 stack frames for all the tasks in a global pool,
+>    and work through them in parallel on N cores?  (Memory explosion)
+
+I think this is the goal. Rust will be getting stack growth soon and 
+stacks should start very small.
+
+> Reading the Wiki, it suggests that the task/port/channel-related stuff
+> was being moved out to a library, which means the compiler can't
+> optimise it -- or was that just the old design?
+
+All task stuff is in the library now, partly because it allows more 
+freedom to experiment. It does take away the compiler's ability to do 
+any special optimizations with tasks.
+
+There's definitely a lot of opportunity to improve and influence the 
+design of the task system still.
+
+-Brian
+
+
+
+
+
+From eric.holk at gmail.com  Thu Oct  6 21:33:27 2011
+From: eric.holk at gmail.com (Eric Holk)
+Date: Fri, 7 Oct 2011 00:33:27 -0400
+Subject: [rust-dev] Task scheduling and optimisation
+In-Reply-To: <4E8DF55B.8090200@mozilla.com>
+References: <20111005155343.GA2083@uazu.net> <4E8DF55B.8090200@mozilla.com>
+Message-ID: <03D611E2-C015-4ADA-8030-7C8AF791945E@gmail.com>
+
+On Oct 6, 2011, at 2:37 PM, Brian Anderson wrote:
+
+> Hi Jim,
+> 
+> You have a lot of good observations here, of which I may be qualified to respond to a few.
+> 
+> On 10/05/2011 08:53 AM, Jim Peters wrote:
+>> As a newcomer to Rust, it seems to me that it would be a
+>> simplification to express an iterator using a port, channel and task,
+>> to re-use existing parts of the compiler instead of making an iterator
+>> a special case.  So the iterator code (notionally) runs as a task and
+>> passes back values over the channel, and the foreach loop pulls in
+>> those values one by one from the port.  (The task creation could be
+>> hidden behind the 'iter' calling syntax.)
+> 
+> Expressing iteration with tasks is very attractive.
+
+It's definitely nice from the standpoint of having fewer languages forms for users to learn and implementers to debug. It reminds me of how task join and status notifications got a lot simpler when we implemented them in terms of messages. However, iterators need to be really fast, and in most cases the compiler should be able to optimize them into a really tight loop. I really doubt Rust's task system will ever be able to be this fast.
+
+>> For example, let's say I have a loop from 1 to 100,000, and there is a
+>> small chunk of work I need to do for each value.  The obvious approach
+>> is to spawn a task for each of these 100,000 values in order to make
+>> use of all my cores.  How is Rust going to deal with this?
+>> 
+>> - Allocate 100,000 stack frames for all the tasks in a global pool,
+>>   and work through them in parallel on N cores?  (Memory explosion)
+> 
+> I think this is the goal. Rust will be getting stack growth soon and stacks should start very small.
+
+Even without stack growth, we have a few programs that manage to spawn ten thousands of threads. This requires a small hack to shrink the default stack size, but it does work. In general, Rust programmers shouldn't have to worry about keeping track of how many tasks they are creating.
+
+>> Reading the Wiki, it suggests that the task/port/channel-related stuff
+>> was being moved out to a library, which means the compiler can't
+>> optimise it -- or was that just the old design?
+> 
+> All task stuff is in the library now, partly because it allows more freedom to experiment. It does take away the compiler's ability to do any special optimizations with tasks.
+
+The key benefit of having tasks and communication is that we can innovate in the task system without having to modify the compiler. Tasks and communication are still an integral part of the language, even if their interface is only through the standard library. For example, communication safety is enforced by the kind system. The runtime is also very much aware of tasks, and many dynamic scheduling optimizations can happen here.
+
+For example, one scheduling trick I think would be worth trying is making it so when you send a message to a port and the task that owns the port is blocked on that port, the sending task could yield directly to the receiving task. I think this might improve performance for tasks that primarily receive small messages, do a minimal amount of processing, and then go back to waiting.
+
+
+There's a spectrum of things various languages call tasks. Rust's are more like lightweight threads. As such, they should be really cheap to create and you can comfortable create many thousands of them, but they will probably always cost more than a function call, for example. Other languages have lighter task-like things that could be used for things like iterators, but they tend to require extensive code transformations to implement efficiently. Rust's design philosophy seems to eschew these high level code transformations in favor of making it easier to predict what output the compiler will generate for various programs.
+
+-Eric
+
+From marijnh at gmail.com  Thu Oct  6 23:24:07 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 7 Oct 2011 08:24:07 +0200
+Subject: [rust-dev] Task scheduling and optimisation
+In-Reply-To: <20111005155343.GA2083@uazu.net>
+References: <20111005155343.GA2083@uazu.net>
+Message-ID: <CAJnHWXt0d=e51_3e1R8Hnm38tEKDrhp_hpaSsUzbZAGu6pMhXQ@mail.gmail.com>
+
+Another thing that makes iterators-as-tasks not really work is data
+sharing. You want to be able to share data with your iterator, you
+can't share data with other tasks.
+
+From jim at uazu.net  Fri Oct  7 09:38:30 2011
+From: jim at uazu.net (Jim Peters)
+Date: Fri, 7 Oct 2011 11:38:30 -0500
+Subject: [rust-dev] Task scheduling and optimisation
+In-Reply-To: <03D611E2-C015-4ADA-8030-7C8AF791945E@gmail.com>
+	<4E8DF55B.8090200@mozilla.com>
+Message-ID: <20111007163830.GA2210@uazu.net>
+
+Brian Anderson wrote:
+> >However, this would force the compiler to do quite a lot of
+> >optimisation if this was going to work efficiently (e.g. as
+> >efficiently as a conventional for loop).
+> 
+> It would definitely require a lot of compiler magic, which is
+> somewhat contrary to Rust's goal of making everything have a
+> well-defined cost-model.
+
+I can see what you are saying: making the costs transparent.  But
+there are some optimisation transformations that everyone feels that
+they can count on -- e.g. elimination of temporaries in C code --
+i.e. I know that the compiler will fix this up, so there is no cost.
+
+
+> All task stuff is in the library now, partly because it allows more
+> freedom to experiment. It does take away the compiler's ability to
+> do any special optimizations with tasks.
+> 
+> There's definitely a lot of opportunity to improve and influence the
+> design of the task system still.
+
+It would be good if the option was left open to bring it back into the
+compiler some day, so that later on more optimisation could be done if
+someone felt that that would be useful.
+
+
+Eric Holk wrote:
+> It's definitely nice from the standpoint of having fewer languages
+> forms for users to learn and implementers to debug. It reminds me of
+> how task join and status notifications got a lot simpler when we
+> implemented them in terms of messages. However, iterators need to be
+> really fast, and in most cases the compiler should be able to
+> optimize them into a really tight loop. I really doubt Rust's task
+> system will ever be able to be this fast.
+
+Sounds like an interesting challenge!
+
+> The key benefit of having tasks and communication is that we can
+> innovate in the task system without having to modify the
+> compiler. Tasks and communication are still an integral part of the
+> language, even if their interface is only through the standard
+> library. For example, communication safety is enforced by the kind
+> system. The runtime is also very much aware of tasks, and many
+> dynamic scheduling optimizations can happen here.
+> 
+> For example, one scheduling trick I think would be worth trying is
+> making it so when you send a message to a port and the task that
+> owns the port is blocked on that port, the sending task could yield
+> directly to the receiving task. I think this might improve
+> performance for tasks that primarily receive small messages, do a
+> minimal amount of processing, and then go back to waiting.
+
+Yes, I think that choosing whether to yield directly on message
+passing or spawning is a powerful control that the runtime has.  It
+could make a big difference to performance.
+
+For example in my 100,000 task example, if the spawning task yielded
+directly to the spawned task, and the spawned task ran to completion
+before yielding, then there would be no explosion of tasks.  However
+then there would also be no parallelism (unless the spawning task was
+rescheduled onto another core).  So that is a pretty powerful choice
+the runtime is making.
+
+The question is how to tune the runtime to make the right choices,
+over all the possible use patterns of tasks.
+
+
+> There's a spectrum of things various languages call tasks. Rust's
+> are more like lightweight threads. As such, they should be really
+> cheap to create and you can comfortable create many thousands of
+> them, but they will probably always cost more than a function call,
+> for example. Other languages have lighter task-like things that
+> could be used for things like iterators, but they tend to require
+> extensive code transformations to implement efficiently. 
+
+You're talking about emulating coroutines with a transformation into
+normal called code?  (I forget the name of the transformation.)  If
+you have a cheap coroutine switch operation that shouldn't be
+necessary.  I think I need to study Rust's implementation more.
+Reading about LLVM's lack of support for coroutine switches was
+disappointing -- although maybe that has improved.
+
+> Rust's design philosophy seems to eschew these high level code
+> transformations in favor of making it easier to predict what output
+> the compiler will generate for various programs.
+
+Okay.  I will watch the list and keep thinking about it and studying
+Rust more, and see if I can contribute anything later on when I am
+more up to speed.
+
+Jim
+
+-- 
+ Jim Peters                  (_)/=\~/_(_)                 jim at uazu.net
+                          (_)  /=\  ~/_  (_)
+ Uaz?                  (_)    /=\    ~/_    (_)                http://
+ in Peru            (_) ____ /=\ ____ ~/_ ____ (_)            uazu.net
+
+From marijnh at gmail.com  Fri Oct  7 10:56:35 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 7 Oct 2011 19:56:35 +0200
+Subject: [rust-dev] Why are there &&-signs in my function signatures? (or:
+ update on by-value arguments)
+Message-ID: <CAJnHWXt6OegX+tKC6O+C=_ShF4o6QxKHBK+11VAKP_4t6XmMXQ@mail.gmail.com>
+
+You'll notice that, as of today, Rust is once again more picky about
+passing functions to higher-order functions. Each argument to each
+function is marked as either by-reference or by-value, and you can not
+pass a function expecting a by-value arg (`fn(+type)`) to a
+higher-order function that wants a by-ref function (`fn(&&type)`). The
+new system is different from the old (pre-my-alias-overhaul) approach
+in two ways:
+
+ - You don't have to explicitly annotate most functions. The compiler
+chooses a default passing convention (by-value for immediate types --
+scalars, box/unique pointers, natives -- and by-ref for everything
+else). In practice, you only need to add a && in front of the arg name
+when your function takes something that defaults to by-value, but you
+need a function that passes by ref.
+
+- The 'ownership' of the arg stays with the caller, even for by-value
+args, so that we can usually avoid having to do a take and a drop on
+args.
+
+I think the result is pleasing. We don't have the constant clutter of
+ampersands in function signatures, but do get the performance benefits
+of using an appropriate and efficient passing style for each type.
+Having to line up passing styles for higher-order functions is a bit
+of a pain, but no more than it used to be before I started messing
+with call styles. I hope that at one point we'll monomorphize our
+generics (generate different version for different types), at which
+point we could simply make them call the given function in the right
+style, and remove this burden from the programmer.
+
+Best,
+Marijn
+
+From eric.holk at gmail.com  Fri Oct  7 11:19:39 2011
+From: eric.holk at gmail.com (Eric Holk)
+Date: Fri, 7 Oct 2011 14:19:39 -0400
+Subject: [rust-dev] Task scheduling and optimisation
+In-Reply-To: <20111007163830.GA2210@uazu.net>
+References: <20111007163830.GA2210@uazu.net>
+Message-ID: <128C326C-2C07-484C-8DA8-E538EFE8A507@gmail.com>
+
+
+On Oct 7, 2011, at 12:38 PM, Jim Peters wrote:
+
+> Brian Anderson wrote:
+>> All task stuff is in the library now, partly because it allows more
+>> freedom to experiment. It does take away the compiler's ability to
+>> do any special optimizations with tasks.
+>> 
+>> There's definitely a lot of opportunity to improve and influence the
+>> design of the task system still.
+> 
+> It would be good if the option was left open to bring it back into the
+> compiler some day, so that later on more optimisation could be done if
+> someone felt that that would be useful.
+
+I've been doing some background thinking on what a good data parallel story for Rust could be. Most data parallel languages so far fall into the camp of requiring a lot of compiler heroics to make them work well. Once we get to this point in Rust, it'll probably be a good time to think about this some more. I like keeping the core language as simple as possible, but maybe we can do more aggressive things with syntax extensions.
+
+> Eric Holk wrote:
+> For example in my 100,000 task example, if the spawning task yielded
+> directly to the spawned task, and the spawned task ran to completion
+> before yielding, then there would be no explosion of tasks.  However
+> then there would also be no parallelism (unless the spawning task was
+> rescheduled onto another core).  So that is a pretty powerful choice
+> the runtime is making.
+
+As it currently stands, the scheduler is free to run tasks on whatever core it wants, although last I checked it doesn't actually move tasks except when they are first created. Spawning tasks still creates parallelism. The case where the "yield to receiver" pattern would work well, I think, is in a program like MapReduce, where a bunch of tasks are doing independent work and sending intermediate results to a single accumulator task. One way to think of it is that rather than everyone sending their results to the receiver, the receiver would travel around gathering results from the sender.
+
+>> Other languages have lighter task-like things that
+>> could be used for things like iterators, but they tend to require
+>> extensive code transformations to implement efficiently. 
+> 
+> You're talking about emulating coroutines with a transformation into
+> normal called code?  (I forget the name of the transformation.)  If
+> you have a cheap coroutine switch operation that shouldn't be
+> necessary.  I think I need to study Rust's implementation more.
+> Reading about LLVM's lack of support for coroutine switches was
+> disappointing -- although maybe that has improved.
+
+Two examples I was thinking of are stream processing languages like StreamIt, and task parallel languages like Cilk. In Cilk, spawn is basically a function call, but it marks the stack with a stealable continuation. Some other thread can then steal the continuation and pick up executing after the spawn statement. This works well because Cilk doesn't allow tasks to outlive the function they were spawned in, and continuation stealing allows large chunks of work to be stolen early on. Languages like StreamIt, on the other hand, define programs in terms of streams of data and filters on the data. The filters are typically small, so the compiler will try to take several adjacent filters and combine them into a bigger filter to reduce scheduling overhead. Data parallel languages such as Copperhead do similar things.
+
+-Eric
+
+From jim at uazu.net  Fri Oct  7 15:31:39 2011
+From: jim at uazu.net (Jim Peters)
+Date: Fri, 7 Oct 2011 17:31:39 -0500
+Subject: [rust-dev] Task scheduling and optimisation
+In-Reply-To: <128C326C-2C07-484C-8DA8-E538EFE8A507@gmail.com>
+References: <20111007163830.GA2210@uazu.net>
+	<128C326C-2C07-484C-8DA8-E538EFE8A507@gmail.com>
+Message-ID: <20111007223139.GA11736@uazu.net>
+
+Eric Holk wrote:
+> I've been doing some background thinking on what a good data
+> parallel story for Rust could be. Most data parallel languages so
+> far fall into the camp of requiring a lot of compiler heroics to
+> make them work well. Once we get to this point in Rust, it'll
+> probably be a good time to think about this some more. I like
+> keeping the core language as simple as possible, but maybe we can do
+> more aggressive things with syntax extensions.
+
+Keeping the language or the compiler simple?  Most compilers seem to
+get more and more complex over time as they aim for greater
+performance for the generated code.
+
+A simple and working compiler is stage one.  However, I think there is
+an advantage to finding a clean language design that doesn't create
+obstacles to later optimisation.  The current minimalistic combination
+of tasks, ports and channels seems like a good foundation for later
+optimisation, so long as it stays clean.
+
+Are you thinking of syntax extensions to tell the compiler: "optimise
+this in a certain way"?  I can see the idea: instead of letting the
+compiler recognise certain task-usage patterns, explicitly specify
+that that pattern is being used, and let the compiler complain if the
+code breaks that pattern.  That does make sense as well.
+
+(I guess an iterator could be one of those patterns, which might
+optimise down to something like the existing implementation.)
+
+
+> As it currently stands, the scheduler is free to run tasks on
+> whatever core it wants, although last I checked it doesn't actually
+> move tasks except when they are first created. Spawning tasks still
+> creates parallelism. The case where the "yield to receiver" pattern
+> would work well, I think, is in a program like MapReduce, where a
+> bunch of tasks are doing independent work and sending intermediate
+> results to a single accumulator task. One way to think of it is that
+> rather than everyone sending their results to the receiver, the
+> receiver would travel around gathering results from the sender.
+
+I think that there are two sources of information that could be useful
+to the runtime task scheduler:
+
+- Static information about a task's pattern of use and how it relates
+  to other tasks via channels and ports (whether derived from syntax
+  extensions or from static analysis)
+
+- Dynamic observation of the behaviour of the tasks at runtime
+
+The first needs some help from the compiler, and potentially could
+result in compiler-based optimisations as well.
+
+
+> Two examples I was thinking of are stream processing languages like
+> StreamIt, and task parallel languages like Cilk. In Cilk, spawn is
+> basically a function call, but it marks the stack with a stealable
+> continuation. Some other thread can then steal the continuation and
+> pick up executing after the spawn statement. This works well because
+> Cilk doesn't allow tasks to outlive the function they were spawned
+> in, and continuation stealing allows large chunks of work to be
+> stolen early on. Languages like StreamIt, on the other hand, define
+> programs in terms of streams of data and filters on the data. The
+> filters are typically small, so the compiler will try to take
+> several adjacent filters and combine them into a bigger filter to
+> reduce scheduling overhead. Data parallel languages such as
+> Copperhead do similar things.
+
+These ideas are exciting and interesting but which optimisation to
+apply would likely depend on the pattern of usage of each individual
+task.
+
+Really Rust is giving the programmer an open model with massive
+parallelism, but real machines provide only a relatively small amount
+of parallelism, so more often than not tasks will be running in a
+serial or interleaved fashion.  As soon as the cores are saturated,
+certain patterns would be better run optimised inline, and this will
+be the more common execution case.  (And I guess this is the case that
+Cilk is optimising for.)
+
+Well, there is enormous potential for optimisation when the time
+comes.  Just look how many GC schemes Java has gone through behind the
+scenes based on a simple, minimalistic, few-promises GC contract with
+the programmer.
+
+Jim
+
+-- 
+ Jim Peters                  (_)/=\~/_(_)                 jim at uazu.net
+                          (_)  /=\  ~/_  (_)
+ Uaz?                  (_)    /=\    ~/_    (_)                http://
+ in Peru            (_) ____ /=\ ____ ~/_ ____ (_)            uazu.net
+
+From banderson at mozilla.com  Sat Oct  8 14:51:23 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Sat, 08 Oct 2011 14:51:23 -0700
+Subject: [rust-dev] LLVM bump to revision 141500
+Message-ID: <4E90C5DB.1040900@mozilla.com>
+
+I've bumped the version of LLVM on the bots to svn revision 141500. This 
+fixes LLVM bug 10987, which generates incorrect optimizations, and which 
+we have run into occasionally.
+
+From niko at alum.mit.edu  Mon Oct 10 09:26:28 2011
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Mon, 10 Oct 2011 09:26:28 -0700
+Subject: [rust-dev] Exuberant Ctags for rust
+Message-ID: <35AC7976-F7ED-4556-A35B-A46EAA26D973@alum.mit.edu>
+
+I created a project containing etags definitions for Rust.  These let users of vi or emacs (and probably other editors) quickly search and find functions and types by name.
+
+	https://github.com/nikomatsakis/rust-etags
+
+Obviously these are pretty basic! Suggestions for improvements are welcome but I've found them quite useful already.
+
+
+Niko
+
+From niko at alum.mit.edu  Mon Oct 10 16:20:53 2011
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Mon, 10 Oct 2011 16:20:53 -0700
+Subject: [rust-dev] unsafe
+Message-ID: <3CDC8649-9601-4AF2-BA15-BACD2647E351@alum.mit.edu>
+
+I have been working on adding unsafe functions.  The first "installment" is ready to be merged: it simply allows functions or blocks to be tagged as unsafe.  The code to actually check that unsafe functions are only called from unsafe blocks is included, but not enabled.  I have a branch that adds sufficient unsafe annotations to make the library and compiler  compile, but it cannot be merged in until a new snapshot is generated that contains the first installment.  I will submit a push request soon.
+
+The current syntax is as follows:
+
+"unsafe fn foo() { ? }" designates an unsafe function.  Unsafe functions can only be used from unsafe code.  Unsafe code is either another unsafe function or the contents of an unsafe block.
+
+An unsafe block is written "unsafe {?}".  The contents of the block are unsafe but the block itself is not.  This allows unsafe code to be wrapped inside of safe functions.
+
+To create an unsafe wrapper function, the most convenient notation is the following:
+	fn foo(?) -> T unsafe {
+		? (unsafe code) ...
+	}
+Here the keyword unsafe precedes the "{" that begins the body of the function.  This means that the body is an unsafe block, but the function itself is safe.
+
+Certainly restrictions are not currently enforced. I intend to add these in next:
+
+* The only unsafe operations are invoking native libraries or unsafe functions.  I will shortly begin adding other operations such as pointer dereferences or arithmetic.  Any suggestions for operations/ast nodes that ought to be unsafe are welcome.
+
+* Unsafe functions should not be first class.  That is, you should not be able to get a pointer to an unsafe function, it must be called by name.  
+
+Note that it is possible to create a Smalltalk/Ruby-stlye block in unsafe functions or blocks.  Such "fn blocks" may contain unsafe code.  I believe this is safe because those blocks can only be invoked from within the context of the unsafe creator.
+
+
+Niko
+
+From lindsey at rockstargirl.org  Tue Oct 11 15:22:24 2011
+From: lindsey at rockstargirl.org (Lindsey Kuper)
+Date: Tue, 11 Oct 2011 18:22:24 -0400
+Subject: [rust-dev] Vectorization
+Message-ID: <CALnXJirUKUPCTQwuyYkuvLQx92npETbwBrTaCiNnO3WKKP_k8A@mail.gmail.com>
+
+Has there ever been any discussion of vectorization (i.e., taking
+advantage of LLVM's vector types) in Rust?  Patrick said that he'd
+brought it up in passing before, but I don't think I've seen it come
+up on the mailing list yet.  I'm thinking about trying it out for a
+class project.  I'm at the "looked at the Wikipedia page some" level
+of knowledge about vectorization right now, so I have a lot to learn.
+Um...thoughts?
+
+Lindsey
+
+From banderson at mozilla.com  Sat Oct 15 15:56:34 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Sat, 15 Oct 2011 15:56:34 -0700
+Subject: [rust-dev] LLVM bump to svn revision 142082
+Message-ID: <4E9A0FA2.5090701@mozilla.com>
+
+This captures a recent change to the LLVM Linker API
+
+From eric.holk at gmail.com  Tue Oct 18 08:50:58 2011
+From: eric.holk at gmail.com (Eric Holk)
+Date: Tue, 18 Oct 2011 11:50:58 -0400
+Subject: [rust-dev] Task scheduling and optimisation
+In-Reply-To: <20111007223139.GA11736@uazu.net>
+References: <20111007163830.GA2210@uazu.net>
+	<128C326C-2C07-484C-8DA8-E538EFE8A507@gmail.com>
+	<20111007223139.GA11736@uazu.net>
+Message-ID: <BCD207F4-83FB-4663-BBF6-55BC4903E18A@gmail.com>
+
+
+On Oct 7, 2011, at 6:31 PM, Jim Peters wrote:
+> Are you thinking of syntax extensions to tell the compiler: "optimise
+> this in a certain way"?  I can see the idea: instead of letting the
+> compiler recognise certain task-usage patterns, explicitly specify
+> that that pattern is being used, and let the compiler complain if the
+> code breaks that pattern.  That does make sense as well.
+
+I  meant syntax extension in terms of something like macros. Rust already has some macro support and a way of adding syntax extensions to the compiler frontend (this is how #fmt is implemented). Doing something like this for data parallelism seems like the right way to do it, as I'm not sure fine-grained data parallel patterns will end up being the best fit for the Rust task system.
+
+-Eric
+
+From eric.holk at gmail.com  Tue Oct 18 08:58:15 2011
+From: eric.holk at gmail.com (Eric Holk)
+Date: Tue, 18 Oct 2011 11:58:15 -0400
+Subject: [rust-dev] Vectorization
+In-Reply-To: <CALnXJirUKUPCTQwuyYkuvLQx92npETbwBrTaCiNnO3WKKP_k8A@mail.gmail.com>
+References: <CALnXJirUKUPCTQwuyYkuvLQx92npETbwBrTaCiNnO3WKKP_k8A@mail.gmail.com>
+Message-ID: <C4FF1A05-D401-49D5-A8C8-E5FE84746C42@gmail.com>
+
+
+On Oct 11, 2011, at 6:22 PM, Lindsey Kuper wrote:
+
+> Has there ever been any discussion of vectorization (i.e., taking
+> advantage of LLVM's vector types) in Rust?  Patrick said that he'd
+> brought it up in passing before, but I don't think I've seen it come
+> up on the mailing list yet.  I'm thinking about trying it out for a
+> class project.  I'm at the "looked at the Wikipedia page some" level
+> of knowledge about vectorization right now, so I have a lot to learn.
+> Um?thoughts?
+
+Does LLVM have any support for doing autovectorization? I know it has vector types, and presumably these correspond to SSE or AVX or whatever vector instructions the CPU has.
+
+As far as how to exploit these in Rust, I think it'd make sense to have some way of making their use explicit, but higher level than SSE intrinsics like GCC has. Perhaps one way would be to overload operators like plus to work on tuples of numeric types? Tuples of floats match up pretty well with the vector registers in the CPU, I think. I guess this could also be extended to vectors. Another option I'd consider would be making a data parallel library. Even if rustc doesn't generate vectorized code, this library could be implemented in native code using SSE intrinsics. This also might help pave the way for GPU support in the future.
+
+-Eric
+
+From brendan at mozilla.org  Tue Oct 18 11:10:10 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Tue, 18 Oct 2011 11:10:10 -0700
+Subject: [rust-dev] Vectorization
+In-Reply-To: <C4FF1A05-D401-49D5-A8C8-E5FE84746C42@gmail.com>
+References: <CALnXJirUKUPCTQwuyYkuvLQx92npETbwBrTaCiNnO3WKKP_k8A@mail.gmail.com>
+	<C4FF1A05-D401-49D5-A8C8-E5FE84746C42@gmail.com>
+Message-ID: <1A809C2B-9D9C-45AE-930B-FC9044CB6F59@mozilla.org>
+
+On Oct 18, 2011, at 8:58 AM, Eric Holk wrote:
+
+> 
+> On Oct 11, 2011, at 6:22 PM, Lindsey Kuper wrote:
+> 
+>> Has there ever been any discussion of vectorization (i.e., taking
+>> advantage of LLVM's vector types) in Rust?  Patrick said that he'd
+>> brought it up in passing before, but I don't think I've seen it come
+>> up on the mailing list yet.  I'm thinking about trying it out for a
+>> class project.  I'm at the "looked at the Wikipedia page some" level
+>> of knowledge about vectorization right now, so I have a lot to learn.
+>> Um?thoughts?
+> 
+> Does LLVM have any support for doing autovectorization? I know it has vector types, and presumably these correspond to SSE or AVX or whatever vector instructions the CPU has.
+
+I'm not sure about CPU vector units, but there's the PTX abstract ISA that compiles to GPU, from NVIDIA. Look for PTX under http://llvm.org/devmtg/2009-10/ and see also https://github.com/jholewinski/llvm-ptx-samples
+
+
+> As far as how to exploit these in Rust, I think it'd make sense to have some way of making their use explicit, but higher level than SSE intrinsics like GCC has. Perhaps one way would be to overload operators like plus to work on tuples of numeric types? Tuples of floats match up pretty well with the vector registers in the CPU, I think. I guess this could also be extended to vectors. Another option I'd consider would be making a data parallel library. Even if rustc doesn't generate vectorized code, this library could be implemented in native code using SSE intrinsics. This also might help pave the way for GPU support in the future.
+
+Have you guys checked out Intel Lab's River Trail yet?
+
+http://github.com/RiverTrail/RiverTrail
+http://brendaneich.com/2011/09/capitoljs-rivertrail/
+
+ParallelArray (immutable, n-dimensional typed array based library abstraction) for JS, with Narcissus-based compiler to OpenCL. A tech demonstrator for sure, we are now working on integration into IonMonkey.
+
+/be
+
+
+> 
+> -Eric
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From scoopr at iki.fi  Tue Oct 18 12:10:26 2011
+From: scoopr at iki.fi (Mikko Lehtonen)
+Date: Tue, 18 Oct 2011 22:10:26 +0300
+Subject: [rust-dev] Vectorization
+In-Reply-To: <C4FF1A05-D401-49D5-A8C8-E5FE84746C42@gmail.com>
+References: <CALnXJirUKUPCTQwuyYkuvLQx92npETbwBrTaCiNnO3WKKP_k8A@mail.gmail.com>
+	<C4FF1A05-D401-49D5-A8C8-E5FE84746C42@gmail.com>
+Message-ID: <4E9DCF22.9050702@iki.fi>
+
+
+Hello, I'm silently following rust progress, and thought I chip in here.
+
+On 10/18/11 6:58 PM, Eric Holk wrote:
+
+ > Does LLVM have any support for doing autovectorization?
+
+   LLVM does not have any autovectorization currently. There is a
+   project called polly that does some of that, but I guess it's a
+   separate research project that may or may not merge with mainline
+   llvm if it ever bears fruit.
+
+   Personally, I would be pretty happy with types like
+   simd::float4  made available with the most obvious operators.
+
+   Especially if I can wrap it something like
+
+
+import simd::float4;
+import math;
+
+type vec3f = simd::float4;
+
+fn length_squared(v: vec3f) -> float { v[0] * v[0] + v[1] * v[1] + v[2] 
+* v[2] }
+fn length(v: vec3f) -> float { math::sqrt(length_squared(v)); }
+
+fn normalize(v:vec3f) -> vec3f { v / length(v) }
+
+
+
+--
+Mikko Lehtonen
+
+From lindsey at rockstargirl.org  Tue Oct 18 12:29:23 2011
+From: lindsey at rockstargirl.org (Lindsey Kuper)
+Date: Tue, 18 Oct 2011 15:29:23 -0400
+Subject: [rust-dev] Vectorization
+In-Reply-To: <C4FF1A05-D401-49D5-A8C8-E5FE84746C42@gmail.com>
+References: <CALnXJirUKUPCTQwuyYkuvLQx92npETbwBrTaCiNnO3WKKP_k8A@mail.gmail.com>
+	<C4FF1A05-D401-49D5-A8C8-E5FE84746C42@gmail.com>
+Message-ID: <CALnXJirJBsfrt3z=5-fKVesfWySmnS78SYSSic6WcLXootEzHg@mail.gmail.com>
+
+On Tue, Oct 18, 2011 at 11:58 AM, Eric Holk <eric.holk at gmail.com> wrote:
+> Does LLVM have any support for doing autovectorization?
+
+Rather than fully automatic vectorization (not requiring any change to
+the source code), I was picturing something like a "simd" pragma (like
+what ICC has: http://software.intel.com/sites/products/documentation/studio/composer/en-us/2011/compiler_c/cref_cls/common/cppref_pragma_simd.htm).
+
+Lindsey
+
+From dherman at mozilla.com  Wed Oct 19 08:24:19 2011
+From: dherman at mozilla.com (David Herman)
+Date: Wed, 19 Oct 2011 08:24:19 -0700
+Subject: [rust-dev] PL development: the past 5 years
+Message-ID: <EABE0EE2-63B8-4EE5-8AE8-FBBAFD86480F@mozilla.com>
+
+Fogus blogs about language developments in recent years:
+
+    http://blog.fogus.me/2011/10/18/programming-language-development-the-past-5-years/
+
+He doesn't say much about Rust (which is fair; we haven't said much yet!), but apparently we fit his first axiom:
+
+    When brilliant people create things, study them.
+
+:)
+
+Dave
+
+
+From marijnh at gmail.com  Fri Oct 21 05:58:30 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 21 Oct 2011 14:58:30 +0200
+Subject: [rust-dev] The new way to do iteration
+Message-ID: <CAJnHWXvmg5-rtUd-HUJiexhj5yz4HJA=9SG6HDW9K+RWmdOLLQ@mail.gmail.com>
+
+As agreed on in this week's meething, I removed compiler support for
+iter functions and for-each loops today. Instead, it is now possible
+to say
+
+    uint::range(0u, 10u) {|i|
+        log_err i;
+    }
+    my_map.items {|key, val|
+        ...
+    }
+
+If an call expression in statement position is followed directly by a
+block ({| or {||), that block is added as a final argument to the
+call. For a non-call expression, the expression becomes a call with a
+single argument, the block.
+
+(The reason it only recognizes expressions in statement position---at
+the top level of an outer block---is that this way, you don't need to
+terminate a block call with a semicolon. When using higher-order
+functions in a way that returns a value, you'll have to put the block
+inside the parentheses as before.)
+
+Iterators are now simply functions that take a block as their last
+argument. They are strictly as powerful as our old iterators, and
+require much less compiler machinery.
+
+An open problem is whether we want to allow break/continue or even
+returning from the outer function inside a block. (This didn't work
+for the old iterators either.)
+
+Best,
+Marijn
+
+From marijnh at gmail.com  Mon Oct 24 01:22:39 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 24 Oct 2011 10:22:39 +0200
+Subject: [rust-dev] Change the syntax for type parameter kinds?
+Message-ID: <CAJnHWXvLs2Y4phw3OU0b5fH2b-c1f01D1LWpTKoGAGceqEEkRw@mail.gmail.com>
+
+At least two people have confused @T with a boxed type in the past
+weeks. Even me, who really should know better at this point,
+occasionally misinterpret some code because of the similarity between
+the two. The same probably goes for ~T.
+
+I think we should change the syntax. It can be a little more verbose,
+I think, as long as it doesn't resemble other type-related syntax.
+
+I'd also support making 'shared' the default kind for type parameters.
+It is usually what you want.
+
+Proposal: 'pinned T' and 'unique T' for pinned/unique type params. 'T'
+for shared ones.
+
+From dherman at mozilla.com  Mon Oct 24 06:43:15 2011
+From: dherman at mozilla.com (David Herman)
+Date: Mon, 24 Oct 2011 06:43:15 -0700
+Subject: [rust-dev] Change the syntax for type parameter kinds?
+In-Reply-To: <CAJnHWXvLs2Y4phw3OU0b5fH2b-c1f01D1LWpTKoGAGceqEEkRw@mail.gmail.com>
+References: <CAJnHWXvLs2Y4phw3OU0b5fH2b-c1f01D1LWpTKoGAGceqEEkRw@mail.gmail.com>
+Message-ID: <F5748BC8-A4D4-4C7F-A8C9-985ACE9C71D8@mozilla.com>
+
+I don't have any particular intuition of what's the best syntax we should use there, but I agree that the current one is awfully confusing.
+
+Dave
+
+On Oct 24, 2011, at 1:22 AM, Marijn Haverbeke wrote:
+
+> At least two people have confused @T with a boxed type in the past
+> weeks. Even me, who really should know better at this point,
+> occasionally misinterpret some code because of the similarity between
+> the two. The same probably goes for ~T.
+> 
+> I think we should change the syntax. It can be a little more verbose,
+> I think, as long as it doesn't resemble other type-related syntax.
+> 
+> I'd also support making 'shared' the default kind for type parameters.
+> It is usually what you want.
+> 
+> Proposal: 'pinned T' and 'unique T' for pinned/unique type params. 'T'
+> for shared ones.
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From pwalton at mozilla.com  Mon Oct 24 08:42:59 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Mon, 24 Oct 2011 08:42:59 -0700
+Subject: [rust-dev] Change the syntax for type parameter kinds?
+In-Reply-To: <CAJnHWXvLs2Y4phw3OU0b5fH2b-c1f01D1LWpTKoGAGceqEEkRw@mail.gmail.com>
+References: <CAJnHWXvLs2Y4phw3OU0b5fH2b-c1f01D1LWpTKoGAGceqEEkRw@mail.gmail.com>
+Message-ID: <4EA58783.6010709@mozilla.com>
+
+On 10/24/2011 01:22 AM, Marijn Haverbeke wrote:
+> At least two people have confused @T with a boxed type in the past
+> weeks. Even me, who really should know better at this point,
+> occasionally misinterpret some code because of the similarity between
+> the two. The same probably goes for ~T.
+>
+> I think we should change the syntax. It can be a little more verbose,
+> I think, as long as it doesn't resemble other type-related syntax.
+>
+> I'd also support making 'shared' the default kind for type parameters.
+> It is usually what you want.
+>
+> Proposal: 'pinned T' and 'unique T' for pinned/unique type params. 'T'
+> for shared ones.
+
+Agreed. I've hit this myself a lot.
+
+Patrick
+
+From lindsey at rockstargirl.org  Mon Oct 24 08:48:34 2011
+From: lindsey at rockstargirl.org (Lindsey Kuper)
+Date: Mon, 24 Oct 2011 11:48:34 -0400
+Subject: [rust-dev] Vectorization
+In-Reply-To: <4E9DCF22.9050702@iki.fi>
+References: <CALnXJirUKUPCTQwuyYkuvLQx92npETbwBrTaCiNnO3WKKP_k8A@mail.gmail.com>
+	<C4FF1A05-D401-49D5-A8C8-E5FE84746C42@gmail.com>
+	<4E9DCF22.9050702@iki.fi>
+Message-ID: <CALnXJiopX72+S=S5nfh1ogtFEAP_1aa8gFm7bBt6y3RVtE1vdw@mail.gmail.com>
+
+On Tue, Oct 18, 2011 at 3:10 PM, Mikko Lehtonen <scoopr at iki.fi> wrote:
+> ?Personally, I would be pretty happy with types like
+> ?simd::float4 ?made available with the most obvious operators.
+>
+> ?Especially if I can wrap it something like
+>
+>
+> import simd::float4;
+> import math;
+>
+> type vec3f = simd::float4;
+>
+> fn length_squared(v: vec3f) -> float { v[0] * v[0] + v[1] * v[1] + v[2] *
+> v[2] }
+> fn length(v: vec3f) -> float { math::sqrt(length_squared(v)); }
+>
+> fn normalize(v:vec3f) -> vec3f { v / length(v) }
+>
+>
+>
+> --
+> Mikko Lehtonen
+
+Mikko, supposing this code were real, what is the compiler being told
+to parallelize here?
+
+Lindsey
+
+From banderson at mozilla.com  Mon Oct 24 11:04:38 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Mon, 24 Oct 2011 11:04:38 -0700
+Subject: [rust-dev] Change the syntax for type parameter kinds?
+In-Reply-To: <CAJnHWXvLs2Y4phw3OU0b5fH2b-c1f01D1LWpTKoGAGceqEEkRw@mail.gmail.com>
+References: <CAJnHWXvLs2Y4phw3OU0b5fH2b-c1f01D1LWpTKoGAGceqEEkRw@mail.gmail.com>
+Message-ID: <4EA5A8B6.8050702@mozilla.com>
+
+On 10/24/2011 01:22 AM, Marijn Haverbeke wrote:
+> Proposal: 'pinned T' and 'unique T' for pinned/unique type params. 'T'
+> for shared ones.
+Yes.
+
+From marijnh at gmail.com  Mon Oct 24 12:13:13 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 24 Oct 2011 21:13:13 +0200
+Subject: [rust-dev] Change the syntax for type parameter kinds?
+In-Reply-To: <4EA5A8B6.8050702@mozilla.com>
+References: <CAJnHWXvLs2Y4phw3OU0b5fH2b-c1f01D1LWpTKoGAGceqEEkRw@mail.gmail.com>
+	<4EA5A8B6.8050702@mozilla.com>
+Message-ID: <CAJnHWXv0tm+uWoG0f3+O3pHz3Xr=s99_vJ7M5v2UFqctJA5hPQ@mail.gmail.com>
+
+Opened https://github.com/graydon/rust/issues/1067 for this.
+
+From banderson at mozilla.com  Mon Oct 24 13:21:03 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Mon, 24 Oct 2011 13:21:03 -0700
+Subject: [rust-dev] The new way to do iteration
+In-Reply-To: <CAJnHWXvmg5-rtUd-HUJiexhj5yz4HJA=9SG6HDW9K+RWmdOLLQ@mail.gmail.com>
+References: <CAJnHWXvmg5-rtUd-HUJiexhj5yz4HJA=9SG6HDW9K+RWmdOLLQ@mail.gmail.com>
+Message-ID: <4EA5C8AF.4060608@mozilla.com>
+
+On 10/21/2011 05:58 AM, Marijn Haverbeke wrote:
+> (The reason it only recognizes expressions in statement position---at
+> the top level of an outer block---is that this way, you don't need to
+> terminate a block call with a semicolon. When using higher-order
+> functions in a way that returns a value, you'll have to put the block
+> inside the parentheses as before.)
+This seems to make the feature not very useful. Is there a way we can 
+get around this limitation?
+
+From peterhull90 at gmail.com  Mon Oct 24 13:53:08 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Mon, 24 Oct 2011 21:53:08 +0100
+Subject: [rust-dev] The new way to do iteration
+In-Reply-To: <CAJnHWXvmg5-rtUd-HUJiexhj5yz4HJA=9SG6HDW9K+RWmdOLLQ@mail.gmail.com>
+References: <CAJnHWXvmg5-rtUd-HUJiexhj5yz4HJA=9SG6HDW9K+RWmdOLLQ@mail.gmail.com>
+Message-ID: <CAK9Gx1egqKm+iA_j0A1gYQUviMG=VGoRnK2MBpnpE7e3==x2kw@mail.gmail.com>
+
+On Fri, Oct 21, 2011 at 1:58 PM, Marijn Haverbeke <marijnh at gmail.com> wrote:
+> As agreed on in this week's meething, I removed compiler support for
+> iter functions and for-each loops today.
+Does this mean that the little code snippet on
+http://www.rust-lang.org/ is no longer valid?
+
+Pete
+
+From scoopr at iki.fi  Mon Oct 24 14:19:32 2011
+From: scoopr at iki.fi (Mikko Lehtonen)
+Date: Tue, 25 Oct 2011 00:19:32 +0300
+Subject: [rust-dev] Vectorization
+In-Reply-To: <CALnXJiopX72+S=S5nfh1ogtFEAP_1aa8gFm7bBt6y3RVtE1vdw@mail.gmail.com>
+References: <CALnXJirUKUPCTQwuyYkuvLQx92npETbwBrTaCiNnO3WKKP_k8A@mail.gmail.com>
+	<C4FF1A05-D401-49D5-A8C8-E5FE84746C42@gmail.com>
+	<4E9DCF22.9050702@iki.fi>
+	<CALnXJiopX72+S=S5nfh1ogtFEAP_1aa8gFm7bBt6y3RVtE1vdw@mail.gmail.com>
+Message-ID: <4EA5D664.9000408@iki.fi>
+
+> On Tue, Oct 18, 2011 at 3:10 PM, Mikko Lehtonen<scoopr at iki.fi>  wrote:
+>>   Personally, I would be pretty happy with types like
+>>   simd::float4  made available with the most obvious operators.
+>>
+>>   Especially if I can wrap it something like
+>>
+>>
+>> import simd::float4;
+>> import math;
+>>
+>> type vec3f = simd::float4;
+>>
+>> fn length_squared(v: vec3f) ->  float { v[0] * v[0] + v[1] * v[1] + v[2] *
+>> v[2] }
+>> fn length(v: vec3f) ->  float { math::sqrt(length_squared(v)); }
+>>
+>> fn normalize(v:vec3f) ->  vec3f { v / length(v) }
+>>
+
+On 10/24/11 6:48 PM, Lindsey Kuper wrote:
+>
+> Mikko, supposing this code were real, what is the compiler being told
+> to parallelize here?
+>
+> Lindsey
+
+
+   Ah excellent question, my example was kind of stupid in that respect.
+   In this case, not really much.
+
+   I wrote the code more to illustrate how it could look, not how to use
+   it to full effect.
+
+   Of course, the code that benefits from this is more like
+   vec3f force = vec3f(0.0, -1.0, 0.0);
+   float timestep = 0.16;
+   // in loop for lots of points etc..
+   vec3f new_pos = old_pos + force * timestep ;
+
+   Or if you want to take full effect of the four vector elements,
+   it needs to be transposed so it's doing it for xxxx,
+   yyyy, zzzz, if the transposing doesn't eat the advantage, or the
+   memory layout can be changed to accommodate that.
+
+   I'm not a certified SIMD expert, I've only done some game
+   related coding, so take this with a appropriate grain of salt.
+
+   Given the lack of "generic simd stuff" support from any of the newer
+   programming languages of late, even languages claiming to be for
+   "system programming", I can only infer that it just isn't as simple
+   to implement them.
+   And thinking about it more, it may be difficult to have anything
+   predictable. There are more restrictions to alignments, not all types
+   have all the some operations available for them orthogonally, not all
+   platforms have the same way of achieving some operations..
+
+   So I guess what I'm saying, if llvm makes it easy to implement them,
+   in a simple, semi-predictable way, it would be really useful,
+   I'm all for it. And it would be really shame if there wasn't any way
+   to use them, but I'm not sure what alternative way there is to
+   implement then. Expose simd::sse::_mm_setzero_ps  etc. ?
+
+
+--
+Mikko Lehtonen
+
+
+
+
+From marijnh at gmail.com  Tue Oct 25 00:52:11 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 25 Oct 2011 09:52:11 +0200
+Subject: [rust-dev] The new way to do iteration
+In-Reply-To: <4EA5C8AF.4060608@mozilla.com>
+References: <CAJnHWXvmg5-rtUd-HUJiexhj5yz4HJA=9SG6HDW9K+RWmdOLLQ@mail.gmail.com>
+	<4EA5C8AF.4060608@mozilla.com>
+Message-ID: <CAJnHWXuTzR7vTqCNOqPkbEVDZQ3kM4d3-rR2gnSvshrMYqwKng@mail.gmail.com>
+
+> This seems to make the feature not very useful. Is there a way we can get
+> around this limitation?
+
+Why do you say that? It is trivial to get around this limitation, but
+it seems that block calls like this in expression position would just
+look even weirder than the form where you have the block inside the
+parentheses. Compare
+
+    let sum = reduce({|a, b| a + b}, myseq) + 2;
+
+    let sum = reduce(myseq) {|a, b| a + b} + 2;
+
+Do you prefer the second? I figured this would just be a trick to make
+statement-style loops look better.
+
+Best,
+Marijn
+
+From marijnh at gmail.com  Tue Oct 25 00:59:20 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 25 Oct 2011 09:59:20 +0200
+Subject: [rust-dev] The new way to do iteration
+In-Reply-To: <CAK9Gx1egqKm+iA_j0A1gYQUviMG=VGoRnK2MBpnpE7e3==x2kw@mail.gmail.com>
+References: <CAJnHWXvmg5-rtUd-HUJiexhj5yz4HJA=9SG6HDW9K+RWmdOLLQ@mail.gmail.com>
+	<CAK9Gx1egqKm+iA_j0A1gYQUviMG=VGoRnK2MBpnpE7e3==x2kw@mail.gmail.com>
+Message-ID: <CAJnHWXum5huVYixh_vvVcrPWYEtFNBZvLRojb7qCYBmn+nvFGw@mail.gmail.com>
+
+> Does this mean that the little code snippet on
+> http://www.rust-lang.org/ is no longer valid?
+
+No, that's a vector for loop. Only 'for each x in myiter() { ... }' was removed.
+
+From marijnh at gmail.com  Tue Oct 25 07:07:53 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 25 Oct 2011 16:07:53 +0200
+Subject: [rust-dev] Change the syntax for type parameter kinds?
+In-Reply-To: <CAJnHWXv0tm+uWoG0f3+O3pHz3Xr=s99_vJ7M5v2UFqctJA5hPQ@mail.gmail.com>
+References: <CAJnHWXvLs2Y4phw3OU0b5fH2b-c1f01D1LWpTKoGAGceqEEkRw@mail.gmail.com>
+	<4EA5A8B6.8050702@mozilla.com>
+	<CAJnHWXv0tm+uWoG0f3+O3pHz3Xr=s99_vJ7M5v2UFqctJA5hPQ@mail.gmail.com>
+Message-ID: <CAJnHWXuQQz=BmK9TPzMtVAy8QnUshD2hQ9vsQeNoiM-_cfAjEg@mail.gmail.com>
+
+I implemented this today. The rationale for making T represent
+'pinned' is that 'pinned' is the broadest category -- all types can be
+passed to a function expecting a pinned type. I still think that
+making the default 'shared' is a good idea, but there are downsides --
+it's easy to define a generic function or datatype as taking a more
+narrow type than it really accepts.
+
+Maybe we could have the compiler warn in such a case?
+
+From banderson at mozilla.com  Tue Oct 25 09:40:58 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Tue, 25 Oct 2011 09:40:58 -0700
+Subject: [rust-dev] The new way to do iteration
+In-Reply-To: <CAJnHWXuTzR7vTqCNOqPkbEVDZQ3kM4d3-rR2gnSvshrMYqwKng@mail.gmail.com>
+References: <CAJnHWXvmg5-rtUd-HUJiexhj5yz4HJA=9SG6HDW9K+RWmdOLLQ@mail.gmail.com>	<4EA5C8AF.4060608@mozilla.com>
+	<CAJnHWXuTzR7vTqCNOqPkbEVDZQ3kM4d3-rR2gnSvshrMYqwKng@mail.gmail.com>
+Message-ID: <4EA6E69A.8050407@mozilla.com>
+
+On 10/25/2011 12:52 AM, Marijn Haverbeke wrote:
+>> This seems to make the feature not very useful. Is there a way we can get
+>> around this limitation?
+> Why do you say that? It is trivial to get around this limitation, but
+> it seems that block calls like this in expression position would just
+> look even weirder than the form where you have the block inside the
+> parentheses. Compare
+>
+>      let sum = reduce({|a, b| a + b}, myseq) + 2;
+>
+>      let sum = reduce(myseq) {|a, b| a + b} + 2;
+>
+> Do you prefer the second? I figured this would just be a trick to make
+> statement-style loops look better.
+
+Not in this example, but I always want nicer ways to write spawn. 
+Imagine a glorious future where spawn looks like
+
+let task = spawn {
+    ... do something ...
+}
+
+Yeah? Obviously there are a number of changes required to make that 
+possible.
+
+Regardless, putting the block in parens isn't a major headache (except 
+that rust-mode and the pretty-printer don't like it).
+
+-Brian
+
+From pwalton at mozilla.com  Fri Oct 28 13:01:14 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 28 Oct 2011 13:01:14 -0700
+Subject: [rust-dev] Renaming "tag" and "log_err"
+Message-ID: <4EAB0A0A.5070905@mozilla.com>
+
+A little bikeshedding:
+
+Tags
+----
+
+In my experience "tag" has been confusing for newcomers to the language. 
+It's consistent in that it's the only way to define a nominal type, but 
+nominal types are more of a compiler writer's construct than a construct 
+users of the language are used to thinking about. So I suggest instead 
+that we change the keyword for variant-typed tags to "variant", and in 
+the documentation, change the previous usages of "variant" to "case". 
+The word "variant" suggests what the type actually means, and a lot of 
+potential users of Rust will be coming from languages like C++, in which 
+sum types don't exist. It's a lot easier to explain to newcomers "a 
+variant value is one of several cases" than to say "a tag value is one 
+of several variants".
+
+Additionally, "variant" and "case" match OCaml.
+
+Unfortunately, "variant" is 7 letters, which breaks our 5-character 
+limit for keywords, but I think "var" would be even more confusing.
+
+Note that this means that will want a "newtype" keyword for the newtype 
+syntax, and it could well just be "newtype" like Haskell.
+
+Logging
+-------
+
+"log_err" is a bit unsightly, and I'm worried about releasing 0.1 
+without a nice-looking "hello world" program. So I propose renaming it 
+to "print". Other suggestions welcome.
+
+This way our "hello world" program will look like:
+
+     fn main() {
+         print "Hello world!";
+     }
+
+Thoughts?
+
+Patrick
+
+From marijnh at gmail.com  Fri Oct 28 13:18:18 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 28 Oct 2011 22:18:18 +0200
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <4EAB0A0A.5070905@mozilla.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+Message-ID: <CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+
+It might be relevant that (for the same "hello world should be simple"
+reason) recently added `std::io::print` and `std::io::println` to the
+stdlib.
+
+From dteller at mozilla.com  Fri Oct 28 15:25:16 2011
+From: dteller at mozilla.com (David Rajchenbach-Teller)
+Date: Sat, 29 Oct 2011 00:25:16 +0200
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+	<CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+Message-ID: <4EAB2BCC.6000607@mozilla.com>
+
+As a newbie, I confirm that both "tag" and "log_err" are quite 
+confusing.
+
+I confirm that "print" will be much better.
+
+If you want something shorter than "variant", here are a few, well, 
+variants:
+- "sum"
+- "cases"
+- "choice"
+- "tags" (it's a plural)
+- "tagged"
+- "enum" (Java-style, not C++ style)
+- "family"
+- "alt"
+- "either"
+
+From brendan at mozilla.org  Fri Oct 28 15:28:38 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Fri, 28 Oct 2011 15:28:38 -0700
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <4EAB2BCC.6000607@mozilla.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+	<CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+	<4EAB2BCC.6000607@mozilla.com>
+Message-ID: <4BA56DAF-7242-4105-87F9-1FB35C400BD9@mozilla.org>
+
+On Oct 28, 2011, at 3:25 PM, David Rajchenbach-Teller wrote:
+
+> As a newbie, I confirm that both "tag" and "log_err" are quite 
+> confusing.
+> 
+> I confirm that "print" will be much better.
+
++1
+
+
+> If you want something shorter than "variant", here are a few, well, 
+> variants:
+> - "sum"
+> - "cases"
+> - "choice"
+> - "tags" (it's a plural)
+> - "tagged"
+> - "enum" (Java-style, not C++ style)
+> - "family"
+> - "alt"
+> - "either"
+
+Thanks, good suggestions (although alt is taken and either is binary). I like "sum" first, "enum" second.
+
+/be
+
+
+From sebastian.sylvan at gmail.com  Fri Oct 28 16:39:05 2011
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Fri, 28 Oct 2011 16:39:05 -0700
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <4EAB2BCC.6000607@mozilla.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+	<CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+	<4EAB2BCC.6000607@mozilla.com>
+Message-ID: <CAGZgfT4LpTesvZdmTiFwGaj2O_Zp7HrJmmnsGThQFuw7oOnBVw@mail.gmail.com>
+
+On Fri, Oct 28, 2011 at 3:25 PM, David Rajchenbach-Teller
+<dteller at mozilla.com> wrote:
+> If you want something shorter than "variant", here are a few, well,
+> variants:
+> - "sum"
+> - "cases"
+> - "choice"
+> - "tags" (it's a plural)
+> - "tagged"
+> - "enum" (Java-style, not C++ style)
+> - "family"
+> - "alt"
+> - "either"
+>
+
+How about "union"? C/C++ programmers will instantly get the gist of
+it, while probably suspecting that it'll be a safer version of the
+union construct they're familiar with.
+
+-- 
+Sebastian Sylvan
+
+From pwalton at mozilla.com  Fri Oct 28 16:45:50 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 28 Oct 2011 16:45:50 -0700
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <CAGZgfT4LpTesvZdmTiFwGaj2O_Zp7HrJmmnsGThQFuw7oOnBVw@mail.gmail.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+	<CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+	<4EAB2BCC.6000607@mozilla.com>
+	<CAGZgfT4LpTesvZdmTiFwGaj2O_Zp7HrJmmnsGThQFuw7oOnBVw@mail.gmail.com>
+Message-ID: <4EAB3EAE.6000801@mozilla.com>
+
+On 10/28/11 4:39 PM, Sebastian Sylvan wrote:
+> How about "union"? C/C++ programmers will instantly get the gist of
+> it, while probably suspecting that it'll be a safer version of the
+> union construct they're familiar with.
+
+There was a concern that C/C++ programmers would mistake it for the 
+unsafe version. Note that we guarantee C ABI compatibility for records, 
+but we don't for unions.
+
+Additionally, using "union" for enums might look weird...
+
+Patrick
+
+From peterhull90 at gmail.com  Sat Oct 29 00:55:13 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Sat, 29 Oct 2011 08:55:13 +0100
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <4EAB2BCC.6000607@mozilla.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+	<CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+	<4EAB2BCC.6000607@mozilla.com>
+Message-ID: <CAK9Gx1dMv-wsvFQj4wq19Ak5_=1381aDsKmGvqoJihS=DF2xbQ@mail.gmail.com>
+
+On Fri, Oct 28, 2011 at 11:25 PM, David Rajchenbach-Teller
+<dteller at mozilla.com> wrote:
+> As a newbie, I confirm that both "tag" and "log_err" are quite
+> confusing.
+>
+> I confirm that "print" will be much better.
+I disagree. I would expect print to be something that writes to
+stdout. As I understand it, log is a specialised debug/trace facility
+which is built-in and configurable. For example if you write log
+"hello world" it won't print anything unless RUST_LOG is set. I don't
+think it would be too mind blowing to introduce std::io::stdout() in
+the Hello World program.
+>
+> If you want something shorter than "variant", here are a few, well,
+> variants:
+I would have gone for union, for exactly the same reasons as Sebastian Sylvan.
+
+Pete
+
+From dteller at mozilla.com  Sat Oct 29 05:06:34 2011
+From: dteller at mozilla.com (David Rajchenbach-Teller)
+Date: Sat, 29 Oct 2011 14:06:34 +0200
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <CAK9Gx1dMv-wsvFQj4wq19Ak5_=1381aDsKmGvqoJihS=DF2xbQ@mail.gmail.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+	<CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+	<4EAB2BCC.6000607@mozilla.com>
+	<CAK9Gx1dMv-wsvFQj4wq19Ak5_=1381aDsKmGvqoJihS=DF2xbQ@mail.gmail.com>
+Message-ID: <4EABEC4A.9010706@mozilla.com>
+
+On Sat Oct 29 09:55:13 2011, Peter Hull wrote:
+> On Fri, Oct 28, 2011 at 11:25 PM, David Rajchenbach-Teller
+> <dteller at mozilla.com> wrote:
+>> As a newbie, I confirm that both "tag" and "log_err" are quite
+>> confusing.
+>>
+>> I confirm that "print" will be much better.
+> I disagree. I would expect print to be something that writes to
+> stdout. As I understand it, log is a specialised debug/trace facility
+> which is built-in and configurable. For example if you write log
+> "hello world" it won't print anything unless RUST_LOG is set. I don't
+> think it would be too mind blowing to introduce std::io::stdout() in
+> the Hello World program.
+
+Why not a "print" that (unconditionally) prints to stdout?
+
+>> If you want something shorter than "variant", here are a few, well,
+>> variants:
+> I would have gone for union, for exactly the same reasons as Sebastian Sylvan.
+
+Between "enum" and "union", I tend to favor "enum", for a simple 
+reason:
+- attempting to use a variant as a C-style or Java-style enum will work 
+flawlessly;
+- by opposition, attempting to use a variant as a C-style union will 
+fail for reasons that will be very unclear for C programmers.
+
+Cheers,
+ David
+
+From pwalton at mozilla.com  Sat Oct 29 08:17:54 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 29 Oct 2011 08:17:54 -0700
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <4EABEC4A.9010706@mozilla.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+	<CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+	<4EAB2BCC.6000607@mozilla.com>
+	<CAK9Gx1dMv-wsvFQj4wq19Ak5_=1381aDsKmGvqoJihS=DF2xbQ@mail.gmail.com>
+	<4EABEC4A.9010706@mozilla.com>
+Message-ID: <4EAC1922.6070201@mozilla.com>
+
+On 10/29/2011 05:06 AM, David Rajchenbach-Teller wrote:
+>> I disagree. I would expect print to be something that writes to
+>> stdout. As I understand it, log is a specialised debug/trace facility
+>> which is built-in and configurable. For example if you write log
+>> "hello world" it won't print anything unless RUST_LOG is set. I don't
+>> think it would be too mind blowing to introduce std::io::stdout() in
+>> the Hello World program.
+>
+> Why not a "print" that (unconditionally) prints to stdout?
+
+In my experience "log_err" is for quick and dirty "printf debugging", so 
+stderr seems appropriate to me. It's not intended to be the main way for 
+command-line programs to get stuff on the screen. It's not ideal for 
+that purpose anyway, since it's polymorphic and you typically don't want 
+to show the equivalent of toSource() output to end users.
+
+Perhaps "show" would be a better name, to make it clear that it's a 
+debugging tool?
+
+Given what I just said above, maybe our hello world shouldn't encourage 
+poor practices and should import the print function from the standard 
+library. I'm a little concerned from a developer ergonomics/marketing 
+perspective that we require an import statement for hello world (note 
+that not even Java requires this), but I suppose it can't be helped 
+unless we really want to have a std::pervasives module that's imported 
+by default.
+
+> Between "enum" and "union", I tend to favor "enum", for a simple
+> reason:
+> - attempting to use a variant as a C-style or Java-style enum will work
+> flawlessly;
+> - by opposition, attempting to use a variant as a C-style union will
+> fail for reasons that will be very unclear for C programmers.
+
+I'd prefer to not use either, because variants are really a combination 
+of enums and unions in the C/C++ sense. If we use "enum", the "union" 
+aspect of variants will look weird to C folks; if we use "union", the 
+"enum" aspect will likewise look weird.
+
+Patrick
+
+From marijnh at gmail.com  Sat Oct 29 10:11:23 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 29 Oct 2011 19:11:23 +0200
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <4EAC1922.6070201@mozilla.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+	<CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+	<4EAB2BCC.6000607@mozilla.com>
+	<CAK9Gx1dMv-wsvFQj4wq19Ak5_=1381aDsKmGvqoJihS=DF2xbQ@mail.gmail.com>
+	<4EABEC4A.9010706@mozilla.com> <4EAC1922.6070201@mozilla.com>
+Message-ID: <CAJnHWXtXt6QE-eAJsWpZQmojxbLbsfUPqmapV1i+Kkz3cmwSJg@mail.gmail.com>
+
+> but I suppose it can't be helped unless we really want to
+> have a std::pervasives module that's imported by default.
+
+I've been thinking that something like the Haskell standard prelude
+(small, guaranteed to always be available) might be nice. It could
+hold some stuff like the std::option datatype, a print-to-stdout
+function, and a few other things that are really common in tiny
+programs.
+
+From brendan at mozilla.org  Sat Oct 29 13:34:03 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Sat, 29 Oct 2011 13:34:03 -0700
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <CAJnHWXtXt6QE-eAJsWpZQmojxbLbsfUPqmapV1i+Kkz3cmwSJg@mail.gmail.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+	<CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+	<4EAB2BCC.6000607@mozilla.com>
+	<CAK9Gx1dMv-wsvFQj4wq19Ak5_=1381aDsKmGvqoJihS=DF2xbQ@mail.gmail.com>
+	<4EABEC4A.9010706@mozilla.com> <4EAC1922.6070201@mozilla.com>
+	<CAJnHWXtXt6QE-eAJsWpZQmojxbLbsfUPqmapV1i+Kkz3cmwSJg@mail.gmail.com>
+Message-ID: <60CACA18-33E9-4323-9B2A-EBAB63795021@mozilla.org>
+
+This seems like it will pay off for many, and rarely or never bite back. Have to keep it small, of course.
+
+/be
+
+On Oct 29, 2011, at 10:11 AM, Marijn Haverbeke wrote:
+
+>> but I suppose it can't be helped unless we really want to
+>> have a std::pervasives module that's imported by default.
+> 
+> I've been thinking that something like the Haskell standard prelude
+> (small, guaranteed to always be available) might be nice. It could
+> hold some stuff like the std::option datatype, a print-to-stdout
+> function, and a few other things that are really common in tiny
+> programs.
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From as at hacks.yi.org  Sat Oct 29 13:43:42 2011
+From: as at hacks.yi.org (austin seipp)
+Date: Sat, 29 Oct 2011 15:43:42 -0500
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <4EAC1922.6070201@mozilla.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+	<CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+	<4EAB2BCC.6000607@mozilla.com>
+	<CAK9Gx1dMv-wsvFQj4wq19Ak5_=1381aDsKmGvqoJihS=DF2xbQ@mail.gmail.com>
+	<4EABEC4A.9010706@mozilla.com> <4EAC1922.6070201@mozilla.com>
+Message-ID: <CAEs96n2G+k+k6r4ieabOjpVn-xSR-LyWcKOTVwU88NUrU-FqiQ@mail.gmail.com>
+
+On Sat, Oct 29, 2011 at 10:17 AM, Patrick Walton <pwalton at mozilla.com> wrote:
+> In my experience "log_err" is for quick and dirty "printf debugging", so
+> stderr seems appropriate to me. It's not intended to be the main way for
+> command-line programs to get stuff on the screen. It's not ideal for that
+> purpose anyway, since it's polymorphic and you typically don't want to show
+> the equivalent of toSource() output to end users.
+>
+> Perhaps "show" would be a better name, to make it clear that it's a
+> debugging tool?
+>
+> Given what I just said above, maybe our hello world shouldn't encourage poor
+> practices and should import the print function from the standard library.
+> I'm a little concerned from a developer ergonomics/marketing perspective
+> that we require an import statement for hello world (note that not even Java
+> requires this), but I suppose it can't be helped unless we really want to
+> have a std::pervasives module that's imported by default.
+>
+
+As someone who's been writing Rust I agree that an introductory 'Hello
+World' should show probably the traditional means of printing directly
+to stdout (via std::io::println.) It's the direct analog to something
+like 'std::cout' or System.out.println after all for C++/Java, and
+'log' as well as 'log_err' are both diagnostics facilities from my
+view.
+
+Just consider what it looks like right now between 'std::io::println'
+and 'log_err':
+
+$ cat hi1.rs
+use std;
+
+fn main() {
+  std::io::println("Hello World!");
+}
+$ ./hi1
+Hello World!
+
+
+
+And log_err:
+
+$ cat hi2.rs
+use std;
+
+fn main() {
+  log_err "Hello World!";
+}
+$ ./hi2
+rt: ---
+rt: 4259:main:main:                   "Hello World!"
+
+
+Personally I think this would be rather surprising at a first glance.
+I feel log/log_err should definitely be explained in their own right
+(or even just a small dedicated blurb) to explain their purpose as
+well as e.g. RUST_LOG. I see the manual has been catching up on this
+note.
+
+As for renaming them, given that I think they're mostly diagnostic
+utilities, I'm quite OK with just log/log_err as the names. In Haskell
+there's a 'Debug.Trace' module for printing things in pure code, with
+just a 'trace' function. So maybe just 'trace' for the log_err case?
+It does print to stdout in any case. But maybe that's not explanatory
+enough.
+
+I am also +1 for a Prelude-ish module to avert the import but I don't
+mind it much either way. std::option and perhaps some of the println
+things from std::io would probably be sufficient for it.
+
+-- 
+Regards,
+Austin
+
+From dteller at mozilla.com  Sat Oct 29 13:49:19 2011
+From: dteller at mozilla.com (David Rajchenbach-Teller)
+Date: Sat, 29 Oct 2011 22:49:19 +0200
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <CAEs96n2G+k+k6r4ieabOjpVn-xSR-LyWcKOTVwU88NUrU-FqiQ@mail.gmail.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+	<CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+	<4EAB2BCC.6000607@mozilla.com>
+	<CAK9Gx1dMv-wsvFQj4wq19Ak5_=1381aDsKmGvqoJihS=DF2xbQ@mail.gmail.com>
+	<4EABEC4A.9010706@mozilla.com> <4EAC1922.6070201@mozilla.com>
+	<CAEs96n2G+k+k6r4ieabOjpVn-xSR-LyWcKOTVwU88NUrU-FqiQ@mail.gmail.com>
+Message-ID: <4EAC66CF.2020105@mozilla.com>
+
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA1
+
+As a newbie, I do not mind either way between importing std::io or
+having the function baked in a Pervasives/Prelude module. However,  I
+concur that "log" is probably not the right tool for "Hello world".
+
+I also concur that names "log"/"log_err" do not accurately represent
+their behavior. What about renaming "log_err" to "dump" and "log" to
+"dump_log" or something such?
+
+Cheers,
+ David
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1.4.11 (Darwin)
+Comment: Using GnuPG with Mozilla - http://enigmail.mozdev.org/
+
+iQEcBAEBAgAGBQJOrGbPAAoJED+FkPgNe9W+G9wH/2pBx09nGHb6/URZSvSbZK3W
+xXPLxYnisyQ/7CRgoes9T/sdzO8/PVV7QtLvIdhR6pCjdx/mORFv+VSvHbp/AbRS
+wjjTjCxC9RDgzcAvAnCqB6aGT3TTZSWMmfJvrvDxjeDTmXy66ctdcn4/sUa2mbp1
+50BNTa+O6PC2YXdgxv8yL+Yyxxogg6A5Nu99zMgrdDX5rchoQa+w01s7ztXCS0lg
+iUkK9Q5erjTyXr+63yU3Jz8Ejs9OvRhfSjiU1bkrJzj2HVWNWlePibnJw2q9aZc7
+1Qgc//hPw67UW1NAw8S+3JotFWtn2IFxWLbMHvEjCSa+QrDSPlT88vmpx1OELlk=
+=xq4n
+-----END PGP SIGNATURE-----
+
+From pwalton at mozilla.com  Sat Oct 29 14:13:13 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 29 Oct 2011 14:13:13 -0700
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <4EAC66CF.2020105@mozilla.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+	<CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+	<4EAB2BCC.6000607@mozilla.com>
+	<CAK9Gx1dMv-wsvFQj4wq19Ak5_=1381aDsKmGvqoJihS=DF2xbQ@mail.gmail.com>
+	<4EABEC4A.9010706@mozilla.com> <4EAC1922.6070201@mozilla.com>
+	<CAEs96n2G+k+k6r4ieabOjpVn-xSR-LyWcKOTVwU88NUrU-FqiQ@mail.gmail.com>
+	<4EAC66CF.2020105@mozilla.com>
+Message-ID: <4EAC6C69.5080801@mozilla.com>
+
+> As a newbie, I do not mind either way between importing std::io or
+> having the function baked in a Pervasives/Prelude module. However,  I
+> concur that "log" is probably not the right tool for "Hello world".
+
+Looks like it's decided. Filed a bug to get us a Pervasives module: 
+https://github.com/graydon/rust/issues/1096
+
+> I also concur that names "log"/"log_err" do not accurately represent
+> their behavior. What about renaming "log_err" to "dump" and "log" to
+> "dump_log" or something such?
+
+Looks like we have "echo", "show", and "dump" as the three contenders, 
+all equally short. Anyone have strong preferences? I'm inclined toward 
+"show" if there's no consensus.
+
+Patrick
+
+From dteller at mozilla.com  Sun Oct 30 13:53:18 2011
+From: dteller at mozilla.com (David Rajchenbach-Teller)
+Date: Sun, 30 Oct 2011 21:53:18 +0100
+Subject: [rust-dev] Read-only strings?
+Message-ID: <4EADB93E.2020504@mozilla.com>
+
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA1
+
+	Dear Rusties (?),
+  I am in the process of designing a small rope library for Rust and I
+have a few issues wrt `str`. I am a newbie at Rust, so I may be wrong,
+but it is my understanding that `str` supports a form of mutability
+through an in-place append operation `+=`.
+
+ By opposition, ropes rely very much on the immutability of text
+strings to allow sharing, log-time subrope extraction, log-time access
+at index even with Unicode, etc.
+
+In the current wip version of my API, ropes interact with strings
+essentially through the following functions:
+
+//adopt a string as a rope
+rope::of_str(str) -> rope
+
+//adopt a substring as a rope
+rope::of_str_range(str, uint, uint) -> rope
+
+//loop through the str components of a rope ? useful for outputs
+rope::traverse_components(rope, block(str))
+
+If type `str` is indeed (at least partly) mutable, each of these
+functions must copy the `str`, which is rather costly. I wonder if
+there is a type-based mechanism that I could use to guarantee that a
+`str` is never mutated, hopefully some trivial typestate-based pattern
+that currently escapes my grasp.
+
+Note that, if typestate does not allow this kind of thing yet, there
+are good chances that we can obtain this feature without changing the
+type system. For comparison, in OCaml Batteries Included, there is a
+type `ACString.t` ("AC" stands for access control) which uses phantom
+types to distribute read/write rights to strings. If anybody is
+interested, I can detail how it works and/or attempt to port it to Rust.
+
+Cheers,
+ David
+
+P.S.: It is my understanding that operation `+=` to `str` was added to
+simplify serialization. If we have a satisfactory implementation of
+ropes, perhaps an operation `+=` on `@mutable rope` would prove more
+appropriate?
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1.4.11 (Darwin)
+Comment: Using GnuPG with Mozilla - http://enigmail.mozdev.org/
+
+iQEcBAEBAgAGBQJOrbk+AAoJED+FkPgNe9W+yiwIALu/zqbXjVlaUp1WbBB/xspM
+/kP9iiLdmUIbRTyJR6GDfNqeJyWIo1vq5LiSwAisciZMkypW/8sIaN47p2qYDiMa
+uQulBbv2H88R53xBmOjkWqfziRsPAogdNU3c/9pABTBv6KQ2FLT/8bvagSw0LFUm
+Cj4/mYN6xPJhS5OwUs2SiqKff2wTxU5DTfRDFF+SvTtI6l2TBI2e2rYTKTPWFoWj
+RvacIUsqXL8l1tyFBVHfxrCsaZVUHqf8nO+RWDfrY+j/Zrv9JBN90/c3AD9hVYib
+x/wIJ1nuYlg1YVXlrCG+67BCe7pxX/l2GTAqvWzxGd0fcIg3V0an6gspyvyLRps=
+=bBEk
+-----END PGP SIGNATURE-----
+
+From pwalton at mozilla.com  Sun Oct 30 13:55:26 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sun, 30 Oct 2011 13:55:26 -0700
+Subject: [rust-dev] Read-only strings?
+In-Reply-To: <4EADB93E.2020504@mozilla.com>
+References: <4EADB93E.2020504@mozilla.com>
+Message-ID: <4EADB9BE.6090009@mozilla.com>
+
+On 10/30/2011 01:53 PM, David Rajchenbach-Teller wrote:
+> If type `str` is indeed (at least partly) mutable, each of these
+> functions must copy the `str`, which is rather costly. I wonder if
+> there is a type-based mechanism that I could use to guarantee that a
+> `str` is never mutated, hopefully some trivial typestate-based pattern
+> that currently escapes my grasp.
+
+For now, @str is what you want. Vector uniqueness is causing all sorts 
+of problems, and it's possible/probable that we'll change this in the 
+future.
+
+Patrick
+
+
+From banderson at mozilla.com  Sun Oct 30 15:35:42 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Sun, 30 Oct 2011 15:35:42 -0700
+Subject: [rust-dev] Read-only strings?
+In-Reply-To: <4EADB93E.2020504@mozilla.com>
+References: <4EADB93E.2020504@mozilla.com>
+Message-ID: <4EADD13E.10200@mozilla.com>
+
+On 10/30/2011 01:53 PM, David Rajchenbach-Teller wrote:
+> -----BEGIN PGP SIGNED MESSAGE-----
+> Hash: SHA1
+>
+> 	Dear Rusties (?),
+>    I am in the process of designing a small rope library for Rust and I
+> have a few issues wrt `str`. I am a newbie at Rust, so I may be wrong,
+> but it is my understanding that `str` supports a form of mutability
+> through an in-place append operation `+=`.
+The mutability story for strings continues to make me uncomfortable. We 
+tend to assert that strings are immutable, but they often behave as 
+though they are mutable and they are implemented as mutable.
+
+The reason we can consider them immutable (I think) is that they have 
+unique ownership, so no two parties can have a view of the same string 
+and see it mutate. When we mutate a string in Rust, what is actually 
+happening is that the 'slot' containing the string changes to hold a 
+(conceptually) different string. So when you do
+
+let a = "foo";
+a += "bar";
+
+you aren't (conceptually) mutating the "foo" string to be "foobar", you 
+are mutating the slot named 'a' to hold the string "foobar" instead of 
+the string "foo". Because we have unique semantics for strings we 
+actually just go ahead and mutate "foo" into "foobar". The net effect is 
+that strings behave like scalar value types - either mutable or 
+immutable depending on the nature of the slot they reside in. Local 
+strings are mutable and strings inside of aggregates are only mutable 
+when preceded with the 'mutable' keyword. What tends to happen is two 
+parties will have a reference to the same 'slot', one will change the 
+string in the slot and then the other party is looking at a different 
+string.
+
+So if you want to have a bunch of ropes looking at the same immutable 
+string you need to copy it into a shared, immutable box. In an immutable 
+box, you won't be able to perform append operations on it.
+
+Someone please correct me. Obviously I spend a lot of time being 
+confused about the situation.
+
+Regards,
+Brian
+
+
+From noelgrandin at gmail.com  Mon Oct 31 01:04:40 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Mon, 31 Oct 2011 10:04:40 +0200
+Subject: [rust-dev] Read-only strings?
+In-Reply-To: <4EADB9BE.6090009@mozilla.com>
+References: <4EADB93E.2020504@mozilla.com> <4EADB9BE.6090009@mozilla.com>
+Message-ID: <4EAE5698.7010209@gmail.com>
+
+why not just have two types, one for mutable, and one for immutable strings?
+str and dynstr/strbuf?
+
+Conceptually, you can assert that in cases like
+let a = "foo";
+a += "bar";
+a temporary strbuf string is created, even if the compiler optimises it away and created the final immutable str directly.
+
+Patrick Walton wrote:
+> On 10/30/2011 01:53 PM, David Rajchenbach-Teller wrote:
+>> If type `str` is indeed (at least partly) mutable, each of these
+>> functions must copy the `str`, which is rather costly. I wonder if
+>> there is a type-based mechanism that I could use to guarantee that a
+>> `str` is never mutated, hopefully some trivial typestate-based pattern
+>> that currently escapes my grasp.
+>
+> For now, @str is what you want. Vector uniqueness is causing all sorts of problems, and it's possible/probable that
+> we'll change this in the future.
+>
+> Patrick
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From marijnh at gmail.com  Mon Oct 31 02:39:47 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 31 Oct 2011 10:39:47 +0100
+Subject: [rust-dev] Renaming "tag" and "log_err"
+In-Reply-To: <4EAC6C69.5080801@mozilla.com>
+References: <4EAB0A0A.5070905@mozilla.com>
+	<CAJnHWXtO886P6VnBJLJD6-gzL=SebySUGv_maiK96z4A68hm4Q@mail.gmail.com>
+	<4EAB2BCC.6000607@mozilla.com>
+	<CAK9Gx1dMv-wsvFQj4wq19Ak5_=1381aDsKmGvqoJihS=DF2xbQ@mail.gmail.com>
+	<4EABEC4A.9010706@mozilla.com> <4EAC1922.6070201@mozilla.com>
+	<CAEs96n2G+k+k6r4ieabOjpVn-xSR-LyWcKOTVwU88NUrU-FqiQ@mail.gmail.com>
+	<4EAC66CF.2020105@mozilla.com> <4EAC6C69.5080801@mozilla.com>
+Message-ID: <CAJnHWXvyz+feu9HOAtmpLm-Mj2oK7zNNvCU5NML-9VNMvOWpHQ@mail.gmail.com>
+
+Also relevant here: log_err was originally added as a stopgap
+temporary solution, with the idea being that logging eventually would
+be a more primitive operation where you specified  both a log level
+and a message, and there would be a macro that'd help you do this in a
+more nice-looking way. We have four log levels, but are only using two
+of them at the moment. Making log polymorphic has removed one reason
+for making it a macro (the idea was to integrate #fmt), but proper
+support for more log levels would still be nice.
+
+(Tangentially, the standard prelude, if such a thing materializes,
+would be the ideal spot for such a logging macro.)
+
+From marijnh at gmail.com  Mon Oct 31 08:24:00 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 31 Oct 2011 16:24:00 +0100
+Subject: [rust-dev] First skeleton of a tutorial
+Message-ID: <CAJnHWXvDKK9FaTEjR5aaeispYHe4fpDs9e8vBg_ZObZbW8CS5g@mail.gmail.com>
+
+http://marijnhaverbeke.nl/rust_tutorial (I didn't have time to
+integrate it with rust-lang.net today, and that probably should wait
+until it's a bit more fleshed out).
+
+Please comment. There's a bunch of stuff completely missing for now
+(tasks, most notably).
+
+From jim at uazu.net  Mon Oct 31 10:11:43 2011
+From: jim at uazu.net (Jim Peters)
+Date: Mon, 31 Oct 2011 12:11:43 -0500
+Subject: [rust-dev] First skeleton of a tutorial
+In-Reply-To: <CAJnHWXvDKK9FaTEjR5aaeispYHe4fpDs9e8vBg_ZObZbW8CS5g@mail.gmail.com>
+References: <CAJnHWXvDKK9FaTEjR5aaeispYHe4fpDs9e8vBg_ZObZbW8CS5g@mail.gmail.com>
+Message-ID: <20111031171143.GA3403@uazu.net>
+
+Marijn Haverbeke wrote:
+> http://marijnhaverbeke.nl/rust_tutorial (I didn't have time to
+> integrate it with rust-lang.net today, and that probably should wait
+> until it's a bit more fleshed out).
+> 
+> Please comment. There's a bunch of stuff completely missing for now
+> (tasks, most notably).
+
+To me it is very helpful.  The end of this paragraph needs clarifying:
+
+  Literals
+
+  Integers can be written in decimal (144), hexadecimal (0x90), and
+  binary (0b10010000) base. Without suffix, an integer literal is
+  considered to be of type int. Add a u (144u) to make it a uint
+  instead. Literals of the fixed-size integer types can be created by
+  the literal with the type name (i8, u64, etc).
+
+Do you mean I can write "144u8"?
+
+The argument-passing flags (&, &&, +, whatever) would probably need
+some deep thought and a few more reads through before I get it.
+
+Jim
+
+-- 
+ Jim Peters                  (_)/=\~/_(_)                 jim at uazu.net
+                          (_)  /=\  ~/_  (_)
+ Uaz?                  (_)    /=\    ~/_    (_)                http://
+ in Peru            (_) ____ /=\ ____ ~/_ ____ (_)            uazu.net
+
+From banderson at mozilla.com  Mon Oct 31 11:40:48 2011
+From: banderson at mozilla.com (Brian Anderson)
+Date: Mon, 31 Oct 2011 11:40:48 -0700
+Subject: [rust-dev] First skeleton of a tutorial
+In-Reply-To: <CAJnHWXvDKK9FaTEjR5aaeispYHe4fpDs9e8vBg_ZObZbW8CS5g@mail.gmail.com>
+References: <CAJnHWXvDKK9FaTEjR5aaeispYHe4fpDs9e8vBg_ZObZbW8CS5g@mail.gmail.com>
+Message-ID: <4EAEEBB0.9040800@mozilla.com>
+
+On 10/31/2011 08:24 AM, Marijn Haverbeke wrote:
+> http://marijnhaverbeke.nl/rust_tutorial (I didn't have time to
+> integrate it with rust-lang.net today, and that probably should wait
+> until it's a bit more fleshed out).
+>
+> Please comment. There's a bunch of stuff completely missing for now
+> (tasks, most notably).
+It's really good, Marijn. I've left review comments on github.
+

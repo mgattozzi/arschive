@@ -1,0 +1,2477 @@
+From peterhull90 at gmail.com  Fri Apr  1 05:58:31 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Fri, 1 Apr 2011 13:58:31 +0100
+Subject: [rust-dev] "A Quick Look at the Rust Programming Language"
+In-Reply-To: <AANLkTikKB8tySb7Kj1yT6439dSsTd+hraVD2iFpb1fV7@mail.gmail.com>
+References: <AANLkTikKB8tySb7Kj1yT6439dSsTd+hraVD2iFpb1fV7@mail.gmail.com>
+Message-ID: <AANLkTik1kWDossD8FryD70PbUj2S9=hA9OWvKAPyDU5A@mail.gmail.com>
+
+On Thu, Mar 31, 2011 at 12:30 PM, Peter Hull <peterhull90 at gmail.com> wrote:
+> Probably everyone's seen this by now but Chris Double has posted on his blog:
+> http://www.bluishcoder.co.nz/2011/03/31/a-quick-look-at-the-rust-programming-language.html#
+Just on his factorial example:
+fn fac(uint x) -> uint {
+  if (x <= 1u) {
+    ret 1u;
+  }
+  else {
+    ret x * fac(x-1u);
+  }
+}
+Should he use 'be' instead of the second 'ret' or can rustc detect
+tail-recursion automatically now?
+Pete
+
+From peterhull90 at gmail.com  Fri Apr  1 06:03:22 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Fri, 1 Apr 2011 14:03:22 +0100
+Subject: [rust-dev] "A Quick Look at the Rust Programming Language"
+In-Reply-To: <AANLkTik1kWDossD8FryD70PbUj2S9=hA9OWvKAPyDU5A@mail.gmail.com>
+References: <AANLkTikKB8tySb7Kj1yT6439dSsTd+hraVD2iFpb1fV7@mail.gmail.com>
+	<AANLkTik1kWDossD8FryD70PbUj2S9=hA9OWvKAPyDU5A@mail.gmail.com>
+Message-ID: <AANLkTin2Zp1zF8q3pP4ue829MgfpjjKNa2NTeYw1ja0n@mail.gmail.com>
+
+On Fri, Apr 1, 2011 at 1:58 PM, Peter Hull <peterhull90 at gmail.com> wrote:
+> Should he use 'be' instead of the second 'ret' or can rustc detect
+> tail-recursion automatically now?
+Sorry, forget that.
+
+Pete
+
+From lkuper at mozilla.com  Wed Apr  6 15:16:20 2011
+From: lkuper at mozilla.com (Lindsey Kuper)
+Date: Wed, 6 Apr 2011 15:16:20 -0700 (PDT)
+Subject: [rust-dev] self-calls braindump
+In-Reply-To: <1837135590.34808.1302125483974.JavaMail.root@cm-mail03.mozilla.org>
+Message-ID: <1438170338.35479.1302128180237.JavaMail.root@cm-mail03.mozilla.org>
+
+So, as of yesterday, rustc can compile self-calls (like self.foo()) as long as they don't have arguments, and the resulting code even runs as you might expect!  But self-calls with arguments don't compile.  The error we get is "ann_to_type() called on node with no type".  
+
+>From what I can tell, the 'ann' part of an AST node is a type annotation, originally empty.  The check_expr function in typeck.rs takes a function context and an AST node and returns an AST node with the 'ann' part filled in.  (Correct me if I'm mistaken about any of this.)  Right now, for expr_call_self nodes, we're not filling in anything in that spot, hence the error.  The question is, *what* should we fill it in with?
+
+My first idea was to look at what we're doing for expr_call nodes in typeck.check_expr, and hack it up to work for expr_call_self nodes.  This seems like it could work, analogously to how we hacked up trans.trans_call yesterday to be able to process self-call expressions as well as regular call expressions.  But the analogous thing to do in check_expr, when given an self-call expression, would be to just call check_call, passing the *entire self-call expr* to it.  Right now we can't do that, because the self-call expr would just go through to check_call_or_bind, then back to check_expr, and loop infinitely.  So, maybe check_call_or_bind (or maybe just check_call; not sure where this functionality should go) needs to behave differently, depending on whether it is dealing with an expr_call_self node.  
+
+Yesterday we essentially added a new field to the type fn_ctxt in trans.rs.  What used to be an option[ValueRef] called 'llself' is now an option of a *record* containing a ValueRef and a @ty.t.  That @ty.t is what makes it possible to translate self-calls (because we know about the type of the object we're currently in -- or something like that; I don't understand it completely).  I think that we need to do something analogous in typeck.rs, which, confusingly, has its *own* fn_ctxt type defined.  that is, I think we need to add a new field 'ty_self' (or what have you) to the typeck.fn_ctxt type.  But I'm not sure how/where we are supposed to be putting anything in that field.
+
+So that's where I am.  This discussion is probably best continued on IRC, or in person, as we look at the code, but I wanted to first braindump what I've thought of so far.  :)
+
+Lindsey
+
+From lkuper at mozilla.com  Fri Apr  8 16:51:56 2011
+From: lkuper at mozilla.com (Lindsey Kuper)
+Date: Fri, 8 Apr 2011 16:51:56 -0700 (PDT)
+Subject: [rust-dev] self-calls braindump
+In-Reply-To: <1438170338.35479.1302128180237.JavaMail.root@cm-mail03.mozilla.org>
+Message-ID: <1674074440.58229.1302306716428.JavaMail.root@cm-mail03.mozilla.org>
+
+I wanted to follow up on Wednesday's message regarding self-calls.
+TL;DR: problem solved, and you can now write self-calls that take
+arguments.
+
+Longer version: Graydon suggested a change to the way we parse
+self-calls that really simplifies middle-end processing.  In
+particular, instead of distinguishing an expr_call_self node, we use
+the usual expr_call node for self-calls, and then a new
+expr_self_method node as the expr_call's subexpression.  Doing this
+allows more code reuse and makes typechecking tractable; also, this
+new AST representation for self-calls now fits together nicely with
+how we were already handling self-calls in trans.rs.  So I barely had
+to change trans.rs at all after making the necessary front-end and
+typechecker changes.
+
+So, now rustc can compile code that looks like: 
+https://github.com/graydon/rust/blob/master/src/test/run-pass/obj-self-3.rs
+
+Note that we still don't have first-class support for 'self'.  That
+is, we don't have a 'self' type; we can't take 'self' as an argument
+nor can we return it from a function.  But I'm hoping that just
+self-calls alone make objects more useful for the time being!
+
+Before tackling self-types, I'm going to change gears for a bit and
+work on attempting to model the operational semantics of Rust in PLT
+Redex.  In a few days I should have a better idea of whether the Redex
+idea is worth continuing to pursue.  In the meantime, feel free to
+pound on 'self' and assign me bugs.  :)
+
+Lindsey
+
+From respindola at mozilla.com  Thu Apr 14 17:31:21 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Thu, 14 Apr 2011 20:31:21 -0400
+Subject: [rust-dev] cost/benefits of tasks
+Message-ID: <4DA791D9.3060304@mozilla.com>
+
+I have been thinking about the costs and benefits we get from tasks. I 
+had discussed some of them with Graydon both by email on IRC. The email 
+is a quick summary to open the discussion.
+
+First, on the "copy stacks" X "link stacks" issue, some of the issues 
+with copying stacks:
+
+*) We cannot in general inline from C to rust. For example, we cannot 
+LTO LLVM into rustc. The problem is that a C compiler cannot prove where 
+a pointer to the stack might be hidden, so it is not safe to move the 
+stack.
+
+*) The idea of using a special calling convention for doing rust to C 
+calls only works if we C stack is in a really easy to find place, like a 
+pinned register. We could do better than we do now by converting the 
+upcall functions with intrinsic functions, but that is still not ideal.
+
+*) The rust compiler knows what points to the stack, but LLVM has to 
+keep track of that. This is equivalent to what other languages have to 
+keep track of for GC and unfortunately LLVM is not very good at it right 
+now. It only tracks GC roots in memory, which would force us to always 
+access pointers to the stack via a load of a root.
+
+*) One case I am not sure how to handle is that of a function that takes 
+a reference argument. That reference could point to the stack, so it has 
+to go to a GC root, but the check for "do I need more stack space" goes 
+before we have a chance to store it in a root :-(
+
+Given this and the fact that there is already interest in having LLVM 
+support linked stacks, for the rest of the email I will assume we will 
+use stack linking instead of copying.
+
+The way I see it, the big advantaged of tasks would be if they could be 
+used like erlang threads or goroutines. The programmer can just create 
+lots of them, use blocking APIs and they get scheduled as needed.
+
+Unfortunately, that model *cannot* be implemented in rust. A task cannot 
+move from a thread to another, so it is possible for two tasks that 
+could be executing to be in the same thread.
+
+Consider the example of a browser that wants to fetch many objects and 
+handle them. It would be very tempting to create one task for each of 
+the objects, but we cannot do that. The task creation would happen 
+before the network request and we would be already pinned to a thread 
+before knowing which resource would be available first.
+
+A similar problem happens for pure IO, like a static http server. Open a 
+thread per request and you don't know which read will finish first. Some 
+of this can be avoided by having a clever IO library where read just 
+sends a message to an IO thread that uses select. Unfortunately, this 
+will not work when using mmap for example.
+
+For these reasons it looks to me as if tasks add a lot of cost for a 
+small benefit. My main proposal in this email (other than avoiding the 
+stack copying implementation) is
+
+--------------------------------------------------------------------
+Lets implement just process and threads for now. With these in place we 
+can see how far we can go. Once we have a need for more abstraction, we 
+can revisit what a task is and implement it.
+--------------------------------------------------------------------
+
+And some different implementation ideas for when we do decide to 
+implement tasks:
+
+* Use an OS thread of each task. What we currently call a thread in rust 
+will then just be a control for what tasks can run in parallel. A coarse 
+and easy to use parallelism that that user can refine if it finds a 
+contention.
+
+This solves the "task blocking because of unrelated task" problem with 
+no extra code, even for memory mapped IO.
+
+Another advantage of this implementation is that we can expose any OS 
+level services to the tasks. For example, we can deliver signals without 
+having to de multiplex them.
+
+This is not as expensive as it looks, since we would still be using 
+small stacks. It is hard to image a case where this is too expensive but 
+the existing proposal is not. If there are cases that do need very light 
+tasks:
+
+* Go with an even lighter notion of what a task is. The idea is to 
+implement something like GCD. In the current implementation of GCD (as 
+in most C code), the burden of safety is always in the programmer. We 
+can probably do a bit better for rust in the common case.
+
+Thread pools could have ownership of what the tasks can access. In the 
+case of constant data, that is always safe. In the case of mutable data 
+they can use some form of exclusion (running in a single thread as the 
+current tasks or locks) or delegate to the programmer in an unsafe block.
+
+The example of a browser reading images becomes:
+
+* The image loading is done using threads, async IO or tasks. Each image 
+is fetched, frozen and sent to the pool.
+* Each image rendering is a task. They get issued as the images become 
+available. After this, the programmer has some options:
+   * Do an unsafe write to the assigned memory position.
+   * Freeze the rendered image and send it to a thread managing the 
+final buffer.
+   * Create a "splat this into the final buffer" task if we are really 
+into the GCD way.
+
+This is more code than the what would be written with the current tasks, 
+but at least it behaves as expected. You never get an image that is not 
+displayed because another one is being slow to load.
+
+From graydon at mozilla.com  Thu Apr 14 19:07:03 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 14 Apr 2011 19:07:03 -0700
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <4DA791D9.3060304@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com>
+Message-ID: <4DA7A847.2030703@mozilla.com>
+
+On 11-04-14 05:31 PM, Rafael Avila de Espindola wrote:
+> I have been thinking about the costs and benefits we get from tasks. I
+> had discussed some of them with Graydon both by email on IRC. The email
+> is a quick summary to open the discussion.
+
+Thanks for the write-up. I'll try to be more coherent here :)
+
+> *) The idea of using a special calling convention for doing rust to C
+> calls only works if we C stack is in a really easy to find place, like a
+> pinned register. We could do better than we do now by converting the
+> upcall functions with intrinsic functions, but that is still not ideal.
+
+I think we need something here in any case, since even with linked 
+stacks we might be calling into C code that was compiled without them. 
+It will overrun the current segment and crash if it goes too deep. We 
+need to switch stacks, sometimes :(
+
+But aside from that I agree with the other points on linked stacks. It's 
+worth trying them, they look better than the approach rustboot tried.
+
+> Given this and the fact that there is already interest in having LLVM
+> support linked stacks, for the rest of the email I will assume we will
+> use stack linking instead of copying.
+
+Yup.
+
+> The way I see it, the big advantaged of tasks would be if they could be
+> used like erlang threads or goroutines. The programmer can just create
+> lots of them, use blocking APIs and they get scheduled as needed.
+
+Here is probably where we part ways. You're glossing over a lot of 
+detail by saying this:
+
+  - "Like Erlang" means that a runtime-provided, very careful async
+    I/O manager is standing in the way of every "blocking"-looking API
+    and intercepting it, multiplexing it through I/O facilities. This
+    is *largely* what I've been proposing we do, with exceptions for
+    unsafe calls when the user really wants the option to shoot their
+    own foot.
+
+  - "Like Go" only works in Go because they are willing to let all
+    goroutines get remapped to threads at will and race on shared access
+    to memory. We're not.
+
+So let's please keep in mind that nobody, at the moment, has a "general" 
+solution to the speed/complexity/safety tradeoff: those that pick safety 
+have to compensate with a certain amount of runtime machinery for I/O 
+and possibly lose speed when dealing with concurrent access 
+(particularly with mutable things); those that pick speed wind up 
+(usually) losing safety.
+
+I'd very much like to chart a path towards a nice balance between these 
+tensions, but we have to be honest about the tensions existing.
+
+> Unfortunately, that model *cannot* be implemented in rust. A task cannot
+> move from a thread to another, so it is possible for two tasks that
+> could be executing to be in the same thread.
+
+Agreed. If you make an unsafe, blocking C OS API call in the current 
+model, it will block your thread and every task in it. Erlang can dodge 
+this bullet because there's *no* sharing between tasks; you can always 
+reschedule all tasks -- in their entirety -- to other threads, so one 
+thread blocking is no big deal.
+
+But that's also rare; Erlang discourages you *heavily* from making any 
+blocking C calls directly. The point in that model (and in many dozens 
+of other systems, from Node to win32 IOCP) is that the work you do 
+saturating the CPU with "caulcuation" and the work you do feeding data 
+in and out of I/O facilities use such dramatically different OS 
+interfaces and concurrency requirements that they tend to run on 
+different threads and communicate using queues local to the process. 
+Separate IO thread pool and CPU thread pool. That's how we've been 
+proceeding so far (with a further dividing-up of memory into tasks to 
+provide multiplexed control within a thread). It's not strictly 
+necessary but it's also not completely made up or novel.
+
+> Consider the example of a browser that wants to fetch many objects and
+> handle them. It would be very tempting to create one task for each of
+> the objects, but we cannot do that. The task creation would happen
+> before the network request and we would be already pinned to a thread
+> before knowing which resource would be available first.
+>
+> A similar problem happens for pure IO, like a static http server. Open a
+> thread per request and you don't know which read will finish first. Some
+> of this can be avoided by having a clever IO library where read just
+> sends a message to an IO thread that uses select. Unfortunately, this
+> will not work when using mmap for example.
+>
+> For these reasons it looks to me as if tasks add a lot of cost for a
+> small benefit.
+
+I disagree, obviously. The benefit has to do with conceptual simplicity. 
+In concurrent programs, you often have two Very Hard Reasoning Problems 
+that are typically Done Wrong:
+
+   - Multiplexing ownership of memory (usually via locks, atomic
+     refcounts or concurrent GC) between multiple cores.
+
+   - Multiplexing blocking serial execution (usually via state machines)
+     between multiple I/O endpoints.
+
+A task unifies both these problems into a simple abstraction that a user 
+is likely to get right, while keeping costs .. low. Depending on which 
+cost you want to measure. I agree there's a price -- implementing a 
+scheduler, occasional mis-assignment of tasks to threads so you starve a 
+runnable task, writing a decent I/O multiplexing library -- but there 
+are major benefits to be had in providing a simplified cognitive model. 
+This is why we have OS processes with control stacks in the first place, 
+rather than single address space and 'goto'.
+
+> --------------------------------------------------------------------
+> Lets implement just process and threads for now. With these in place we
+> can see how far we can go. Once we have a need for more abstraction, we
+> can revisit what a task is and implement it.
+> --------------------------------------------------------------------
+
+My feeling is we're *starting* with a need for more abstraction: we are 
+presently shooting our feet regularly trying to write safe programs that 
+do concurrent memory access and blocking I/O using just threads and 
+processes, in C. It's too hard in general. People always get it wrong.
+
+> And some different implementation ideas for when we do decide to
+> implement tasks:
+>
+> * Use an OS thread of each task. What we currently call a thread in rust
+> will then just be a control for what tasks can run in parallel. A coarse
+> and easy to use parallelism that that user can refine if it finds a
+> contention.
+
+I agree that there might be a way to make this model of a task work if 
+threads are sufficiently cheap -- on many unixes they are now, not sure 
+how win32 is doing these days -- and we can make guarantees about 
+exclusive ownership of memory. Even if it only works on some platforms, 
+it may well be worth investigating as a way to instantiate the model.
+
+> This solves the "task blocking because of unrelated task" problem with
+> no extra code, even for memory mapped IO.
+
+Agreed. That's a very desirable feature of it.
+
+> Another advantage of this implementation is that we can expose any OS
+> level services to the tasks. For example, we can deliver signals without
+> having to de multiplex them.
+
+To the extent that the OS service does not rely on running on our stack, 
+maybe. Even signals tend to want something for that (see sigaltstack). 
+But in some cases I imagine you are right. The OS generally presents 
+APIs that are ... if not thread *friendly*, at least thread *aware*. 
+We'd probably get a few for free.
+
+> This is not as expensive as it looks, since we would still be using
+> small stacks. It is hard to image a case where this is too expensive but
+> the existing proposal is not.
+
+It's not the expense of thread-per-task that concerns me. That's just a 
+question of arithmetic: either it is or it isn't. We can simply measure: 
+how much is N thousand threads on each OS? Easy to research and figure 
+out threshold values.
+
+My concern is with preserving the abstractions of multiplexed sequential 
+I/O (rather than manual continuation-passing / interleaved state-machine 
+style) and non-contended ownership of a private piece of memory (or the 
+functional equivalent, say "only immutable memory"). I want to hold on 
+to those, because those are the parts that are hardest about concurrent 
+programming today.
+
+> * Go with an even lighter notion of what a task is. The idea is to
+> implement something like GCD. In the current implementation of GCD (as
+> in most C code), the burden of safety is always in the programmer. We
+> can probably do a bit better for rust in the common case.
+
+Maybe so. I'm interested in exploring this sort of interface more when 
+we have implemented unique pointers, so that we can talk about a type 
+kind that is known to require neither GC nor atomic refcounting. It 
+seems like a safe(r) GCD workalike could be written there.
+
+But I feel there remains a strong need for an abstraction that lets you 
+trade some portion of maximum possible throughput (in terms of CPU * 
+I/O) for a simplified mental model that multiplexes I/O and control flow 
+safely and automatically (if not optimally). I agree that necessarily 
+entails a good AIO multiplexing library, somewhat baked into the 
+standard library.
+
+I think you overestimate the degree to which normal human programmers 
+are currently able to write a correct program that *just* handles lots 
+of concurrent I/O, even setting aside the "saturate the CPU" problem. 
+AIO libraries are in the dark ages. Node and Erlang both achieved what 
+notoriety they did mostly by providing *any* kind of saner abstraction 
+over it (they didn't even pick the same abstraction; node doesn't do 
+coroutines). Simply exposing the AIO interfaces in a non-crazy way is a 
+huge win, and (IMO) providing a coroutine library on top is better yet.
+
+Cognitive and correctness costs are real.
+
+-Graydon
+
+
+From marijnh at gmail.com  Fri Apr 15 03:29:38 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 15 Apr 2011 12:29:38 +0200
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <4DA7A847.2030703@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com>
+	<4DA7A847.2030703@mozilla.com>
+Message-ID: <BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+
+Relevant link: http://blogs.msdn.com/b/oldnewthing/archive/2005/07/29/444912.aspx
+(short of it: Windows is not good at large number of threads, Raymond
+Chen is unapologetic about it, insinuates it is stupid to want many
+threads).
+
+I don't have much else to add. I share Rafael's concerns about I/O
+multiplexing being complicated and necessarily leaky, and I'd like to
+support automatic migration of tasks between threads, but I do not
+know how to model this in a robust, low-overhead way (yet).
+
+From respindola at mozilla.com  Fri Apr 15 07:02:06 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Fri, 15 Apr 2011 10:02:06 -0400
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <4DA7D96D.60007@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<4DA7B2F0.6080305@mozilla.com> <4DA7D96D.60007@mozilla.com>
+Message-ID: <4DA84FDE.1070603@mozilla.com>
+
+On 11-04-15 1:36 AM, Graydon Hoare wrote:
+> I am replying to you since you replied privately to me; if you meant to
+> reply to list, say so and I'll send this back there. Not sure if you
+> wanted this to be a private diversion in the conversation..
+
+No, sorry about that. A blame Thunderbird (or the list setup?) :-)
+
+>> Yes, we have this is a problem for both implementations. On linux at
+>> least we can also use a global thread local variable to hold the C stack
+>> for the OS thread. I have no idea what we should do for OS X in here.
+>
+> No TLS on OSX? I gather they have a rather different threading system
+> than linux (and windows); I don't know the exact details.
+
+I don't think any released version has it. There was some activity in 
+LLVM, so I think they are implementing it.
+
+> This is important research to do before jumping to conclusions:
+> different OSs provide quite different facilities, some cheap, some
+> expensive, and with very different scalability curves. Win32 looks like
+> it eats 12kb of kernel stack for each thread -- not free, though not
+> huge -- but I have no idea what the scheduler does when a few thousand
+> of them issue sync IO requests at once. OSX will cap an 8gb machine to
+> 12,500 threads (weirdly: http://support.apple.com/kb/HT3854), not sure
+> if those are posix or mach threads. There are things to study.
+>
+> We need to quantify costs and qualify portability if we're going to have
+> such horse-trading arguments about implementation effort and focus.
+>
+> I suspect we won't get stacks smaller than a page. Tasks can be smaller,
+> but then if we're recycling stack segments between tasks-or-threads,
+> pages might make the most sense anyways.
+
+Yes, my gut feeling is that managing space smaller than a page would not 
+be very efficient.
+
+>> I agree in here. It might just be that the decision of having no user
+>> visible global mutable state makes tasks that can share refcounted
+>> objects too limited to be useful. We might have to choose one.
+>
+> Yeah. And be careful to differentiate uniquely owned from merely
+> immutable. Immutable stuff still needs to be collected somehow if it's
+> DAG-shaped or worse.
+>
+>> I understand the abstraction. In fact, I like it. The problem is that it
+>> is not what we are implementing. You can implement it by giving the
+>> language enough information to move tasks (expensive for all
+>> implementation options I can think of) or by exposing the problem to the
+>> user (undesirable in general, still needed in unsafe blocks).
+>
+> I disagree. The abstraction is "a coroutine that's properly multiplexed
+> so long as you don't hit the blocking OS interfaces directly", and it's
+> properly implemented by soft coroutines with shared memory. Better yet,
+> you can share immutable DAG-shaped stuff between them, within a thread,
+> using non-atomic refcounting. And if you want to hit the blocking OS
+> interfaces directly, use a thread. That is: change
+>
+> "spawn foo()"
+>
+> to
+>
+> "spawn thread foo()"
+>
+> It's not so bad, eh? If a user sees too much jank or stalled tasks or
+> something, they can analyze the problem, decide, and possibly insert the
+> word 'thread'.
+
+OK. We are talking about different abstractions. Mine would be "behaves 
+like a regular thread, but is cheaper to create". Having two "run 
+concurrently" things with different semantics for what can happen in 
+parallel does add to the "cognitive burder" as you like to put it.
+
+>> Can we just give them better tools? Consider what rust would look like
+>> right now without tasks.
+>>
+>> * Creating a thread is more expensive than creating a task.
+>> * Scheduling would work as expected
+>> * Passing data in a safe way would imply
+>> * Immutable data *or*
+>> * Copy *or*
+>> * Move semantics if we can figure out how to do it.
+>> * Use of an unsafe block is a natural extension.
+>
+> That's exactly what "spawn thread foo()" gives you. I'm not suggesting
+> we take it away. Merely that we maintain a 3rd option that's lighter
+> still, that gives you:
+>
+> * Free sharing of immutable substructures between tasks.
+> * Potentially (though I'll grant, not necessarily) cheaper spawn
+> and kill events, other per-task overheads, switching speed
+> (probably depends on platform, good to quantify).
+> * Easier concurrent debugging, if you like, since the scheduler is
+> down in userspace. Longer timeslices, manual yielding, etc.
+>
+> Keep in mind, 3 is not the limit of options I'm hoping to support. A
+> GCD-like thing that uses frozen-unique values it owns and saturates the
+> CPU using a queue of worker callbacks is definitely reasonable. As is a
+> "parallel for loop" that does fork/join, or a vectorizing / SIMD
+> construct. Parallelism and concurrency structures are a bit
+> heterogeneous, just like control and data structures :)
+
+It can be an addition, but it hardly looks crucial. I disagree with 
+number 3. Using regular threads gives us access to regular debuging 
+tools like helgrind.
+
+>> I would love to have both at a reasonable price, but the proposed
+>> implementation is not there. It looks like it when you write the code,
+>> but you do not really have multiplexed sequential threads. You can get
+>> basic (not memory mapped) IO multiplexing with a lot of code, but that
+>> is it.
+>
+> It's worth differentiating cases. Not every task is doing mmap'ed I/O,
+> and that's the only case where this abstraction doesn't hold up.
+> Everything else we can indirect through an AIO interface, with the added
+> benefit that we can make the user-facing side of it much less crazy than
+> the C API.
+>
+> (And .. I think you're rarely doing mmap'ed network I/O anyways)
+
+So, is it really worth it to add an abstraction that
+
+* blocks you from OS services for threads
+* has corner cases when it can block other threads
+* has a lot more expensive regular io model (two threads switches at least)
+* has hard to reason about cases of which two task can run in parallel. 
+This is particularly true if we try to abstract the task creation in a 
+library.
+
+>> Yes, but given our target marked (build the best browser), the
+>> implementation cost is a go/no-go.
+>
+> The best browser may well have lots of internal actions that are not
+> doing mmap'ed I/O. Coroutines make sense for them.
+>
+> The argument seems a bit like you want it both ways. You're insisting
+> that the costs of doing non-mmap'ed I/O (that is, copying buffers) is
+> always unacceptable, but then saying it's .. ok to limit ourselves to a
+> tasking model that may require deep-copying a lot of messages to
+> communicate. What gives? Can't we just give the user a vocabulary to
+> decide when they want which kinds of copying?
+
+It is a model where it is very natural to move from a simple copying to 
+using moves to pass ownership back and forth to unsafe blocks to the 
+very critical parts.
+
+I would like tasks if they had the abstractions explained above. That 
+way it would be easy to go from tasks to threads or back depending on 
+which is more efficient for each case.
+
+As it stands it is hard for me to see a case where tasks is the correct 
+solution. It would have to be a case of traditional coroutines, where 
+one task does a bit of work, passes it to another task to do a bit more, 
+maybe get it back, etc, correct?
+
+Now, if it is known that only one "worker" (thread or task) is looking 
+at the data at a time, why wouldn't move semantics apply (and avoid the 
+deep copying)?
+
+>> That is why my suggestion right now is to go with just threads (and
+>> stack linking to make creating them cheap). If it turns out that users
+>> have to use unsafe block too often because they couldn't get a safe move
+>> and copying is too expensive, we know need to provide something else.
+>
+> I'm not fond of this strategy. I think that if we don't spend the time
+> making "something else" work from the beginning, nobody ever will.
+> System architecture changes will get *harder* over time, not easier.
+
+Implementing something might get harder, but at least we will know it is 
+needed.
+
+> -Graydon
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Fri Apr 15 07:05:58 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Fri, 15 Apr 2011 10:05:58 -0400
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+References: <4DA791D9.3060304@mozilla.com>	<4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+Message-ID: <4DA850C6.5080502@mozilla.com>
+
+On 11-04-15 6:29 AM, Marijn Haverbeke wrote:
+> Relevant link: http://blogs.msdn.com/b/oldnewthing/archive/2005/07/29/444912.aspx
+> (short of it: Windows is not good at large number of threads, Raymond
+> Chen is unapologetic about it, insinuates it is stupid to want many
+> threads).
+
+Thanks!
+
+> I don't have much else to add. I share Rafael's concerns about I/O
+> multiplexing being complicated and necessarily leaky, and I'd like to
+> support automatic migration of tasks between threads, but I do not
+> know how to model this in a robust, low-overhead way (yet).
+
+For clarity, all of my concerns come from task migration being too 
+expensive to be practical. The best possible solution would be if 
+someone could figure out how to do it, but I really have no idea on how 
+it can be done without dropping (IMHO) more important 
+abstractions/guarantees.
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Fri Apr 15 07:07:47 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Fri, 15 Apr 2011 10:07:47 -0400
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+References: <4DA791D9.3060304@mozilla.com>	<4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+Message-ID: <4DA85133.9070603@mozilla.com>
+
+On 11-04-15 6:29 AM, Marijn Haverbeke wrote:
+> Relevant link: http://blogs.msdn.com/b/oldnewthing/archive/2005/07/29/444912.aspx
+> (short of it: Windows is not good at large number of threads, Raymond
+> Chen is unapologetic about it, insinuates it is stupid to want many
+> threads).
+
+Ah, note that they have a 1 MB stack. We would probably start with 4kb 
+or so :-)
+
+Cheers,
+Rafael
+
+From peterhull90 at gmail.com  Fri Apr 15 07:23:16 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Fri, 15 Apr 2011 15:23:16 +0100
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+Message-ID: <BANLkTimRQNGH6Ff0nAQoa6KLmgS8MpinUw@mail.gmail.com>
+
+On Fri, Apr 15, 2011 at 11:29 AM, Marijn Haverbeke <marijnh at gmail.com> wrote:
+> Relevant link: http://blogs.msdn.com/b/oldnewthing/archive/2005/07/29/444912.aspx
+> (short of it: Windows is not good at large number of threads, Raymond
+> Chen is unapologetic about it, insinuates it is stupid to want many
+> threads).
+On the subject of Raymond, his latest set of postings on lock-free
+code have left me hoping that there's a better way of doing concurrent
+programming - I don't know how normal people (ie. me) are supposed to
+write correct programs in that style. Maybe rust tasks are the answer?
+
+Pete
+
+From peterhull90 at gmail.com  Fri Apr 15 07:30:42 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Fri, 15 Apr 2011 15:30:42 +0100
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <4DA84FDE.1070603@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<4DA7B2F0.6080305@mozilla.com> <4DA7D96D.60007@mozilla.com>
+	<4DA84FDE.1070603@mozilla.com>
+Message-ID: <BANLkTinLW-jN2nBNE+n9wJ_bR_Ghf5TShA@mail.gmail.com>
+
+2011/4/15 Rafael ?vila de Esp?ndola <respindola at mozilla.com>:
+> On 11-04-15 1:36 AM, Graydon Hoare wrote:
+>>> Yes, we have this is a problem for both implementations. On linux at
+>>> least we can also use a global thread local variable to hold the C stack
+>>> for the OS thread. I have no idea what we should do for OS X in here.
+>>
+>> No TLS on OSX? I gather they have a rather different threading system
+>> than linux (and windows); I don't know the exact details.
+>
+> I don't think any released version has it. There was some activity in LLVM,
+> so I think they are implementing it.
+I've used the pthreads functions* in the past, with a compatibility
+layer for those platforms with 'native' tls. It worked ok for me,
+would it be suitable for rust?
+
+Pete
+* i.e. http://developer.apple.com/library/mac/documentation/Darwin/Reference/ManPages/man3/pthread_getspecific.3.html
+et al
+
+From marijnh at gmail.com  Fri Apr 15 07:49:25 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 15 Apr 2011 16:49:25 +0200
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <4DA850C6.5080502@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+	<4DA850C6.5080502@mozilla.com>
+Message-ID: <BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>
+
+> For clarity, all of my concerns come from task migration being too expensive
+> to be practical.
+
+Can you suggest some reading material on this? It's not clear to me
+why task migration *has* to be that expensive.
+
+From graydon at mozilla.com  Fri Apr 15 08:10:44 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 15 Apr 2011 08:10:44 -0700
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+References: <4DA791D9.3060304@mozilla.com>	<4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+Message-ID: <4DA85FF4.1000506@mozilla.com>
+
+On 15/04/2011 3:29 AM, Marijn Haverbeke wrote:
+> Relevant link: http://blogs.msdn.com/b/oldnewthing/archive/2005/07/29/444912.aspx
+> (short of it: Windows is not good at large number of threads, Raymond
+> Chen is unapologetic about it, insinuates it is stupid to want many
+> threads).
+
+Yeah, I saw this but .. I think he's a bit overzealous on this point; or 
+at least unclear: "well-known not to scale beyond a dozen clients" 
+implies a scalability limit far short of the tens of thousands you can 
+get win32 up to with the stack size and reserve overridden. I'm curious 
+what he's getting at; it implies one or more win32 abstraction (locks, 
+sync IO, .. not sure) explodes with 10,000 threads hammering on it at once.
+
+Anyone know?
+
+-Graydon
+
+From graydon at mozilla.com  Fri Apr 15 08:13:31 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 15 Apr 2011 08:13:31 -0700
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>
+References: <4DA791D9.3060304@mozilla.com>
+	<4DA7A847.2030703@mozilla.com>	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>	<4DA850C6.5080502@mozilla.com>
+	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>
+Message-ID: <4DA8609B.3030003@mozilla.com>
+
+On 15/04/2011 7:49 AM, Marijn Haverbeke wrote:
+>> For clarity, all of my concerns come from task migration being too expensive
+>> to be practical.
+>
+> Can you suggest some reading material on this? It's not clear to me
+> why task migration *has* to be that expensive.
+
+They have pointers into a heap shared with other tasks in their thread. 
+We'd have to dig through that heap cloning everything they point to.
+
+Erlang is more militant about his and just says "message sends never 
+share" -- they're either deep copies or moves. We *could* adopt that 
+stance (especially after we have unique boxes). If we did, we could 
+reassign tasks to threads arbitrarily.
+
+-Graydon
+
+From graydon at mozilla.com  Fri Apr 15 08:15:33 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 15 Apr 2011 08:15:33 -0700
+Subject: [rust-dev] Fwd: Re:  cost/benefits of tasks
+Message-ID: <4DA86115.3000301@mozilla.com>
+
+Forwarding message from last night to list...
+
+-------- Original Message --------
+Subject: Re: [rust-dev] cost/benefits of tasks
+Date: Thu, 14 Apr 2011 22:36:45 -0700
+From: Graydon Hoare <graydon at mozilla.com>
+To: Rafael ?vila de Esp?ndola <respindola at mozilla.com>
+
+I am replying to you since you replied privately to me; if you meant to
+reply to list, say so and I'll send this back there. Not sure if you
+wanted this to be a private diversion in the conversation..
+
+
+
+On 14/04/2011 7:52 PM, Rafael ?vila de Esp?ndola wrote:
+
+> Yes, we have this is a problem for both implementations. On linux at
+> least we can also use a global thread local variable to hold the C stack
+> for the OS thread. I have no idea what we should do for OS X in here.
+
+No TLS on OSX? I gather they have a rather different threading system
+than linux (and windows); I don't know the exact details.
+
+This is important research to do before jumping to conclusions:
+different OSs provide quite different facilities, some cheap, some
+expensive, and with very different scalability curves. Win32 looks like
+it eats 12kb of kernel stack for each thread -- not free, though not
+huge -- but I have no idea what the scheduler does when a few thousand
+of them issue sync IO requests at once. OSX will cap an 8gb machine to
+12,500 threads (weirdly: http://support.apple.com/kb/HT3854), not sure
+if those are posix or mach threads. There are things to study.
+
+We need to quantify costs and qualify portability if we're going to have
+such horse-trading arguments about implementation effort and focus.
+
+I suspect we won't get stacks smaller than a page. Tasks can be smaller,
+but then if we're recycling stack segments between tasks-or-threads,
+pages might make the most sense anyways.
+
+> I agree in here. It might just be that the decision of having no user
+> visible global mutable state makes tasks that can share refcounted
+> objects too limited to be useful. We might have to choose one.
+
+Yeah. And be careful to differentiate uniquely owned from merely
+immutable. Immutable stuff still needs to be collected somehow if it's
+DAG-shaped or worse.
+
+> I understand the abstraction. In fact, I like it. The problem is that it
+> is not what we are implementing. You can implement it by giving the
+> language enough information to move tasks (expensive for all
+> implementation options I can think of) or by exposing the problem to the
+> user (undesirable in general, still needed in unsafe blocks).
+
+I disagree. The abstraction is "a coroutine that's properly multiplexed
+so long as you don't hit the blocking OS interfaces directly", and it's
+properly implemented by soft coroutines with shared memory. Better yet,
+you can share immutable DAG-shaped stuff between them, within a thread,
+using non-atomic refcounting. And if you want to hit the blocking OS
+interfaces directly, use a thread. That is: change
+
+   "spawn foo()"
+
+to
+
+   "spawn thread foo()"
+
+It's not so bad, eh? If a user sees too much jank or stalled tasks or
+something, they can analyze the problem, decide, and possibly insert the
+word 'thread'.
+
+> Can we just give them better tools? Consider what rust would look like
+> right now without tasks.
+>
+> * Creating a thread is more expensive than creating a task.
+> * Scheduling would work as expected
+> * Passing data in a safe way would imply
+> * Immutable data *or*
+> * Copy *or*
+> * Move semantics if we can figure out how to do it.
+> * Use of an unsafe block is a natural extension.
+
+That's exactly what "spawn thread foo()" gives you. I'm not suggesting
+we take it away. Merely that we maintain a 3rd option that's lighter
+still, that gives you:
+
+   * Free sharing of immutable substructures between tasks.
+   * Potentially (though I'll grant, not necessarily) cheaper spawn
+     and kill events, other per-task overheads, switching speed
+     (probably depends on platform, good to quantify).
+   * Easier concurrent debugging, if you like, since the scheduler is
+     down in userspace. Longer timeslices, manual yielding, etc.
+
+Keep in mind, 3 is not the limit of options I'm hoping to support. A
+GCD-like thing that uses frozen-unique values it owns and saturates the
+CPU using a queue of worker callbacks is definitely reasonable. As is a
+"parallel for loop" that does fork/join, or a vectorizing / SIMD
+construct. Parallelism and concurrency structures are a bit
+heterogeneous, just like control and data structures :)
+
+> I would love to have both at a reasonable price, but the proposed
+> implementation is not there. It looks like it when you write the code,
+> but you do not really have multiplexed sequential threads. You can get
+> basic (not memory mapped) IO multiplexing with a lot of code, but that
+> is it.
+
+It's worth differentiating cases. Not every task is doing mmap'ed I/O,
+and that's the only case where this abstraction doesn't hold up.
+Everything else we can indirect through an AIO interface, with the added
+benefit that we can make the user-facing side of it much less crazy than
+the C API.
+
+(And .. I think you're rarely doing mmap'ed network I/O anyways)
+
+> It is always nice to remember that one of the problems of C++ is that
+> its higher level features are too expensive. Firefox is built with
+> exceptions disabled for example.
+
+That is not only out of cost concerns; but point taken.
+
+> Yes, but given our target marked (build the best browser), the
+> implementation cost is a go/no-go.
+
+The best browser may well have lots of internal actions that are not
+doing mmap'ed I/O. Coroutines make sense for them.
+
+The argument seems a bit like you want it both ways. You're insisting
+that the costs of doing non-mmap'ed I/O (that is, copying buffers) is
+always unacceptable, but then saying it's .. ok to limit ourselves to a
+tasking model that may require deep-copying a lot of messages to
+communicate. What gives? Can't we just give the user a vocabulary to
+decide when they want which kinds of copying?
+
+> If not copying stacks, tasks at least don't have the problem of making
+> every program pay for what they don't use. My only real concern is that
+> we would be implementing the next RTTI: a fancy feature that is not used
+> in practice.
+
+Oh, "the next RTTI" that stings!
+
+> That is why my suggestion right now is to go with just threads (and
+> stack linking to make creating them cheap). If it turns out that users
+> have to use unsafe block too often because they couldn't get a safe move
+> and copying is too expensive, we know need to provide something else.
+
+I'm not fond of this strategy. I think that if we don't spend the time
+making "something else" work from the beginning, nobody ever will.
+System architecture changes will get *harder* over time, not easier.
+
+-Graydon
+
+From marijnh at gmail.com  Fri Apr 15 08:32:08 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 15 Apr 2011 17:32:08 +0200
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <4DA8609B.3030003@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+	<4DA850C6.5080502@mozilla.com>
+	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>
+	<4DA8609B.3030003@mozilla.com>
+Message-ID: <BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+
+> They have pointers into a heap shared with other tasks in their thread. We'd
+> have to dig through that heap cloning everything they point to.
+
+Right. I can see the costs, but you have to agree that migrating tasks
+would be a *great* thing to have. Having shared values become more
+complicated might be worth it. Unique boxes are one good solution. You
+also alluded to a task-lifetime trick last week (task X holding onto
+immutable value Z, and not being allowed to die until task Y, which
+accesses this value, finishes -- if I understood it correctly). There
+are probably other hacks that can be applied when sharing big
+structures. For small ones, copying is a good idea anyway.
+
+Of course, this'd also upset our current design of domains and such.
+I'm not really putting myself behind any new approach at this point,
+but I think we should definitely be open to anything that would help
+us avoid costly and awkward I/O multiplexing magic.
+
+From dherman at mozilla.com  Fri Apr 15 09:04:02 2011
+From: dherman at mozilla.com (David Herman)
+Date: Fri, 15 Apr 2011 09:04:02 -0700
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+	<4DA850C6.5080502@mozilla.com>
+	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>
+	<4DA8609B.3030003@mozilla.com>
+	<BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+Message-ID: <E0E2E0C8-0FB6-400C-8A00-BDAE9E3288AB@mozilla.com>
+
+I don't have any concrete solutions to offer, just a few scattered thoughts:
+
+- In our recent discussions at the all-hands, we were leaning towards eliminating the ability to send higher-order data over channels. This would be in tension with the desire to migrate tasks.
+
+- Migrating tasks could be simulated in a lightweight way (for example, I believe you could implement GCD on top of something like the existing task model) if we could send closures over channels: the dispatcher would send work as functions to tasks.
+
+- Migrating tasks could be done in a more expressive way if we had continuations: you could suspend your entire task. (This may just be an equivalent way of looking at task migration. But actually continuations can be a good fit for lower-level languages like Rust, independent of the use case of migration: they are helpful for building systems like OSes and web servers. I'm not advocating, just putting this out there.)
+
+- I don't have insight into how to deal efficiently with the heap when you migrate tasks. But FWIW the following paper has some nice description of different implementation strategies for some of the other parts of the puzzle (particularly growable and storable stacks):
+
+    http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.70.9076
+
+Don't know how much of that is useful/relevant but I've always liked the paper so I figured I'd mention it.
+
+Dave
+
+On Apr 15, 2011, at 8:32 AM, Marijn Haverbeke wrote:
+
+>> They have pointers into a heap shared with other tasks in their thread. We'd
+>> have to dig through that heap cloning everything they point to.
+> 
+> Right. I can see the costs, but you have to agree that migrating tasks
+> would be a *great* thing to have. Having shared values become more
+> complicated might be worth it. Unique boxes are one good solution. You
+> also alluded to a task-lifetime trick last week (task X holding onto
+> immutable value Z, and not being allowed to die until task Y, which
+> accesses this value, finishes -- if I understood it correctly). There
+> are probably other hacks that can be applied when sharing big
+> structures. For small ones, copying is a good idea anyway.
+> 
+> Of course, this'd also upset our current design of domains and such.
+> I'm not really putting myself behind any new approach at this point,
+> but I think we should definitely be open to anything that would help
+> us avoid costly and awkward I/O multiplexing magic.
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From graydon at mozilla.com  Fri Apr 15 09:48:05 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 15 Apr 2011 09:48:05 -0700
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+References: <4DA791D9.3060304@mozilla.com>	<4DA7A847.2030703@mozilla.com>	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>	<4DA850C6.5080502@mozilla.com>	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>	<4DA8609B.3030003@mozilla.com>
+	<BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+Message-ID: <4DA876C5.9090403@mozilla.com>
+
+On 15/04/2011 8:32 AM, Marijn Haverbeke wrote:
+>> They have pointers into a heap shared with other tasks in their thread. We'd
+>> have to dig through that heap cloning everything they point to.
+>
+> Right. I can see the costs, but you have to agree that migrating tasks
+> would be a *great* thing to have. Having shared values become more
+> complicated might be worth it. Unique boxes are one good solution. You
+> also alluded to a task-lifetime trick last week (task X holding onto
+> immutable value Z, and not being allowed to die until task Y, which
+> accesses this value, finishes -- if I understood it correctly). There
+> are probably other hacks that can be applied when sharing big
+> structures. For small ones, copying is a good idea anyway.
+
+It's entirely possible to go down this road. I'm much, much more 
+comfortable if our research leads us to a design in which:
+
+   - Domains don't exist.
+   - Tasks are run on threads M:N where, at the limit, you may
+     choose to make that 1:1. But if you have cost reasons to prefer
+     different M and N you can get it, nothing breaks.
+   - Tasks always own all their reachable data, no sharing.
+   - Messages are therefore always either deep-copied or moved.
+
+That's an ok cognitive model. Fewer parts, fewer corner cases; it gives 
+up one case (shared messages) but might be a net win given the 
+simplification. Might, might not. Maybe that's all Rafael was suggesting 
+in the first place, or close enough not to matter.
+
+I wasn't sure what we were pushing toward; a conclusion like "we have to 
+use unsafe blocks everywhere" is unacceptable to me. So is one where we 
+lose important parts of the per-task structure like its local GC pool, 
+incoming lockless queues for ports, or its unwind semantics on failure. 
+These are strict improvements to the notion of a thread, and they're 
+hard ones for users to simulate.
+
+Losing the ability to share message substructures after sending is .. a 
+cost though. And it's one that's worth caring at least somewhat about; 
+maybe we sacrifice it but I want everyone to know why it's worth 
+keeping, so I will place it in a Special Attention-Getting Block:
+
+   I want users to feel comfortable making lots of tasks, not just for
+   concurrency: it's a way to *isolate* code from side effects of other
+   code. Even if I was developing a completely serial program I'd want
+   to be able to carve it up into tasks. They are natural boundaries,
+   like namespaces or such, where you have a line drawn that the language
+   is telling you the semantics will prevent anyone from crossing, even
+   considering dynamic reachability. That's important for maintaining
+   partial correctness and system function in the presence of errors.
+
+That said, Erlang seems able to encourage users to make lots of tasks -- 
+for robustness -- while having them pay for deep copies every time. So 
+maybe it's just something where users get accustomed to the copy 
+boundaries and learn to live with that tax. And maybe, if we have unique 
+pointers, most serious code will lean on them heavily so that ownership 
+handoff is more common. I'm unsure.
+
+> Of course, this'd also upset our current design of domains and such.
+> I'm not really putting myself behind any new approach at this point,
+> but I think we should definitely be open to anything that would help
+> us avoid costly and awkward I/O multiplexing magic.
+
+Yeah .. I'm not wedded to domains; they seemed necessary to 
+differentiate cases, but if those cases wind up collapsing (and if, 
+absent the effect system, there's no reason for *processes* to be 
+reified in the language either) then removing the domain concept lowers 
+cognitive costs, while removing an awkward case (task starvation), so 
+I'm ... tentatively ok with it. If users will accept the loss of cheap 
+isolation in exchange for simplified model, and we don't run into I/O 
+scalability issues. But regarding that, here is another Attention 
+Getting Block:
+
+   Another thing to keep in mind: "awkward I/O multiplexing magic" is
+   likely *necessary* on some platforms to scale well. Or at least this
+   is the mythology. This is a numeric question that demands research.
+   Try writing a C program that does "the smallest thread you can make"
+   on each OS and tries to make 100,000 of them doing concurrent
+   blocking reads on 100,000 file descriptors. See if it scales as well
+   as a 100,000 way IOCP/kqueue/epoll approach. It might. It might not.
+   Kernel people are always tilting the balance one way or another,
+   sometimes userspace is just misinformed, working on old information.
+
+   Even with a 4kb (1 page) stack, I'd expect to be able to make a
+   million tasks on an 8gb machine. I .. actually demo'ed this on the old
+   rustboot approach, way back when, when tasks started with 300 bytes of
+   stack, it's plausible.
+
+So: if you want to pursue this simplification, go forth and research! 
+See what our limits are. Otherwise we're making stuff up based on 
+folklore and blog posts.
+
+-Graydon
+
+From marijnh at gmail.com  Fri Apr 15 10:39:41 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 15 Apr 2011 19:39:41 +0200
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <4DA876C5.9090403@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+	<4DA850C6.5080502@mozilla.com>
+	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>
+	<4DA8609B.3030003@mozilla.com>
+	<BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+	<4DA876C5.9090403@mozilla.com>
+Message-ID: <BANLkTikTrkBfBJHmmc_LFSerdtyzDf9_2Q@mail.gmail.com>
+
+Your first 'warning box' brings another sharing model to mind --
+'return' sharing, where we somehow set up a task to send a value at
+the moment it dies, which makes it trivial to prove that the task
+itself doesn't own the value anymore.
+
+As for the continued need for multiplexing, you seem to be right. The
+way I envision this is that we'd be creating significantly more
+threads (to distribute our tasks over) than there are cores, to allow
+blocking without dire consequences, but when doing something like
+writing a server for long polling clients, that's still nowhere near
+sufficient. Any solutions seem to either lead back to client code
+doing their own select calls, or introducing i/o wrappers. That's too
+bad. I'll think on it some more.
+
+From sebastian.sylvan at gmail.com  Fri Apr 15 11:22:23 2011
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Fri, 15 Apr 2011 19:22:23 +0100
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <4DA85FF4.1000506@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+	<4DA85FF4.1000506@mozilla.com>
+Message-ID: <BANLkTi=CP4HKiBe6eR9bw1ZB47tAQie6nw@mail.gmail.com>
+
+On Fri, Apr 15, 2011 at 4:10 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> On 15/04/2011 3:29 AM, Marijn Haverbeke wrote:
+>
+>> Relevant link:
+>> http://blogs.msdn.com/b/oldnewthing/archive/2005/07/29/444912.aspx
+>> (short of it: Windows is not good at large number of threads, Raymond
+>> Chen is unapologetic about it, insinuates it is stupid to want many
+>> threads).
+>>
+>
+> Yeah, I saw this but .. I think he's a bit overzealous on this point; or at
+> least unclear: "well-known not to scale beyond a dozen clients" implies a
+> scalability limit far short of the tens of thousands you can get win32 up to
+> with the stack size and reserve overridden. I'm curious what he's getting
+> at; it implies one or more win32 abstraction (locks, sync IO, .. not sure)
+> explodes with 10,000 threads hammering on it at once.
+>
+> Anyone know?
+>
+I would guess that the old (since eliminated) dispatcher lock would hurt you
+badly if you try to actually communicate with two many threads. Should be a
+lot better in Windows 7 though.
+
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110415/5fad3eb5/attachment.html>
+
+From igor at mir2.org  Fri Apr 15 15:00:11 2011
+From: igor at mir2.org (Igor Bukanov)
+Date: Sat, 16 Apr 2011 00:00:11 +0200
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+	<4DA850C6.5080502@mozilla.com>
+	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>
+	<4DA8609B.3030003@mozilla.com>
+	<BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+Message-ID: <BANLkTikD9DTiqoXnWwiLxFL4eD9ztWbDZw@mail.gmail.com>
+
+On 15 April 2011 17:32, Marijn Haverbeke <marijnh at gmail.com> wrote:
+> I'm not really putting myself behind any new approach at this point,
+> but I think we should definitely be open to anything that would help
+> us avoid costly and awkward I/O multiplexing magic.
+
+With libevent2 and such cross-platform I/O multiplexing is no longer a
+magic. Surely it has some corner cases, but it is rather
+straightforward to use even in plain C.
+
+From graydon at mozilla.com  Fri Apr 15 15:05:52 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 15 Apr 2011 15:05:52 -0700
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <BANLkTikD9DTiqoXnWwiLxFL4eD9ztWbDZw@mail.gmail.com>
+References: <4DA791D9.3060304@mozilla.com>	<4DA7A847.2030703@mozilla.com>	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>	<4DA850C6.5080502@mozilla.com>	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>	<4DA8609B.3030003@mozilla.com>	<BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+	<BANLkTikD9DTiqoXnWwiLxFL4eD9ztWbDZw@mail.gmail.com>
+Message-ID: <4DA8C140.9070808@mozilla.com>
+
+On 11-04-15 03:00 PM, Igor Bukanov wrote:
+> On 15 April 2011 17:32, Marijn Haverbeke<marijnh at gmail.com>  wrote:
+>> I'm not really putting myself behind any new approach at this point,
+>> but I think we should definitely be open to anything that would help
+>> us avoid costly and awkward I/O multiplexing magic.
+>
+> With libevent2 and such cross-platform I/O multiplexing is no longer a
+> magic. Surely it has some corner cases, but it is rather
+> straightforward to use even in plain C.
+
+Libevent2 is ... poaaible. They've at least got IOCP working. The code's 
+pretty grotty though. I'm honestly hoping 
+https://github.com/joyent/liboio shapes up. Time will tell though. I 
+agree that it's *probably* a problem we won't have to solve ourselves. 
+Or entirely ourselves. We still need a friendly rust binding to it.
+
+-Graydon
+
+From gal at mozilla.com  Fri Apr 15 16:23:24 2011
+From: gal at mozilla.com (Andreas Gal)
+Date: Fri, 15 Apr 2011 16:23:24 -0700
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+Message-ID: <0BE7BA0E-1BB0-4118-9479-0645FC6A1C5C@mozilla.com>
+
+
+Task migration between threads sounds like a great idea. I am sure we can make that work easily actually. This discussion is timely. We will have an intern start working on these parts in a month or so.
+
+Andreas
+
+On Apr 15, 2011, at 3:29 AM, Marijn Haverbeke wrote:
+
+> Relevant link: http://blogs.msdn.com/b/oldnewthing/archive/2005/07/29/444912.aspx
+> (short of it: Windows is not good at large number of threads, Raymond
+> Chen is unapologetic about it, insinuates it is stupid to want many
+> threads).
+> 
+> I don't have much else to add. I share Rafael's concerns about I/O
+> multiplexing being complicated and necessarily leaky, and I'd like to
+> support automatic migration of tasks between threads, but I do not
+> know how to model this in a robust, low-overhead way (yet).
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From pwalton at mozilla.com  Fri Apr 15 23:20:27 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 15 Apr 2011 23:20:27 -0700
+Subject: [rust-dev] Integer overflow checking
+Message-ID: <4DA9352B.4000706@mozilla.com>
+
+Hi everyone,
+
+I've been wondering for a while whether it's feasible from a performance 
+standpoint for a systems language to detect and abort on 
+potentially-dangerous integer overflows by default. Overflow is an 
+insidious problem for several reasons:
+
+(1) It can happen practically anywhere; anytime the basic arithmetic 
+operators are used, an overflow or underflow could occur.
+
+(2) To reason about overflow, the programmer has to solve a global data 
+flow problem. An expression as simple as "a + b" necessitates an answer 
+to the question "could the program input have influenced a or b such 
+that the operation could overflow?"
+
+(3) Overflow checking is rarely used in practice due to the performance 
+costs associated with it. ISAs aren't that well-suited for overflow 
+checking. For example, on the x86 one has to test for the overflow 
+and/or carry flag after every integer operation that could possibly set 
+it. Contrast this with the floating-point situation, in which a SIGFPE 
+is raised on overflow without having to explicitly test after each 
+instruction.
+
+(4) It can be catastrophic from a memory safety and security standpoint 
+when overflow errors creep in, especially when unsafe operations such as 
+memory allocation and unchecked array copying are performed. We do 
+permit unsafe operations in Rust (although we certainly hope they're 
+going to be rare!)
+
+I did a quick survey of the available literature and there isn't too 
+much out there*, but there is a recent gem of a paper from CERT:
+
+http://www.cert.org/archive/pdf/09tn023.pdf
+
+They managed to get quite impressive numbers: under 6% slowdown using 
+their As-If-Infinitely-Ranged model on GCC -O3. The trick is to delay 
+overflow checking to "observation points", which roughly correspond to 
+state being updated or I/O being performed (there's an interesting 
+connection between this and the operations that made a function "impure" 
+in the previous effect system).
+
+This area seems promising enough that I was wondering if there was 
+interest in something like this for Rust. There's no harm in having the 
+programmer explicitly be able to turn off the checking at the block or 
+item level; some algorithms, such as hashing algorithms, rely on the 
+overflow semantics, after all. But it seems in the spirit of Rust (at 
+the risk of relying on a nebulous term) to be as safe as possible by 
+default, and so I'd like to propose exploring opt-out overflow checking 
+for integers at some point in the future.
+
+Thoughts?
+
+Patrick
+
+* That said, Microsoft seems to have put more effort than most into 
+detecting integer overflows in its huge C++ codebases, both through 
+fairly sophisticated static analysis [1] and through dynamic checks with 
+the SafeInt library [2]. Choice quote: "SafeInt is currently used 
+extensively throughout Microsoft, with substantial adoption within 
+Office and Windows."
+
+[1]: http://research.microsoft.com/pubs/80722/z3prefix.pdf
+[2]: http://safeint.codeplex.com/
+
+From pwalton at mozilla.com  Fri Apr 15 23:22:00 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 15 Apr 2011 23:22:00 -0700
+Subject: [rust-dev] Integer overflow checking
+In-Reply-To: <4DA9352B.4000706@mozilla.com>
+References: <4DA9352B.4000706@mozilla.com>
+Message-ID: <4DA93588.1030007@mozilla.com>
+
+On 04/15/2011 11:20 PM, Patrick Walton wrote:
+> This area seems promising enough that I was wondering if there was
+> interest in something like this for Rust. There's no harm in having the
+> programmer explicitly be able to turn off the checking at the block or
+> item level; some algorithms, such as hashing algorithms, rely on the
+> overflow semantics, after all. But it seems in the spirit of Rust (at
+> the risk of relying on a nebulous term) to be as safe as possible by
+> default, and so I'd like to propose exploring opt-out overflow checking
+> for integers at some point in the future.
+
+To be clear: I'm not proposing that we promote to bignums or anything 
+like that. Most likely we'd just fail on integer overflow by default.
+
+Patrick
+
+From brendan at mozilla.org  Sat Apr 16 01:14:19 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Sat, 16 Apr 2011 10:14:19 +0200
+Subject: [rust-dev] Integer overflow checking
+In-Reply-To: <4DA93588.1030007@mozilla.com>
+References: <4DA9352B.4000706@mozilla.com> <4DA93588.1030007@mozilla.com>
+Message-ID: <3120E5FA-176C-4603-90FD-644738D71867@mozilla.org>
+
+On Apr 16, 2011, at 8:22 AM, Patrick Walton wrote:
+
+> On 04/15/2011 11:20 PM, Patrick Walton wrote:
+>> This area seems promising enough that I was wondering if there was
+>> interest in something like this for Rust. There's no harm in having the
+>> programmer explicitly be able to turn off the checking at the block or
+>> item level; some algorithms, such as hashing algorithms, rely on the
+>> overflow semantics, after all. But it seems in the spirit of Rust (at
+>> the risk of relying on a nebulous term) to be as safe as possible by
+>> default, and so I'd like to propose exploring opt-out overflow checking
+>> for integers at some point in the future.
+> 
+> To be clear: I'm not proposing that we promote to bignums or anything like that. Most likely we'd just fail on integer overflow by default.
+
+Yes, we've talked about this in the past with roc -- failure would be better than wrapping around.
+
+/be
+
+
+From gal at mozilla.com  Sat Apr 16 01:20:19 2011
+From: gal at mozilla.com (Andreas Gal)
+Date: Sat, 16 Apr 2011 01:20:19 -0700
+Subject: [rust-dev] Integer overflow checking
+In-Reply-To: <3120E5FA-176C-4603-90FD-644738D71867@mozilla.org>
+References: <4DA9352B.4000706@mozilla.com> <4DA93588.1030007@mozilla.com>
+	<3120E5FA-176C-4603-90FD-644738D71867@mozilla.org>
+Message-ID: <B74CA39B-F79F-477A-BBCE-DDB68A66B349@mozilla.com>
+
+
+Based on the experience with the tracer, overflow checks aren't really crazy expensive and we can optimize them quite well. It probably depends on how well LLVM understands them. I know it has intrinsics for it.
+
+Andreas
+
+On Apr 16, 2011, at 1:14 AM, Brendan Eich wrote:
+
+> On Apr 16, 2011, at 8:22 AM, Patrick Walton wrote:
+> 
+>> On 04/15/2011 11:20 PM, Patrick Walton wrote:
+>>> This area seems promising enough that I was wondering if there was
+>>> interest in something like this for Rust. There's no harm in having the
+>>> programmer explicitly be able to turn off the checking at the block or
+>>> item level; some algorithms, such as hashing algorithms, rely on the
+>>> overflow semantics, after all. But it seems in the spirit of Rust (at
+>>> the risk of relying on a nebulous term) to be as safe as possible by
+>>> default, and so I'd like to propose exploring opt-out overflow checking
+>>> for integers at some point in the future.
+>> 
+>> To be clear: I'm not proposing that we promote to bignums or anything like that. Most likely we'd just fail on integer overflow by default.
+> 
+> Yes, we've talked about this in the past with roc -- failure would be better than wrapping around.
+> 
+> /be
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From respindola at mozilla.com  Sat Apr 16 07:26:31 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sat, 16 Apr 2011 10:26:31 -0400
+Subject: [rust-dev] Integer overflow checking
+In-Reply-To: <4DA9352B.4000706@mozilla.com>
+References: <4DA9352B.4000706@mozilla.com>
+Message-ID: <4DA9A717.3040204@mozilla.com>
+
+
+> (3) Overflow checking is rarely used in practice due to the performance
+> costs associated with it. ISAs aren't that well-suited for overflow
+> checking. For example, on the x86 one has to test for the overflow
+> and/or carry flag after every integer operation that could possibly set
+> it. Contrast this with the floating-point situation, in which a SIGFPE
+> is raised on overflow without having to explicitly test after each
+> instruction.
+
+Enabling floating point exception is expensive too. On the CPU side it 
+needs to flush pipelines and undo things that executed out of order. On 
+the compiler side it makes a lot harder to vectorize since just changing 
+the code from scalar to vectors would change the semantics if an element 
+in the middle of the vector overflows.
+
+> http://www.cert.org/archive/pdf/09tn023.pdf
+>
+> They managed to get quite impressive numbers: under 6% slowdown using
+> their As-If-Infinitely-Ranged model on GCC -O3. The trick is to delay
+> overflow checking to "observation points", which roughly correspond to
+> state being updated or I/O being performed (there's an interesting
+> connection between this and the operations that made a function "impure"
+> in the previous effect system).
+>
+> This area seems promising enough that I was wondering if there was
+> interest in something like this for Rust. There's no harm in having the
+> programmer explicitly be able to turn off the checking at the block or
+> item level; some algorithms, such as hashing algorithms, rely on the
+> overflow semantics, after all. But it seems in the spirit of Rust (at
+> the risk of relying on a nebulous term) to be as safe as possible by
+> default, and so I'd like to propose exploring opt-out overflow checking
+> for integers at some point in the future.
+>
+> Thoughts?
+
+Please turn it off by default for user code. As in c++ we probably have 
+to do overflow checks when the compiler introduces arithmetic operations 
+(like operator new in c++). There is some code for doing it in 
+here:http://blog.regehr.org/archives/508
+
+> Patrick
+>
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Sat Apr 16 07:44:58 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sat, 16 Apr 2011 10:44:58 -0400
+Subject: [rust-dev] Integer overflow checking
+In-Reply-To: <B74CA39B-F79F-477A-BBCE-DDB68A66B349@mozilla.com>
+References: <4DA9352B.4000706@mozilla.com>
+	<4DA93588.1030007@mozilla.com>	<3120E5FA-176C-4603-90FD-644738D71867@mozilla.org>
+	<B74CA39B-F79F-477A-BBCE-DDB68A66B349@mozilla.com>
+Message-ID: <4DA9AB6A.90106@mozilla.com>
+
+On 11-04-16 4:20 AM, Andreas Gal wrote:
+>
+> Based on the experience with the tracer, overflow checks aren't really crazy expensive and we can optimize them quite well. It probably depends on how well LLVM understands them. I know it has intrinsics for it.
+
+The checks themselves are not that expensive, and yes llvm has intrinsic 
+for it.
+
+The problem is that they have some hidden costs. Assuming no overflows 
+makes it easier for the compiler to compute loop trip counts for example.
+
+In the particular case of rust, there is an extra cost too for what it 
+is meant to "fail". If an "a+b" that overflows should have the same 
+effect as the fail statement, we would have to insert code to start an 
+stack unwind. It also means that very basic math only functions can throw.
+
+> Andreas
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Sat Apr 16 07:51:32 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sat, 16 Apr 2011 10:51:32 -0400
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <E0E2E0C8-0FB6-400C-8A00-BDAE9E3288AB@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com>
+	<4DA7A847.2030703@mozilla.com>	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>	<4DA850C6.5080502@mozilla.com>	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>	<4DA8609B.3030003@mozilla.com>	<BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+	<E0E2E0C8-0FB6-400C-8A00-BDAE9E3288AB@mozilla.com>
+Message-ID: <4DA9ACF4.7020900@mozilla.com>
+
+On 11-04-15 12:04 PM, David Herman wrote:
+> I don't have any concrete solutions to offer, just a few scattered
+> thoughts:
+>
+> - In our recent discussions at the all-hands, we were leaning towards
+> eliminating the ability to send higher-order data over channels. This
+> would be in tension with the desire to migrate tasks.
+
+This would make it easier to migrate tasks, no?
+
+> - Migrating tasks could be done in a more expressive way if we had
+> continuations: you could suspend your entire task. (This may just be
+> an equivalent way of looking at task migration. But actually
+> continuations can be a good fit for lower-level languages like Rust,
+> independent of the use case of migration: they are helpful for
+> building systems like OSes and web servers. I'm not advocating, just
+> putting this out there.)
+
+Well, we have basic continuations: the stack :-)
+
+A language that makes call-cc cheap would make task migration cheap, but 
+is there a way to do it without putting the majority of the data in a 
+common GCed heap (a la smlnj)?
+
+
+> Dave
+
+Cheers,
+Rafael
+
+From dherman at mozilla.com  Sat Apr 16 08:25:17 2011
+From: dherman at mozilla.com (David Herman)
+Date: Sat, 16 Apr 2011 08:25:17 -0700
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <4DA9ACF4.7020900@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com>
+	<4DA7A847.2030703@mozilla.com>	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>	<4DA850C6.5080502@mozilla.com>	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>	<4DA8609B.3030003@mozilla.com>	<BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+	<E0E2E0C8-0FB6-400C-8A00-BDAE9E3288AB@mozilla.com>
+	<4DA9ACF4.7020900@mozilla.com>
+Message-ID: <C6854942-33E9-47EF-866C-FB85CA4C181C@mozilla.com>
+
+>> - In our recent discussions at the all-hands, we were leaning towards
+>> eliminating the ability to send higher-order data over channels. This
+>> would be in tension with the desire to migrate tasks.
+> 
+> This would make it easier to migrate tasks, no?
+
+Right. If we could send closures, we could at least simulate task migration by packaging up the work as a function and sending it to another task that was programmed to accept the closure and invoke it. Without continuations, though, you can't suspend your work at arbitrary points unless you use CPS.
+
+> A language that makes call-cc cheap would make task migration cheap, but is there a way to do it without putting the majority of the data in a common GCed heap (a la smlnj)?
+
+Absolutely -- the paper I linked to shows 10 or so different implementation strategies, and shows much more sophisticated approaches that are still largely stack-based.
+
+Dave
+
+
+From respindola at mozilla.com  Sat Apr 16 08:39:36 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sat, 16 Apr 2011 11:39:36 -0400
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <4DA8609B.3030003@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com>	<4DA7A847.2030703@mozilla.com>	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>	<4DA850C6.5080502@mozilla.com>	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>
+	<4DA8609B.3030003@mozilla.com>
+Message-ID: <4DA9B838.20607@mozilla.com>
+
+> They have pointers into a heap shared with other tasks in their thread.
+> We'd have to dig through that heap cloning everything they point to.
+>
+> Erlang is more militant about his and just says "message sends never
+> share" -- they're either deep copies or moves. We *could* adopt that
+> stance (especially after we have unique boxes). If we did, we could
+> reassign tasks to threads arbitrarily.
+
+I like this. It also has the advantage that changing from a task to a 
+thread in a refactoring doesn't change same operations from O(1) to O(n).
+
+Immutable data can still be passed by references, so if this can be 
+combined some form of "freeze" operation than this can be made really 
+flexible.
+
+In this model a task blocking for any reason (even page faults) will 
+block the thread it is on, but will not prevent any other task from 
+executing on other threads.
+
+> -Graydon
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Sat Apr 16 08:47:50 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sat, 16 Apr 2011 11:47:50 -0400
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <4DA876C5.9090403@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com>	<4DA7A847.2030703@mozilla.com>	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>	<4DA850C6.5080502@mozilla.com>	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>	<4DA8609B.3030003@mozilla.com>	<BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+	<4DA876C5.9090403@mozilla.com>
+Message-ID: <4DA9BA26.70205@mozilla.com>
+
+> Another thing to keep in mind: "awkward I/O multiplexing magic" is
+> likely *necessary* on some platforms to scale well. Or at least this
+> is the mythology. This is a numeric question that demands research.
+> Try writing a C program that does "the smallest thread you can make"
+> on each OS and tries to make 100,000 of them doing concurrent
+> blocking reads on 100,000 file descriptors. See if it scales as well
+> as a 100,000 way IOCP/kqueue/epoll approach. It might. It might not.
+> Kernel people are always tilting the balance one way or another,
+> sometimes userspace is just misinformed, working on old information.
+
+
+There is something really wrong with the kernel if many blocking
+threads are as cheep as an epool :-)
+
+We should still provide an api for doing pools, but they get used by the 
+user when needed, without the overhead of passing them to an IO thread, 
+doing the epool, figuring out which task was handing that fd, and 
+switching back.
+
+With light task that can be migrated, it is possible to mix and match. 
+For example, have a thread doing accept/add to epool and creating tasks 
+for serving the requests when data is available.
+
+> -Graydon
+
+
+Cheers,
+Rafael
+
+
+From respindola at mozilla.com  Sat Apr 16 09:03:46 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sat, 16 Apr 2011 12:03:46 -0400
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <BANLkTinLW-jN2nBNE+n9wJ_bR_Ghf5TShA@mail.gmail.com>
+References: <4DA791D9.3060304@mozilla.com>
+	<4DA7A847.2030703@mozilla.com>	<4DA7B2F0.6080305@mozilla.com>
+	<4DA7D96D.60007@mozilla.com>	<4DA84FDE.1070603@mozilla.com>
+	<BANLkTinLW-jN2nBNE+n9wJ_bR_Ghf5TShA@mail.gmail.com>
+Message-ID: <4DA9BDE2.1030304@mozilla.com>
+
+On 11-04-15 10:30 AM, Peter Hull wrote:
+> 2011/4/15 Rafael ?vila de Esp?ndola<respindola at mozilla.com>:
+>> On 11-04-15 1:36 AM, Graydon Hoare wrote:
+>>>> Yes, we have this is a problem for both implementations. On linux at
+>>>> least we can also use a global thread local variable to hold the C stack
+>>>> for the OS thread. I have no idea what we should do for OS X in here.
+>>>
+>>> No TLS on OSX? I gather they have a rather different threading system
+>>> than linux (and windows); I don't know the exact details.
+>>
+>> I don't think any released version has it. There was some activity in LLVM,
+>> so I think they are implementing it.
+> I've used the pthreads functions* in the past, with a compatibility
+> layer for those platforms with 'native' tls. It worked ok for me,
+> would it be suitable for rust?
+
+In the most general case, no. We want to find the C stack to call a C 
+function, so calling one to find it will not do.
+
+We could check where they store the information and implement the same 
+algorithm. The limitation for representing C calls as simple calls in 
+LLVM is that the call expansion has to find the stack with only basic 
+assembly operations. In the case of TLS on linux it is just a load for 
+example.
+
+With a call-to-c intrinsic we can produce as good code, but the inliner 
+will not see through it and there is the problem of a bit of code 
+duplication of the intrinsic expansion with regular calls.
+
+> Pete
+> * i.e. http://developer.apple.com/library/mac/documentation/Darwin/Reference/ManPages/man3/pthread_getspecific.3.html
+> et al
+
+
+Cheers,
+Rafael
+
+From pwalton at mozilla.com  Sat Apr 16 09:34:24 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 16 Apr 2011 09:34:24 -0700
+Subject: [rust-dev] Integer overflow checking
+In-Reply-To: <4DA9A717.3040204@mozilla.com>
+References: <4DA9352B.4000706@mozilla.com> <4DA9A717.3040204@mozilla.com>
+Message-ID: <4DA9C510.1050609@mozilla.com>
+
+On 04/16/2011 07:26 AM, Rafael ?vila de Esp?ndola wrote
+> Please turn it off by default for user code.
+
+But that would seem to defeat the purpose. Performance-sensitive code 
+could be marked unchecked, but by default it'd be safe.
+
+Patrick
+
+From pwalton at mozilla.com  Sat Apr 16 09:56:34 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 16 Apr 2011 09:56:34 -0700
+Subject: [rust-dev] Integer overflow checking
+In-Reply-To: <4DA9AB6A.90106@mozilla.com>
+References: <4DA9352B.4000706@mozilla.com>	<4DA93588.1030007@mozilla.com>	<3120E5FA-176C-4603-90FD-644738D71867@mozilla.org>	<B74CA39B-F79F-477A-BBCE-DDB68A66B349@mozilla.com>
+	<4DA9AB6A.90106@mozilla.com>
+Message-ID: <4DA9CA42.7090604@mozilla.com>
+
+On 04/16/2011 07:44 AM, Rafael ?vila de Esp?ndola wrote:
+> The problem is that they have some hidden costs. Assuming no overflows
+> makes it easier for the compiler to compute loop trip counts for example.
+>
+> In the particular case of rust, there is an extra cost too for what it
+> is meant to "fail". If an "a+b" that overflows should have the same
+> effect as the fail statement, we would have to insert code to start an
+> stack unwind. It also means that very basic math only functions can throw.
+
+It's not quite that bad. The system described in the CERT paper delayed 
+the overflow checks until an externally visible effect occurred:
+
+"AIR Integers do not require Ada-style precise traps, which require that 
+an exception is raised every time there is an integer overflow. In the 
+AIR integer model, it is acceptable to delay catching an incorrectly 
+represented value until an observation point is reached just before it 
+either affects the output or causes a critical undefined behavior [Plum 
+09]. This model improves the ability of compilers to optimize, without 
+sacrificing safety and security."
+
+So (this is off the top of my head and I may be totally wrong), but the 
+two examples you gave (one in another message) could have these solutions:
+
+(1) Loop trip counts can be computed assuming no overflow, and the 
+compiler could insert an overflow check prior to the start of the loop. 
+Failing this sets a trap flag and the first externally visible effect 
+within the loop checks the trap flag and throws if it's set.
+
+(2) Autovectorization could occur as usual. Overflow for any of the 
+values in the vector is checked at the site of the first externally 
+visible effect in the loop.
+
+These scenarios result in the loss of precision (overflow errors can be 
+delayed), but since task failure is non-recoverable precision doesn't 
+seem to me to be that important anyway.
+
+Patrick
+
+From marijnh at gmail.com  Sat Apr 16 11:21:56 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 16 Apr 2011 20:21:56 +0200
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <C6854942-33E9-47EF-866C-FB85CA4C181C@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+	<4DA850C6.5080502@mozilla.com>
+	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>
+	<4DA8609B.3030003@mozilla.com>
+	<BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+	<E0E2E0C8-0FB6-400C-8A00-BDAE9E3288AB@mozilla.com>
+	<4DA9ACF4.7020900@mozilla.com>
+	<C6854942-33E9-47EF-866C-FB85CA4C181C@mozilla.com>
+Message-ID: <BANLkTiknfkKhZuWYcx5DywwghVpYQwDqxg@mail.gmail.com>
+
+[cps being implementable in a cheap way]
+
+> Absolutely -- the paper I linked to shows 10 or so different implementation strategies
+
+I'm not all that up to date on recent research, but as I understand
+it, the great optimistic CPS wave of the 90's (see, for example,
+Appel's papers) has been largely discredited as not working out so
+well in practice. Even in the Scheme world, a common opinion seems to
+be that continuations can be implemented in two ways -- you either
+make normal code extra expensive and get fast continuations, or you
+make normal code fast, and pay a serious price (stack copying) when
+you actually use a continuation. This makes them rather unattractive.
+
+From dherman at mozilla.com  Sat Apr 16 12:55:29 2011
+From: dherman at mozilla.com (David Herman)
+Date: Sat, 16 Apr 2011 12:55:29 -0700
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <BANLkTiknfkKhZuWYcx5DywwghVpYQwDqxg@mail.gmail.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+	<4DA850C6.5080502@mozilla.com>
+	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>
+	<4DA8609B.3030003@mozilla.com>
+	<BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+	<E0E2E0C8-0FB6-400C-8A00-BDAE9E3288AB@mozilla.com>
+	<4DA9ACF4.7020900@mozilla.com>
+	<C6854942-33E9-47EF-866C-FB85CA4C181C@mozilla.com>
+	<BANLkTiknfkKhZuWYcx5DywwghVpYQwDqxg@mail.gmail.com>
+Message-ID: <746F08CB-14BB-4478-B46A-D6AC69A3B136@mozilla.com>
+
+> [cps being implementable in a cheap way]
+
+This isn't about CPS (a style of user code), it's about first-class continuations (a language feature). I think that's just a terminological issue, not a conceptual one -- just making sure we're not talking past one another.
+
+> I'm not all that up to date on recent research, but as I understand
+> it, the great optimistic CPS wave of the 90's (see, for example,
+> Appel's papers) has been largely discredited as not working out so
+> well in practice.
+
+I spent years in the Scheme community (in the 2000's) and that's not exactly the attitude I perceived. People mostly seemed frustrated that continuations hadn't caught on. Personally, I think they're not appropriate for all languages, but they are a pretty natural way to look at things like process management and task migration.
+
+> Even in the Scheme world, a common opinion seems to
+> be that continuations can be implemented in two ways -- you either
+> make normal code extra expensive and get fast continuations, or you
+> make normal code fast, and pay a serious price (stack copying) when
+> you actually use a continuation. This makes them rather unattractive.
+
+There's no free lunch. But I'd urge you to read the paper and see what you think; I'd be curious to hear what you (and the whole team) think about the plausibility of the implementation techniques it describes. (It leans in the direction of making normal code fast while not over-taxing the capture of continuations.)
+
+If we want task migration, we have to deal with these trade-offs no matter what, no?
+
+Dave
+
+
+From marijnh at gmail.com  Sun Apr 17 02:33:15 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sun, 17 Apr 2011 11:33:15 +0200
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <746F08CB-14BB-4478-B46A-D6AC69A3B136@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+	<4DA850C6.5080502@mozilla.com>
+	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>
+	<4DA8609B.3030003@mozilla.com>
+	<BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+	<E0E2E0C8-0FB6-400C-8A00-BDAE9E3288AB@mozilla.com>
+	<4DA9ACF4.7020900@mozilla.com>
+	<C6854942-33E9-47EF-866C-FB85CA4C181C@mozilla.com>
+	<BANLkTiknfkKhZuWYcx5DywwghVpYQwDqxg@mail.gmail.com>
+	<746F08CB-14BB-4478-B46A-D6AC69A3B136@mozilla.com>
+Message-ID: <BANLkTinEk7VndEfORQHRiXJDwxrrOo8SYg@mail.gmail.com>
+
+> If we want task migration, we have to deal with these trade-offs no matter what, no?
+
+Not at all. Just being able to restore the registers and stack of a
+task in another thread and continue running is all that takes. The
+only big obstacle is that our current design for value sharing makes
+some optimizations for within-thread sharing that will be dropped.
+
+Also, scoped resources (destructors, RAII) as Rust currently uses them
+become quite hairy in the face of arbitrary continuations. Scheme's
+dynamic-wind is a cute, but utterly unsatisfactory, alternative.
+
+From dherman at mozilla.com  Sun Apr 17 07:17:55 2011
+From: dherman at mozilla.com (David Herman)
+Date: Sun, 17 Apr 2011 07:17:55 -0700
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <BANLkTinEk7VndEfORQHRiXJDwxrrOo8SYg@mail.gmail.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+	<4DA850C6.5080502@mozilla.com>
+	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>
+	<4DA8609B.3030003@mozilla.com>
+	<BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+	<E0E2E0C8-0FB6-400C-8A00-BDAE9E3288AB@mozilla.com>
+	<4DA9ACF4.7020900@mozilla.com>
+	<C6854942-33E9-47EF-866C-FB85CA4C181C@mozilla.com>
+	<BANLkTiknfkKhZuWYcx5DywwghVpYQwDqxg@mail.gmail.com>
+	<746F08CB-14BB-4478-B46A-D6AC69A3B136@mozilla.com>
+	<BANLkTinEk7VndEfORQHRiXJDwxrrOo8SYg@mail.gmail.com>
+Message-ID: <9FA89459-55A4-4786-BB7C-EE2225F95CBE@mozilla.com>
+
+I should have distinguished one-shot continuations and general continuations. I take it that's the distinction you're making? Task migration still sounds to me like it's equivalent to the former. You're right, though, that duplicating continuations would be problematic for Rust's memory model and type system.
+
+Anyway, I wasn't trying to advocate for the addition of new language features, just suggesting that some of the implementation techniques for continuations might be useful for task migration. I should also add that they can be helpful for resizable stacks, too, which have many of the same implementation challenges as continuations.
+
+> Scheme's dynamic-wind is a cute, but utterly unsatisfactory, alternative.
+
+I didn't propose it (and there's no need to be condescending). I think you're arguing with straw-men. I'm not trying to shove Scheme into Rust. All I did was point to a paper with some implementation techniques for runtimes.
+
+Dave
+
+
+From dherman at mozilla.com  Sun Apr 17 08:16:39 2011
+From: dherman at mozilla.com (David Herman)
+Date: Sun, 17 Apr 2011 08:16:39 -0700
+Subject: [rust-dev] cost/benefits of tasks
+In-Reply-To: <9FA89459-55A4-4786-BB7C-EE2225F95CBE@mozilla.com>
+References: <4DA791D9.3060304@mozilla.com> <4DA7A847.2030703@mozilla.com>
+	<BANLkTimDbFF=CwuuhVnpcPizc0u7mut0ww@mail.gmail.com>
+	<4DA850C6.5080502@mozilla.com>
+	<BANLkTinXc_NnJDEucDD7P8_DZM+GsWxP4Q@mail.gmail.com>
+	<4DA8609B.3030003@mozilla.com>
+	<BANLkTinT_YMAKoxEJnyo1iS+DDNSNRSy+w@mail.gmail.com>
+	<E0E2E0C8-0FB6-400C-8A00-BDAE9E3288AB@mozilla.com>
+	<4DA9ACF4.7020900@mozilla.com>
+	<C6854942-33E9-47EF-866C-FB85CA4C181C@mozilla.com>
+	<BANLkTiknfkKhZuWYcx5DywwghVpYQwDqxg@mail.gmail.com>
+	<746F08CB-14BB-4478-B46A-D6AC69A3B136@mozilla.com>
+	<BANLkTinEk7VndEfORQHRiXJDwxrrOo8SYg@mail.gmail.com>
+	<9FA89459-55A4-4786-BB7C-EE2225F95CBE@mozilla.com>
+Message-ID: <7DD4768B-8E30-4DDD-A534-0FD7EA7D2295@mozilla.com>
+
+Chatting with Marijn on IRC, I think he's probably right that the tricks in the paper are focused on making continuations copyable, and I guess there's not much tricky that needs to be said about moving a continuation (as opposed to copying).
+
+Dave
+
+On Apr 17, 2011, at 7:17 AM, David Herman wrote:
+
+> I should have distinguished one-shot continuations and general continuations. I take it that's the distinction you're making? Task migration still sounds to me like it's equivalent to the former. You're right, though, that duplicating continuations would be problematic for Rust's memory model and type system.
+> 
+> Anyway, I wasn't trying to advocate for the addition of new language features, just suggesting that some of the implementation techniques for continuations might be useful for task migration. I should also add that they can be helpful for resizable stacks, too, which have many of the same implementation challenges as continuations.
+> 
+>> Scheme's dynamic-wind is a cute, but utterly unsatisfactory, alternative.
+> 
+> I didn't propose it (and there's no need to be condescending). I think you're arguing with straw-men. I'm not trying to shove Scheme into Rust. All I did was point to a paper with some implementation techniques for runtimes.
+> 
+> Dave
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From respindola at mozilla.com  Sun Apr 17 13:30:40 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sun, 17 Apr 2011 16:30:40 -0400
+Subject: [rust-dev] Integer overflow checking
+In-Reply-To: <4DA9CA42.7090604@mozilla.com>
+References: <4DA9352B.4000706@mozilla.com>	<4DA93588.1030007@mozilla.com>	<3120E5FA-176C-4603-90FD-644738D71867@mozilla.org>	<B74CA39B-F79F-477A-BBCE-DDB68A66B349@mozilla.com>	<4DA9AB6A.90106@mozilla.com>
+	<4DA9CA42.7090604@mozilla.com>
+Message-ID: <4DAB4DF0.4040107@mozilla.com>
+
+> These scenarios result in the loss of precision (overflow errors can be
+> delayed), but since task failure is non-recoverable precision doesn't
+> seem to me to be that important anyway.
+
+Yes, that should help. Since we don't have shared mutable state there is 
+more opportunity to delay the checks. Are destructors allowed to have 
+side effects like sending messages in a channel? If they are we could 
+still build crazy cases like sending a partially computed sum of two 
+arrays via a channel.
+
+> Patrick
+
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Sun Apr 17 13:39:49 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sun, 17 Apr 2011 16:39:49 -0400
+Subject: [rust-dev] Integer overflow checking
+In-Reply-To: <4DA9C510.1050609@mozilla.com>
+References: <4DA9352B.4000706@mozilla.com> <4DA9A717.3040204@mozilla.com>
+	<4DA9C510.1050609@mozilla.com>
+Message-ID: <4DAB5015.3020305@mozilla.com>
+
+On 11-04-16 12:34 PM, Patrick Walton wrote:
+> On 04/16/2011 07:26 AM, Rafael ?vila de Esp?ndola wrote
+>> Please turn it off by default for user code.
+>
+> But that would seem to defeat the purpose. Performance-sensitive code
+> could be marked unchecked, but by default it'd be safe.
+
+Well, it defeats *a* purpose :-)
+
+Having it off by default turns it into a debug feature or some extra 
+safety check for critical parts of the code.
+
+My first thought was that having it on by default would be a problem 
+because it would then be legal for code to depend on it being on. This 
+is a similar problem with what happens in c++ with -fno-exceptions. If 
+you want your code to be portable, you have to not use exceptions but 
+still work if they are enabled.
+
+In a second thought, integer overflow does look to be a more isolated 
+property. This is particularly if we don't put the overflow check in a 
+command line option, but in a source level construct.
+
+So I guess it is OK to have it on by default, as long as it we are sure 
+it interoperates nicely with areas that have it disabled.
+
+> Patrick
+
+Cheers,
+Rafael
+
+
+From pwalton at mozilla.com  Mon Apr 18 17:42:08 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Mon, 18 Apr 2011 17:42:08 -0700
+Subject: [rust-dev] Integer overflow checking
+In-Reply-To: <4DAB4DF0.4040107@mozilla.com>
+References: <4DA9352B.4000706@mozilla.com>	<4DA93588.1030007@mozilla.com>	<3120E5FA-176C-4603-90FD-644738D71867@mozilla.org>	<B74CA39B-F79F-477A-BBCE-DDB68A66B349@mozilla.com>	<4DA9AB6A.90106@mozilla.com>	<4DA9CA42.7090604@mozilla.com>
+	<4DAB4DF0.4040107@mozilla.com>
+Message-ID: <4DACDA60.50809@mozilla.com>
+
+On 4/17/11 1:30 PM, Rafael ?vila de Esp?ndola wrote:
+> Yes, that should help. Since we don't have shared mutable state there is
+> more opportunity to delay the checks. Are destructors allowed to have
+> side effects like sending messages in a channel?
+
+I think we have to allow them to. Otherwise you couldn't e.g. close a 
+file in a destructor.
+
+> If they are we could
+> still build crazy cases like sending a partially computed sum of two
+> arrays via a channel.
+
+That's true. But I think we can avoid this unless the programmer 
+actually allocates a resource during a loop we would like to 
+autovectorize. Resources are only allowed to close over immutable 
+values, so the only way a resource could refer to the partially computed 
+result would be if the resource was constructed during the loop.
+
+Patrick
+
+From graydon at mozilla.com  Wed Apr 20 00:02:35 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 20 Apr 2011 00:02:35 -0700
+Subject: [rust-dev] stage1/rustc builds
+Message-ID: <4DAE850B.7050005@mozilla.com>
+
+After that last change fixing the logging scope context bug, looks like 
+stage1/rustc builds. Just shy of midnight :)
+
+Takes almost an hour on my buildhost, and generates a 17mb bitcode file, 
+so obviously we need to do some tuning.
+
+But it builds!
+
+-Graydon
+
+From graydon at mozilla.com  Wed Apr 20 00:12:34 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 20 Apr 2011 00:12:34 -0700
+Subject: [rust-dev] stage1/rustc builds
+In-Reply-To: <4DAE850B.7050005@mozilla.com>
+References: <4DAE850B.7050005@mozilla.com>
+Message-ID: <4DAE8762.2090503@mozilla.com>
+
+On 20/04/2011 12:02 AM, Graydon Hoare wrote:
+
+> But it builds!
+
+Runs, even:
+
+graydon at rust-dev:~/src/rust/build$ ls -l stage1
+total 61108
+-rwxr-xr-x 1 graydon graydon  8424476 Apr 20 07:05 rustc
+-rwxr-xr-x 1 graydon graydon 17713972 Apr 20 06:45 rustc.bc
+-rw-r--r-- 1 graydon graydon 36353594 Apr 20 07:03 rustc.s
+graydon at rust-dev:~/src/rust/build$ stage1/rustc
+This is the rust 'self-hosted' compiler.
+The one written in rust.
+It is currently incomplete.
+You may want rustboot instead, the compiler next door.
+usage: stage1/rustc [options] <input>
+
+options:
+
+     -o <filename>      write output to <filename>
+     -nowarn            suppress wrong-compiler warning
+     -glue              generate glue.bc file
+     -shared            compile a shared-library crate
+     -pp                pretty-print the input instead of compiling
+     -ls                list the symbols defined by a crate file
+     -L <path>          add a directory to the library search path
+     -noverify          suppress LLVM verification step (slight speedup)
+     -h                 display this message
+
+rt: ---
+rt: 45a8:main:main:                   rust: error: no input filename
+rt: 45a8:main:main:                   upcall fail 'explicit failure', 
+../src/comp/driver/session.rs:55
+rt: 45a8:main:                        domain main @0xa69acf8 root task 
+failed
+
+Unfortunately it doesn't quite manage to build itself to stage2 yet. But 
+give it time, it's only a few minutes old.
+
+-Graydon
+
+From dherman at mozilla.com  Wed Apr 20 00:54:17 2011
+From: dherman at mozilla.com (David Herman)
+Date: Wed, 20 Apr 2011 02:54:17 -0500
+Subject: [rust-dev] stage1/rustc builds
+In-Reply-To: <4DAE8762.2090503@mozilla.com>
+References: <4DAE850B.7050005@mozilla.com> <4DAE8762.2090503@mozilla.com>
+Message-ID: <D2ED5190-E196-489E-9B34-ADA5E553E53A@mozilla.com>
+
+A huge milestone! Great, great news. Congratulations to all of you for your incredible work.
+
+Dave
+
+On Apr 20, 2011, at 2:12 AM, Graydon Hoare wrote:
+
+> On 20/04/2011 12:02 AM, Graydon Hoare wrote:
+> 
+>> But it builds!
+> 
+> Runs, even:
+> 
+> graydon at rust-dev:~/src/rust/build$ ls -l stage1
+> total 61108
+> -rwxr-xr-x 1 graydon graydon  8424476 Apr 20 07:05 rustc
+> -rwxr-xr-x 1 graydon graydon 17713972 Apr 20 06:45 rustc.bc
+> -rw-r--r-- 1 graydon graydon 36353594 Apr 20 07:03 rustc.s
+> graydon at rust-dev:~/src/rust/build$ stage1/rustc
+> This is the rust 'self-hosted' compiler.
+> The one written in rust.
+> It is currently incomplete.
+> You may want rustboot instead, the compiler next door.
+> usage: stage1/rustc [options] <input>
+> 
+> options:
+> 
+>    -o <filename>      write output to <filename>
+>    -nowarn            suppress wrong-compiler warning
+>    -glue              generate glue.bc file
+>    -shared            compile a shared-library crate
+>    -pp                pretty-print the input instead of compiling
+>    -ls                list the symbols defined by a crate file
+>    -L <path>          add a directory to the library search path
+>    -noverify          suppress LLVM verification step (slight speedup)
+>    -h                 display this message
+> 
+> rt: ---
+> rt: 45a8:main:main:                   rust: error: no input filename
+> rt: 45a8:main:main:                   upcall fail 'explicit failure', ../src/comp/driver/session.rs:55
+> rt: 45a8:main:                        domain main @0xa69acf8 root task failed
+> 
+> Unfortunately it doesn't quite manage to build itself to stage2 yet. But give it time, it's only a few minutes old.
+> 
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From peterhull90 at gmail.com  Wed Apr 20 01:25:31 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Wed, 20 Apr 2011 09:25:31 +0100
+Subject: [rust-dev] stage1/rustc builds
+In-Reply-To: <4DAE850B.7050005@mozilla.com>
+References: <4DAE850B.7050005@mozilla.com>
+Message-ID: <BANLkTi=2owbE8Be0mVCm=hSK=4EChfhALQ@mail.gmail.com>
+
+On Wed, Apr 20, 2011 at 8:02 AM, Graydon Hoare <graydon at mozilla.com> wrote:
+> But it builds!
+Congratulations to Graydon and all the team!
+
+Pete
+
+From respindola at mozilla.com  Wed Apr 20 06:19:58 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Wed, 20 Apr 2011 09:19:58 -0400
+Subject: [rust-dev] stage1/rustc builds
+In-Reply-To: <4DAE850B.7050005@mozilla.com>
+References: <4DAE850B.7050005@mozilla.com>
+Message-ID: <4DAEDD7E.3090003@mozilla.com>
+
+On 11-04-20 3:02 AM, Graydon Hoare wrote:
+> After that last change fixing the logging scope context bug, looks like
+> stage1/rustc builds. Just shy of midnight :)
+>
+> Takes almost an hour on my buildhost, and generates a 17mb bitcode file,
+> so obviously we need to do some tuning.
+
+Awesome! Is the 17MB with optimizations enabled?
+
+> But it builds!
+>
+> -Graydon
+
+Cheers,
+Rafael
+
+
+From graydon at mozilla.com  Wed Apr 20 07:34:50 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 20 Apr 2011 07:34:50 -0700
+Subject: [rust-dev] stage1/rustc builds
+In-Reply-To: <4DAEDD7E.3090003@mozilla.com>
+References: <4DAE850B.7050005@mozilla.com> <4DAEDD7E.3090003@mozilla.com>
+Message-ID: <4DAEEF0A.4000303@mozilla.com>
+
+On 20/04/2011 6:19 AM, Rafael ?vila de Esp?ndola wrote:
+> On 11-04-20 3:02 AM, Graydon Hoare wrote:
+>> After that last change fixing the logging scope context bug, looks like
+>> stage1/rustc builds. Just shy of midnight :)
+>>
+>> Takes almost an hour on my buildhost, and generates a 17mb bitcode file,
+>> so obviously we need to do some tuning.
+>
+> Awesome! Is the 17MB with optimizations enabled?
+
+I honestly don't remember. The makefile rules are off as well, I had to 
+manually run a few steps. I'll tidy this mess up some more today.
+
+-Graydon
+
+From brendan at mozilla.org  Wed Apr 20 11:53:00 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Wed, 20 Apr 2011 11:53:00 -0700
+Subject: [rust-dev] stage1/rustc builds
+In-Reply-To: <4DAEEF0A.4000303@mozilla.com>
+References: <4DAE850B.7050005@mozilla.com> <4DAEDD7E.3090003@mozilla.com>
+	<4DAEEF0A.4000303@mozilla.com>
+Message-ID: <C9A291DE-2A18-434D-BF10-D8139787FD6B@mozilla.org>
+
+Congrats and huzzahs!
+
+/be
+
+On Apr 20, 2011, at 7:34 AM, Graydon Hoare wrote:
+
+> On 20/04/2011 6:19 AM, Rafael ?vila de Esp?ndola wrote:
+>> On 11-04-20 3:02 AM, Graydon Hoare wrote:
+>>> After that last change fixing the logging scope context bug, looks like
+>>> stage1/rustc builds. Just shy of midnight :)
+>>> 
+>>> Takes almost an hour on my buildhost, and generates a 17mb bitcode file,
+>>> so obviously we need to do some tuning.
+>> 
+>> Awesome! Is the 17MB with optimizations enabled?
+> 
+> I honestly don't remember. The makefile rules are off as well, I had to manually run a few steps. I'll tidy this mess up some more today.
+> 
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From jmuizelaar at mozilla.com  Thu Apr 21 13:14:45 2011
+From: jmuizelaar at mozilla.com (Jeff Muizelaar)
+Date: Thu, 21 Apr 2011 16:14:45 -0400
+Subject: [rust-dev] Integer overflow checking
+Message-ID: <C74DFC0E-854A-4BC4-9931-E4B8953EF2E0@mozilla.com>
+
+(Sorry about not threading, I wasn't subscribed when the original thread happened)
+
+Regardless of the what the default behaviour ends up as. I would suggest having the different semantics associated with a different integer type. In Mozilla code we have a CheckedInt type which has behaviour that's similar to floating point and it has worked out quite well so far.
+
+-Jeff
+
+From graydon at mozilla.com  Sun Apr 24 13:19:46 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 24 Apr 2011 13:19:46 -0700
+Subject: [rust-dev] status
+Message-ID: <4DB485E2.6020908@mozilla.com>
+
+Thought everyone following along might want an update:
+
+boot/rustboot builds a stage0/rustc that builds a functional 
+stage1/rustc that can, itself, build and pass about 60% of the testsuite 
+(174 tests); we cannot yet build stage1/libstd, nor stage2/rustc (which 
+will be a candidate "bootstrapped" image, likely but not necessarily a 
+fixpoint; we'll have to build stage3 to check that).
+
+So we're close, but not quite there. A few more bugs to shake out. It is 
+not playing nice.
+
+-Graydon
+
+From pwalton at mozilla.com  Sun Apr 24 16:13:50 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sun, 24 Apr 2011 16:13:50 -0700
+Subject: [rust-dev] status
+In-Reply-To: <4DB485E2.6020908@mozilla.com>
+References: <4DB485E2.6020908@mozilla.com>
+Message-ID: <4DB4AEAE.5040401@mozilla.com>
+
+On 04/24/2011 01:19 PM, Graydon Hoare wrote:
+> Thought everyone following along might want an update:
+>
+> boot/rustboot builds a stage0/rustc that builds a functional
+> stage1/rustc that can, itself, build and pass about 60% of the testsuite
+> (174 tests); we cannot yet build stage1/libstd, nor stage2/rustc (which
+> will be a candidate "bootstrapped" image, likely but not necessarily a
+> fixpoint; we'll have to build stage3 to check that).
+
+Wonderful news! That's much better than I had anticipated.
+
+Patrick
+
+From marijnh at gmail.com  Tue Apr 26 11:34:13 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 26 Apr 2011 20:34:13 +0200
+Subject: [rust-dev] Heads up: Rustc command line argument convention change
+Message-ID: <BANLkTikEFEFDKTLVxTBZLzjVV027J=Mh5A@mail.gmail.com>
+
+All 'long' arguments now take two dashes, so '--shared', not
+'-shared'. This makes us less GCC-style and more proper-getopt-style.
+
+(The change was made in order to be able to use the new std.GetOpts
+library in rustc.rs.)
+
+From graydon at mozilla.com  Fri Apr 29 00:09:59 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 29 Apr 2011 00:09:59 -0700
+Subject: [rust-dev] fixpoint
+Message-ID: <4DBA6447.3020100@mozilla.com>
+
+graydon at rust-dev:~/src/rust/build$ sha1sum stage{0,1,2}/rustc
+113389b63f05a9928943608466ab81dded0da03e  stage0/rustc
+39932ac4888717ccf91f95178a347aa24445b45c  stage1/rustc
+39932ac4888717ccf91f95178a347aa24445b45c  stage2/rustc
+
+We're done. Congratulations to pcwalton, who landed the final commit:
+
+https://github.com/graydon/rust/commit/6daf440037cb10baab332fde2b471712a3a42c76
+
+(Now we just need a whole lot of Makefile machinery, optimization, and 
+an archive host for the snapshots.)
+
+-Graydon
+
+From gal at mozilla.com  Fri Apr 29 00:16:27 2011
+From: gal at mozilla.com (Andreas Gal)
+Date: Fri, 29 Apr 2011 00:16:27 -0700
+Subject: [rust-dev] fixpoint
+In-Reply-To: <4DBA6447.3020100@mozilla.com>
+References: <4DBA6447.3020100@mozilla.com>
+Message-ID: <FB602E18-CE03-4DB7-AFDD-61DE8692F802@mozilla.com>
+
+
+Congrats! What are the build times these days, out of curiosity?
+
+Andreas
+
+On Apr 29, 2011, at 12:09 AM, Graydon Hoare wrote:
+
+> graydon at rust-dev:~/src/rust/build$ sha1sum stage{0,1,2}/rustc
+> 113389b63f05a9928943608466ab81dded0da03e  stage0/rustc
+> 39932ac4888717ccf91f95178a347aa24445b45c  stage1/rustc
+> 39932ac4888717ccf91f95178a347aa24445b45c  stage2/rustc
+> 
+> We're done. Congratulations to pcwalton, who landed the final commit:
+> 
+> https://github.com/graydon/rust/commit/6daf440037cb10baab332fde2b471712a3a42c76
+> 
+> (Now we just need a whole lot of Makefile machinery, optimization, and an archive host for the snapshots.)
+> 
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From graydon at mozilla.com  Fri Apr 29 00:23:55 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 29 Apr 2011 00:23:55 -0700
+Subject: [rust-dev] fixpoint
+In-Reply-To: <FB602E18-CE03-4DB7-AFDD-61DE8692F802@mozilla.com>
+References: <4DBA6447.3020100@mozilla.com>
+	<FB602E18-CE03-4DB7-AFDD-61DE8692F802@mozilla.com>
+Message-ID: <4DBA678B.2000609@mozilla.com>
+
+On 29/04/2011 12:16 AM, Andreas Gal wrote:
+>
+> Congrats! What are the build times these days, out of curiosity?
+
+Still pretty bad. It's not an hour anymore, but it's still ~15 minutes 
+on a fast opteron for stage1 -> stage2.
+
+But:
+
+(a) We know that 6.8mb of the 12mb binary coming out the other side is 
+mostly-redundant structural typing metadata, which I have a wip patch in 
+my stash to eliminate all the redundancy of. Just need to fix a little 
+indexing bug in it.
+
+(b) We have *just* got to the point where we can interact with the llvm 
+optimizer and runtime interface without risk of breaking rustboot 
+compatibility. We've been largely holding still on all fronts while 
+completing this step.
+
+So .. I expect that number to fall substantially in the next little while.
+
+-Graydon
+
+From lkuper at mozilla.com  Fri Apr 29 00:23:50 2011
+From: lkuper at mozilla.com (Lindsey Kuper)
+Date: Fri, 29 Apr 2011 00:23:50 -0700
+Subject: [rust-dev] fixpoint
+In-Reply-To: <4DBA6447.3020100@mozilla.com>
+References: <4DBA6447.3020100@mozilla.com>
+Message-ID: <BANLkTimEAGUQa7cRecB2xyecHq8CU_2eJw@mail.gmail.com>
+
+On Fri, Apr 29, 2011 at 12:09 AM, Graydon Hoare <graydon at mozilla.com> wrote:
+> graydon at rust-dev:~/src/rust/build$ sha1sum stage{0,1,2}/rustc
+> 113389b63f05a9928943608466ab81dded0da03e ?stage0/rustc
+> 39932ac4888717ccf91f95178a347aa24445b45c ?stage1/rustc
+> 39932ac4888717ccf91f95178a347aa24445b45c ?stage2/rustc
+
+Congratulations, Graydon, Patrick, and everyone on the team!  This is
+so cool, I have the chills.
+
+Lindsey
+
+From respindola at mozilla.com  Fri Apr 29 06:25:44 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Fri, 29 Apr 2011 09:25:44 -0400
+Subject: [rust-dev] fixpoint
+In-Reply-To: <4DBA6447.3020100@mozilla.com>
+References: <4DBA6447.3020100@mozilla.com>
+Message-ID: <4DBABC58.8070205@mozilla.com>
+
+On 11-04-29 3:09 AM, Graydon Hoare wrote:
+> graydon at rust-dev:~/src/rust/build$ sha1sum stage{0,1,2}/rustc
+> 113389b63f05a9928943608466ab81dded0da03e stage0/rustc
+> 39932ac4888717ccf91f95178a347aa24445b45c stage1/rustc
+> 39932ac4888717ccf91f95178a347aa24445b45c stage2/rustc
+>
+> We're done. Congratulations to pcwalton, who landed the final commit:
+>
+> https://github.com/graydon/rust/commit/6daf440037cb10baab332fde2b471712a3a42c76
+>
+>
+> (Now we just need a whole lot of Makefile machinery, optimization, and
+> an archive host for the snapshots.)
+
+Cool! You should write a blog post!
+
+> -Graydon
+
+Cheers,
+Rafael
+
+From dherman at mozilla.com  Fri Apr 29 06:28:49 2011
+From: dherman at mozilla.com (Dave Herman)
+Date: Fri, 29 Apr 2011 06:28:49 -0700
+Subject: [rust-dev] fixpoint
+In-Reply-To: <4DBA6447.3020100@mozilla.com>
+References: <4DBA6447.3020100@mozilla.com>
+Message-ID: <01e5b1fa-36e2-4f8a-944b-d3f8a3e6135d@email.android.com>
+
+Magicians, the lot of you. Congratulations!
+
+How's that for RSN, sayrer? ;-)
+
+Dave
+-- 
+Sent from my Android phone with K-9 Mail. Please excuse my brevity.
+
+Graydon Hoare <graydon at mozilla.com> wrote:
+
+graydon at rust-dev:~/src/rust/build$ sha1sum stage{0,1,2}/rustc 113389b63f05a9928943608466ab81dded0da03e stage0/rustc 39932ac4888717ccf91f95178a347aa24445b45c stage1/rustc 39932ac4888717ccf91f95178a347aa24445b45c stage2/rustc We're done. Congratulations to pcwalton, who landed the final commit: https://github.com/graydon/rust/commit/6daf440037cb10baab332fde2b471712a3a42c76 (Now we just need a whole lot of Makefile machinery, optimization, and an archive host for the snapshots.) -Graydon_____________________________________________
+Rust-dev mailing list Rust-dev at mozilla.org https://mail.mozilla.org/listinfo/rust-dev 
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110429/da89aebf/attachment.html>
+

@@ -1,0 +1,2690 @@
+From munificentbob at gmail.com  Wed Dec  1 12:04:06 2010
+From: munificentbob at gmail.com (Bob Nystrom)
+Date: Wed, 1 Dec 2010 12:04:06 -0800
+Subject: [rust-dev] a little friday-norming syntax bikeshedding
+Message-ID: <AANLkTin5HZtGkFQSsNwt0mmeV_Jkw8JnJ+Yb+qpijEkc@mail.gmail.com>
+
+I noticed this didn't seem to get any responses, so I figured I'd throw some
+ideas in:
+
+> The concept of a statement is a little bit arbitrary. There are
+> languages that do not have such a concept, but they're few; most
+> languages have *some* concept of a form shorter-than-a-program that
+> represents a single "chunk" of declaration-or-computation.
+
+I thought Ruby, Smalltalk, Scheme, Lisp, and Io all lacked statements, so it
+doesn't seem that uncommon to me. I'm not sure but maybe even the ML
+languages fall into this?
+
+Personally, I dislike statements so I'd be in favor of Rust or any other
+language ditching them entirely. I'm working on a little language, magpie,
+that's imperative but doesn't have statements. So far, it's been working
+fine.
+
+>  In a language with a first class unit-value like rust, the concept
+becomes blurrier:
+> any "just for side-effects" execution can also be considered as a
+unit-value expression.
+
+Yup. Isn't that what most ML languages do? The only tricky part is handling
+expressions that do non-local flow control, like "return", "break", and
+"throw". For magpie, I just defined another special type "Never" that is the
+return type for those expressions. The type-checker then validates that that
+type is never used in a place where it doesn't make sense. That lets you
+prevent things like:
+
+    foo(return 123); // meaningless since "foo" can never be called
+    // (hence the name "Never" for the return expression's type)
+
+That lets me do basic reachability analysis without having to add statements
+to the language.
+
+> - Blocks
+
+Those can just become a "sequence" expression that evaluates a series of
+expressions, discards intermediate results, and returns the last. Pretty
+much "begin" in Scheme, if I remember right.
+
+> - All 'movement' operations (assignment, send, receive) that have a
+guaranteed side-effect.
+
+It can be nice to be able to compose assignment expressions: if (foo =
+bar()) { /* use foo */ }, but it's also a source of errors. <shrug>
+
+Send can be a unit-valued expression, and receive seems like you'd want it
+to be an expression anyway, unless its semantics are fixed to always receive
+into some variable?
+
+> - All branches (if, alt, alt type, etc.)
+
+I like being able to do:
+
+    let foo = if bar then 123 else 345
+
+It reduces the number of times I need to declare a variable without an
+initializer, which is always a good thing in my book. I prefer the former
+over:
+
+    let int foo
+    if bar then foo = 123 else foo = 345
+
+If you do go down this path, ad-hoc union types can be useful to allow the
+branches to return different types:
+
+    let foo = if bar then 123 else "string"
+
+Normally, that would be a compile error. If you have unions, it could just
+be that foo's type is "int | string". This is what Typed Scheme does as well
+as other languages that try to do static analyis of dynamic languages.
+
+> - All loops (while, do-while, for, for-each)
+
+You could always just make them unit-valued expressions. If you add 'else'
+clauses to loops (which could be neat!) then they could actually have a real
+return type.
+
+> - All non-local jumps (ret, put, break, cont).
+
+I'm handling that with a "Never" type (essentially a bottom type). Seems to
+work OK and lets you do some interesting things like:
+
+    fn alwaysThrows(-> Never) // throw an exception...
+
+    fn foo() {
+        alwaysThrows();
+        bar(); error: unreachable
+   }
+
+In other words, users can define their own abstractions that may also do
+non-local flow and still be able to do reachability analysis on it for free.
+
+> part of it was my own bias against
+> programs that nest too deeply rather than just using more lines of text.
+
+I agree completely. From my experience, ditching statements hasn't led to
+painfully nested Lisp-style mega-expressions in my code. For the most part,
+I still treat it as if many things are statement-like. I just have more
+flexibility if I want it, and it makes the interpreter simpler to implement.
+
+It also plays nicely with metaprogramming: it's easier to have things like
+macros that expand to a chunk of code inserted in the middle of an AST if
+you don't have to worry about distinguishing between whether a statement or
+an expression is expected there.
+
+> auto x = break + type t = int;
+
+Reachability analysis and a bottom or never type would address that for you.
+That would be a compile error since you can statically tell that the "+"
+will never be evaluated so it's unreachable.
+
+> I think it *might* be painting us into some corners syntactically; but it
+is plausible.
+
+One concern would be C-style declarations where a type name is the only
+indicator that you're declaring a variable. Since Rust is using 'let', I
+think it's OK there. I've found in magpie that making most expressions start
+with a keyword ('let', 'if', etc.) keeps the grammar fairly comprehensible.
+
+Anyway, hopefully that's helpful for you. Keep up the good work, I'm really
+excited about the language.
+
+Cheers,
+- bob
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101201/1bd20088/attachment.html>
+
+From graydon at mozilla.com  Wed Dec  1 15:05:16 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 01 Dec 2010 15:05:16 -0800
+Subject: [rust-dev] a little friday-norming syntax bikeshedding
+In-Reply-To: <AANLkTin5HZtGkFQSsNwt0mmeV_Jkw8JnJ+Yb+qpijEkc@mail.gmail.com>
+References: <AANLkTin5HZtGkFQSsNwt0mmeV_Jkw8JnJ+Yb+qpijEkc@mail.gmail.com>
+Message-ID: <4CF6D4AC.7010503@mozilla.com>
+
+On 10-12-01 12:04 PM, Bob Nystrom wrote:
+
+> Anyway, hopefully that's helpful for you. Keep up the good work, I'm really
+> excited about the language.
+
+Thanks. It is helpful, yes. The approach we settled on trying looks 
+largely like what you've outlined here; we're mostly rearranging it into 
+an expression language with syntax carefully ordered to behave exactly 
+like statements, if you choose to write that way. Assuming most people will.
+
+Not sure if we'll try to merge reachability and typechecking a la your 
+proposed Never type, but it's an interesting suggestion. Might go there. 
+We have a little reworking of the typestate algorithm ahead to 
+compensate for the change to deeper exprs.
+
+We *are* retaining a 'stmt' AST node but it'll wind up just as the 
+tagged union of 'decl' and 'expr'. We're not even going to parse
+
+    "a + type b = int;"
+
+for example; decls only live at block-top level, not nested in exprs. 
+This is mostly just to make the scope rules maximally obvious. A decl is 
+in scope for the block it's declared in. I don't think it's much of a 
+limitation since block is an expr; you could do "a + { type b = int; };" 
+and mean the same thing; really it's just a rule about being unambiguous 
+about decl scopes.
+
+(Dherman suggested that if you look carefully, Scheme makes this 
+distinction too; I haven't looked closely enough to be sure so I will 
+not claim it is so but I recall a distinction at compilation-unit or 
+module top-level in various lisps. I know Ocaml has it: note the 
+'definition' production in their AST :)
+
+-Graydon
+
+From bob at stuffwithstuff.com  Wed Dec  1 16:54:40 2010
+From: bob at stuffwithstuff.com (Bob Nystrom)
+Date: Wed, 1 Dec 2010 16:54:40 -0800
+Subject: [rust-dev] a little friday-norming syntax bikeshedding
+In-Reply-To: <4CF6D4AC.7010503@mozilla.com>
+References: <AANLkTin5HZtGkFQSsNwt0mmeV_Jkw8JnJ+Yb+qpijEkc@mail.gmail.com>
+	<4CF6D4AC.7010503@mozilla.com>
+Message-ID: <AANLkTi=x-6NdxD=-RWLQRELsbP6cJ6ZmX1netd50C-dD@mail.gmail.com>
+
+On Wed, Dec 1, 2010 at 3:05 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+>   "a + type b = int;"
+>
+> for example; decls only live at block-top level, not nested in exprs. This
+> is mostly just to make the scope rules maximally obvious. A decl is in scope
+> for the block it's declared in. I don't think it's much of a limitation
+> since block is an expr; you could do "a + { type b = int; };" and mean the
+> same thing; really it's just a rule about being unambiguous about decl
+> scopes.
+>
+
+Ah, yes. My mind has been mostly in a dynamic mindset lately (where
+definitions are just another thing you can do imperatively) so I didn't
+think about that. Type definitions are definitely special, as are a couple
+of other things I can think of like package management stuff ("import",
+"#include", or whatever is appropriate) where it doesn't make sense to allow
+them anywhere.
+
+
+> I know Ocaml has it: note the 'definition' production in their AST :)
+>
+
+Thanks, that's a good reference. I was thinking about "let" being an
+expression, but didn't think about "type" or other definitions.
+
+- bob
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101201/52c448fb/attachment.html>
+
+From graham.fawcett at gmail.com  Thu Dec  2 13:19:05 2010
+From: graham.fawcett at gmail.com (Graham Fawcett)
+Date: Thu, 2 Dec 2010 16:19:05 -0500
+Subject: [rust-dev] issue 42: move yield and join into stdlib
+Message-ID: <AANLkTikpCz4Mz1sRppbUutwPXKoKsLJqMZUbEW-Kuu02@mail.gmail.com>
+
+Hi folks,
+
+While I'm waiting for something at $WORK to compile, I thought I'd
+take a crack at easy issue #42, moving yield and join into the
+standard library.
+
+After removing the yield and join keywords from the front/middle ends,
+is it enough to just add this to std._task:
+
+ native "rust" mod rustrt {
+     fn task_sleep(uint time_in_us);
++    fn upcall_join(task t);
++    fn upcall_yield();
+ }
+
++fn join(task t) {
++    ret rustrt.upcall_join(t);
++}
++
++fn yield() {
++    ret rustrt.upcall_yield();
++}
+
+join() seems to work; I don't know how to test yield().
+
+I see that nothing else in the stdlib calls an upcall_ function; is
+this bad form? Should I add task_yield and task_join to
+rust_builtin.cpp instead, the way task_sleep is handled?
+
+Best,
+Graham
+
+From graydon at mozilla.com  Thu Dec  2 13:54:09 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 02 Dec 2010 13:54:09 -0800
+Subject: [rust-dev] issue 42: move yield and join into stdlib
+In-Reply-To: <AANLkTikpCz4Mz1sRppbUutwPXKoKsLJqMZUbEW-Kuu02@mail.gmail.com>
+References: <AANLkTikpCz4Mz1sRppbUutwPXKoKsLJqMZUbEW-Kuu02@mail.gmail.com>
+Message-ID: <4CF81581.4090001@mozilla.com>
+
+On 10-12-02 01:19 PM, Graham Fawcett wrote:
+> Hi folks,
+>
+> While I'm waiting for something at $WORK to compile, I thought I'd
+> take a crack at easy issue #42, moving yield and join into the
+> standard library.
+
+Great! Thanks. I guess it's pretty easy to do now :)
+
+> After removing the yield and join keywords from the front/middle ends,
+> is it enough to just add this to std._task:
+>
+>   native "rust" mod rustrt {
+>       fn task_sleep(uint time_in_us);
+> +    fn upcall_join(task t);
+> +    fn upcall_yield();
+>   }
+>
+> +fn join(task t) {
+> +    ret rustrt.upcall_join(t);
+> +}
+> +
+> +fn yield() {
+> +    ret rustrt.upcall_yield();
+> +}
+
+Might well be enough, yeah. You'll also want to adjust the testcases 
+that twiddle these keywords.
+
+> join() seems to work; I don't know how to test yield().
+
+There are a couple testcases (test/run-pass/yield*.rs) but they don't 
+definitively test working / non-working-ness of the feature. Really it's 
+... *almost* irrelevant as a call: we inject time-based preemption 
+points at loop edges and function calls anyways, and deschedule anything 
+blocked on I/O, do it really only exists if you're interested in 
+"smoothing" execution-interleaving in an unusual context (without 
+adjusting the time-slice). I'm not sure it'll be easy to test in any case.
+
+> I see that nothing else in the stdlib calls an upcall_ function; is
+> this bad form? Should I add task_yield and task_join to
+> rust_builtin.cpp instead, the way task_sleep is handled?
+
+Yeah, probably. The term "upcall" is sort of vestigial from an earlier 
+iteration of the compiler <-> runtime boundary when we weren't using 
+direct stack-switching calls. Upcalls were structured more like syscalls 
+in C, packing arguments into a structure and entering a generic 
+suspend-me-and-dispatch-upcall routine. That's long gone.
+
+What we currently reserve the (dubious) "upcall" term for is "native 
+calls generated by the compiler". So at present, for symmetry with this 
+rule, adding task_* functions to rust_builtin is better. But only 
+because it is sort of uniform and makes the job of future reorganization 
+of naming more obvious.
+
+-Graydon
+
+From graham.fawcett at gmail.com  Fri Dec  3 06:27:34 2010
+From: graham.fawcett at gmail.com (Graham Fawcett)
+Date: Fri, 3 Dec 2010 09:27:34 -0500
+Subject: [rust-dev] issue 42: move yield and join into stdlib
+In-Reply-To: <4CF81581.4090001@mozilla.com>
+References: <AANLkTikpCz4Mz1sRppbUutwPXKoKsLJqMZUbEW-Kuu02@mail.gmail.com>
+	<4CF81581.4090001@mozilla.com>
+Message-ID: <AANLkTikAoSAAmNPz_cMZqQ9Jx5Fcv5gG1VGDMOm6f3rG@mail.gmail.com>
+
+Hi Graydon,
+
+On Thu, Dec 2, 2010 at 4:54 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+> On 10-12-02 01:19 PM, Graham Fawcett wrote:
+>>
+>> Hi folks,
+>>
+>> While I'm waiting for something at $WORK to compile, I thought I'd
+>> take a crack at easy issue #42, moving yield and join into the
+>> standard library.
+>
+> Great! Thanks. I guess it's pretty easy to do now :)
+
+Well, it was a long compile (and I'm not quite done with #42 yet). :)
+
+>> After removing the yield and join keywords from the front/middle ends,
+>> is it enough to just add this to std._task:
+>>
+>> ?native "rust" mod rustrt {
+>> ? ? ?fn task_sleep(uint time_in_us);
+>> + ? ?fn upcall_join(task t);
+>> + ? ?fn upcall_yield();
+>> ?}
+>>
+>> +fn join(task t) {
+>> + ? ?ret rustrt.upcall_join(t);
+>> +}
+>> +
+>> +fn yield() {
+>> + ? ?ret rustrt.upcall_yield();
+>> +}
+>
+> Might well be enough, yeah. You'll also want to adjust the testcases that
+> twiddle these keywords.
+
+Right, I've gone through the test cases too. I notice that some of the
+tests don't run when I "make check." E.g., it runs task-comm-N.rs for
+N in {0,1,4,5,6,7,11,13} but not the others. Is this normal?
+
+It also tries to perform "compile [rustc]" tests, which fail right
+away:
+
+compile [rustc]: test/run-pass/arith-0.rs
+rt: fatal, 'leaked memory in rust main loop (52 objects)' failed,
+rt/memory_region.cpp:99 52 objects
+
+...which I assume is okay? I don't think I broke rustc. :)
+
+>> I see that nothing else in the stdlib calls an upcall_ function; is
+>> this bad form? Should I add task_yield and task_join to
+>> rust_builtin.cpp instead, the way task_sleep is handled?
+>
+> Yeah, probably. The term "upcall" is sort of vestigial from an earlier
+> iteration of the compiler <-> runtime boundary when we weren't using direct
+> stack-switching calls. Upcalls were structured more like syscalls in C,
+> packing arguments into a structure and entering a generic
+> suspend-me-and-dispatch-upcall routine. That's long gone.
+>
+> What we currently reserve the (dubious) "upcall" term for is "native calls
+> generated by the compiler". So at present, for symmetry with this rule,
+> adding task_* functions to rust_builtin is better. But only because it is
+> sort of uniform and makes the job of future reorganization of naming more
+> obvious.
+
+Thanks, that clears things up a lot. OK, I'll add the task_*
+functions.
+
+I started a fork on github. When I'm ready, do you want a pull-request?
+
+Best,
+Graham
+
+>
+> -Graydon
+
+From pwalton at mozilla.com  Fri Dec  3 08:02:37 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 03 Dec 2010 08:02:37 -0800
+Subject: [rust-dev] issue 42: move yield and join into stdlib
+In-Reply-To: <AANLkTikAoSAAmNPz_cMZqQ9Jx5Fcv5gG1VGDMOm6f3rG@mail.gmail.com>
+References: <AANLkTikpCz4Mz1sRppbUutwPXKoKsLJqMZUbEW-Kuu02@mail.gmail.com>	<4CF81581.4090001@mozilla.com>
+	<AANLkTikAoSAAmNPz_cMZqQ9Jx5Fcv5gG1VGDMOm6f3rG@mail.gmail.com>
+Message-ID: <4CF9149D.6000602@mozilla.com>
+
+On 12/3/10 6:27 AM, Graham Fawcett wrote:
+> It also tries to perform "compile [rustc]" tests, which fail right
+> away:
+>
+> compile [rustc]: test/run-pass/arith-0.rs
+> rt: fatal, 'leaked memory in rust main loop (52 objects)' failed,
+> rt/memory_region.cpp:99 52 objects
+>
+> ...which I assume is okay? I don't think I broke rustc. :)
+
+That typically indicates that rustc couldn't find the LLVM library. (We 
+need better error reporting there.) It has to be called 
+libLLVM2.8svn.{so,dll,dylib} and exist somewhere in the current 
+LD_LIBRARY_PATH (or equivalent on your platform).
+
+Patrick
+
+From graham.fawcett at gmail.com  Fri Dec  3 10:31:53 2010
+From: graham.fawcett at gmail.com (Graham Fawcett)
+Date: Fri, 3 Dec 2010 13:31:53 -0500
+Subject: [rust-dev] issue 42: move yield and join into stdlib
+In-Reply-To: <4CF9149D.6000602@mozilla.com>
+References: <AANLkTikpCz4Mz1sRppbUutwPXKoKsLJqMZUbEW-Kuu02@mail.gmail.com>
+	<4CF81581.4090001@mozilla.com>
+	<AANLkTikAoSAAmNPz_cMZqQ9Jx5Fcv5gG1VGDMOm6f3rG@mail.gmail.com>
+	<4CF9149D.6000602@mozilla.com>
+Message-ID: <AANLkTin2sjxnVktZU3c+-u-aZhYLsHMqCygpMKFHfCCE@mail.gmail.com>
+
+On Fri, Dec 3, 2010 at 11:02 AM, Patrick Walton <pwalton at mozilla.com> wrote:
+> On 12/3/10 6:27 AM, Graham Fawcett wrote:
+>>
+>> It also tries to perform "compile [rustc]" tests, which fail right
+>> away:
+>>
+>> compile [rustc]: test/run-pass/arith-0.rs
+>> rt: fatal, 'leaked memory in rust main loop (52 objects)' failed,
+>> rt/memory_region.cpp:99 52 objects
+>>
+>> ...which I assume is okay? I don't think I broke rustc. :)
+>
+> That typically indicates that rustc couldn't find the LLVM library. (We need
+> better error reporting there.) It has to be called
+> libLLVM2.8svn.{so,dll,dylib} and exist somewhere in the current
+> LD_LIBRARY_PATH (or equivalent on your platform).
+
+D'oh, thanks, I had moved my LLVM installation without reconfiguring.
+The memory_region error is no more.
+
+Graham
+
+>
+> Patrick
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+From respindola at mozilla.com  Thu Dec 16 09:30:59 2010
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Thu, 16 Dec 2010 09:30:59 -0800
+Subject: [rust-dev] Could mutable non-GC point to GC?
+Message-ID: <4D0A4CD3.1010209@mozilla.com>
+
+The manual says that non-GC cannot point to GC and that Immutable cannot 
+point to mutable.
+
+Not allowing immutable not point to mutable is easy to understand as it 
+makes sure that immutable is really immutable and you can for example 
+copy it to another task.
+
+But why do we restrict that mutable non-GC data cannot point to GC? An 
+optimization so that the garbage collector only has to look at the GC layer?
+
+Cheers,
+Rafael
+
+From graydon at mozilla.com  Thu Dec 16 13:03:30 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 16 Dec 2010 13:03:30 -0800
+Subject: [rust-dev] Could mutable non-GC point to GC?
+In-Reply-To: <4D0A4CD3.1010209@mozilla.com>
+References: <4D0A4CD3.1010209@mozilla.com>
+Message-ID: <4D0A7EA2.7090805@mozilla.com>
+
+On 10-12-16 09:30 AM, Rafael ?vila de Esp?ndola wrote:
+
+> But why do we restrict that mutable non-GC data cannot point to GC? An
+> optimization so that the garbage collector only has to look at the GC
+> layer?
+
+To ensure that the division between GC and non-GC has meaning. The cycle 
+must be broken somewhere!
+
+GC memory can point to non-GC. If non-GC could, in turn, point to GC, 
+then it would be possible to form a reference cycle with GC memory: 
+non-GC memory could wind up owning itself. Meaning: destruction order 
+would become non-deterministic.
+
+I think. Possibly we the determination of non-GC-ness of mutable memory 
+(involving inspection of the transitive closure of its structure) could 
+be refined in such a way as to differentiate the two. But with the 
+current non-GC-ness definition ("no mutable boxes holding recursive 
+tags") it won't work. We'd need to ... I guess be able to prove that the 
+GC-memory subgraphs within a non-GC type do not permit formation of 
+cycles between themselves. A vector of cyclic lists is itself acyclic, 
+say; so long as they're not cyclic lists of vectors of cyclic lists :)
+
+Seems potentially harder to formalize. If you're really interested in 
+studying the problem though, don't let me stop you! A clearer or more 
+precise / useful rule than the existing one is plausible.
+
+-Graydon
+
+From rafael.espindola at gmail.com  Thu Dec 16 13:23:06 2010
+From: rafael.espindola at gmail.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Thu, 16 Dec 2010 13:23:06 -0800
+Subject: [rust-dev] Could mutable non-GC point to GC?
+In-Reply-To: <4D0A7EA2.7090805@mozilla.com>
+References: <4D0A4CD3.1010209@mozilla.com> <4D0A7EA2.7090805@mozilla.com>
+Message-ID: <4D0A833A.3030008@gmail.com>
+
+> To ensure that the division between GC and non-GC has meaning. The cycle
+> must be broken somewhere!
+>
+> GC memory can point to non-GC. If non-GC could, in turn, point to GC,
+> then it would be possible to form a reference cycle with GC memory:
+> non-GC memory could wind up owning itself. Meaning: destruction order
+> would become non-deterministic.
+
+I am not sure you need something that strong. For example, lets say you 
+have a type B and a type C that can form a cycle with each other. If you 
+also have A type A that just points to B, A can point to a cycle, but 
+cannot be part of one.
+
+> I think. Possibly we the determination of non-GC-ness of mutable memory
+> (involving inspection of the transitive closure of its structure) could
+> be refined in such a way as to differentiate the two. But with the
+> current non-GC-ness definition ("no mutable boxes holding recursive
+> tags") it won't work. We'd need to ... I guess be able to prove that the
+> GC-memory subgraphs within a non-GC type do not permit formation of
+> cycles between themselves. A vector of cyclic lists is itself acyclic,
+> say; so long as they're not cyclic lists of vectors of cyclic lists :)
+
+Yes, cases like that is what I had in mind.
+
+> Seems potentially harder to formalize. If you're really interested in
+> studying the problem though, don't let me stop you! A clearer or more
+> precise / useful rule than the existing one is plausible.
+
+Having the stronger distinction makes it easier and more efficient to 
+implement the GC, so I would propose not adding it unless needed.
+
+Now, I misunderstood what the current definition is since I thought it 
+was the one that allowed non-GC to point to GC and you added the 
+restriction for some other reason :-)
+
+What the current definition is effectively then is that a type is GC if 
+it can reach a cycle, correct?
+
+> -Graydon
+
+Thanks,
+Rafael
+
+From graydon at mozilla.com  Thu Dec 16 13:25:15 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 16 Dec 2010 13:25:15 -0800
+Subject: [rust-dev] Backtraces in gdb
+Message-ID: <4D0A83BB.7010508@mozilla.com>
+
+Hi,
+
+For those of you hacking nontrivial rust programs presently (say, rustc) 
+you'll probably want to drop into gdb from time to time. The most useful 
+thing is being able to get a backtrace. Unfortunately, when we're in a 
+native call to C there will be a negative previous frame pointer, where 
+rust jumps from a task stack to the C stack. Gdb by default interprets 
+this as "stack corruption", so stops unwinding there. Not so useful.
+
+(Go has the same problem, sadly)
+
+A temporary fix for this is to get a modern (trunk "archer") gdb build 
+with the following patch applied. It just disables the logic for 
+classifying negative fp jumps as "stack corruption".
+
+We'll keep discussing this with gdb upstream and Go (and anyone else who 
+has this problem) until it's fixed in a nice general fashion. But our 
+ABI is likely to shift a bit before it's done. Until then, this patch is 
+an effective workaround.
+
+-Graydon
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: unwind-rust-tasks.patch
+Type: text/x-patch
+Size: 861 bytes
+Desc: not available
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101216/c9614837/attachment.bin>
+
+From respindola at mozilla.com  Thu Dec 16 14:29:58 2010
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Thu, 16 Dec 2010 14:29:58 -0800
+Subject: [rust-dev] Immutable shared boxes and destructors
+Message-ID: <4D0A92E6.5060208@mozilla.com>
+
+Another question I found while reading the manual:
+
+The manual says that immutable boxes are shared and are destroyed when 
+the reference count gets to zero.
+
+The problem, if I understand it correctly, is that the destructors are 
+user visible, but the creation of immutable shared boxes is not in all 
+cases.
+
+When sending something over a channel the runtime can increment the 
+reference copy or do an actual copy (if going to another os thread for 
+example). If it copies now the destructors are run twice.
+
+We discussed some options
+
+*) Require that resources be reference counted. Really expensive, since 
+the reference count would have to be atomic.
+
+*) Distinguish copyable and non-copyable mutable data. A destructor can 
+then only get non copyable data and only copyable data can be sent over 
+a channel (short of a move).
+
+Is the second option in line with what you had in mind?
+
+Thanks,
+Rafael
+
+From graydon at mozilla.com  Thu Dec 16 15:02:31 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 16 Dec 2010 15:02:31 -0800
+Subject: [rust-dev] Immutable shared boxes and destructors
+In-Reply-To: <4D0A92E6.5060208@mozilla.com>
+References: <4D0A92E6.5060208@mozilla.com>
+Message-ID: <4D0A9A87.1010102@mozilla.com>
+
+On 10-12-16 02:29 PM, Rafael ?vila de Esp?ndola wrote:
+
+> Another question I found while reading the manual:
+
+Another good catch :)
+
+> The manual says that immutable boxes are shared and are destroyed when
+> the reference count gets to zero.
+>
+> The problem, if I understand it correctly, is that the destructors are
+> user visible, but the creation of immutable shared boxes is not in all
+> cases.
+
+Indeed. There's also a further problem that in some cases we can't 
+really find a context in which to run a dtor (such as a dropped 
+message), so we'd need some kind of scavenger task.
+
+> When sending something over a channel the runtime can increment the
+> reference copy or do an actual copy (if going to another os thread for
+> example). If it copies now the destructors are run twice.
+>
+> We discussed some options
+>
+> *) Require that resources be reference counted. Really expensive, since
+> the reference count would have to be atomic.
+>
+> *) Distinguish copyable and non-copyable mutable data. A destructor can
+> then only get non copyable data and only copyable data can be sent over
+> a channel (short of a move).
+>
+> Is the second option in line with what you had in mind?
+
+There are a few less-savoury options as well (multiple-destruction, 
+etc.) but I agree with your judgment of the best cases. Our current 
+proposed (but only weakly sketched-out) approach is the latter: 
+distinguish the copyable from the non-copyable. It's not described yet 
+in the manual, nor enforced in the compiler (though it's at least 
+semi-calculated by the bootstrap compiler). The characteristic of types 
+is referred to as their "abstractness", and both closures and objects 
+are considered abstract in the current logic.
+
+Patrick has some thoughts about splitting the concept of a destructable 
+resource out into an orthogonal concept, independent of objects (so that 
+it would not always incur a vtbl+heap allocation). Before we go too far 
+down the road of prohibiting *all* objects from channels, we should 
+probably think more about this scheme, and/or differentiating objects 
+with dtors from those without.
+
+(There are other reasons for potentially making obj and fn types 
+non-transmittable, mostly to do with transmitting data between processes 
+that might have different runtime-linkage choices, thus have different 
+vtbl and fn implementations. We haven't fixed compatibility rules on IPC 
+yet to clarify this. Feel free to chew on this topic as well :)
+
+-Graydon
+
+From dherman at mozilla.com  Thu Dec 16 15:58:06 2010
+From: dherman at mozilla.com (David Herman)
+Date: Thu, 16 Dec 2010 15:58:06 -0800
+Subject: [rust-dev] Immutable shared boxes and destructors
+In-Reply-To: <4D0A9A87.1010102@mozilla.com>
+References: <4D0A92E6.5060208@mozilla.com> <4D0A9A87.1010102@mozilla.com>
+Message-ID: <A2BDB45F-4DF9-43FF-BCC7-6550807DBEFE@mozilla.com>
+
+> Patrick has some thoughts about splitting the concept of a destructable resource out into an orthogonal concept, independent of objects (so that it would not always incur a vtbl+heap allocation). Before we go too far down the road of prohibiting *all* objects from channels, we should probably think more about this scheme, and/or differentiating objects with dtors from those without.
+
+Yeah, we were chatting a little about this. The scheme we came up with was three layers (not taking into account the extra mutable-but-acyclic):
+
+    state
+    non-state, copyable
+    non-state, non-copyable
+
+The graph showing which layers' data can have exterior pointers to which other layers' data is a little subtle, even if you ignore the terribleness of my ASCII art:
+
+       /v          /v          /v
+    +-+----+    +-+----+    +-+----+
+    |      |    |      |    |      |
+    |  NC  +--->|   C  +<---+   S  |
+    |      |    |      |    |      |
+    +------+    +------+    +---+--+
+         ^----------------------/
+
+In more detail:
+
+- Each layer's data can of course point to other data in that same layer.
+
+- Stateful data can refer to any other data.
+
+- Copyable data *can't* refer to non-copyable data, even through an exterior pointer (because it could lead to the non-copyable data being shared across tasks, which would require atomic refcounts).
+
+- Non-copyable data *can* refer to copyable immutable data.
+
+Does that seem about right?
+
+Dave
+
+
+From pwalton at mozilla.com  Fri Dec 17 16:48:11 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 17 Dec 2010 16:48:11 -0800
+Subject: [rust-dev] Mac 10.6 GDB stack trace hack
+Message-ID: <4D0C04CB.7070203@mozilla.com>
+
+If you're like me and going crazy at the lack of usable Rust stack 
+traces in Mac OS X, I prepared a binary patch to the system GDB. Steps 
+to use:
+
+1. Download the patch and save to apple-gdb.bsdiff
+2. $ brew install bsdiff
+3. $ bspatch /usr/libexec/gdb/gdb-i386-apple-darwin my-gdb apple-gdb.bsdiff
+4. Follow the instructions here to create a custom code signing cert: 
+http://sourceware.org/gdb/wiki/BuildingOnDarwin
+5. $ codesign -f -s gdb-cert my-gdb
+
+Then use my-gdb to debug Rust, and enjoy your stack traces!
+
+Patrick
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: apple-gdb.bsdiff
+Type: application/octet-stream
+Size: 2426 bytes
+Desc: not available
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101217/14d8adb4/attachment.obj>
+
+From sebastian.sylvan at gmail.com  Sat Dec 18 09:03:35 2010
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Sat, 18 Dec 2010 17:03:35 +0000
+Subject: [rust-dev] Immutable shared boxes and destructors
+In-Reply-To: <4D0A9A87.1010102@mozilla.com>
+References: <4D0A92E6.5060208@mozilla.com>
+	<4D0A9A87.1010102@mozilla.com>
+Message-ID: <AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>
+
+On Thu, Dec 16, 2010 at 11:02 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> On 10-12-16 02:29 PM, Rafael ?vila de Esp?ndola wrote:
+>
+>  Another question I found while reading the manual:
+>>
+>
+> Another good catch :)
+>
+>
+>  The manual says that immutable boxes are shared and are destroyed when
+>> the reference count gets to zero.
+>>
+>> The problem, if I understand it correctly, is that the destructors are
+>> user visible, but the creation of immutable shared boxes is not in all
+>> cases.
+>>
+>
+> Indeed. There's also a further problem that in some cases we can't really
+> find a context in which to run a dtor (such as a dropped message), so we'd
+> need some kind of scavenger task.
+>
+>
+>  When sending something over a channel the runtime can increment the
+>> reference copy or do an actual copy (if going to another os thread for
+>> example). If it copies now the destructors are run twice.
+>>
+>> We discussed some options
+>>
+>> *) Require that resources be reference counted. Really expensive, since
+>> the reference count would have to be atomic.
+>>
+>> *) Distinguish copyable and non-copyable mutable data. A destructor can
+>> then only get non copyable data and only copyable data can be sent over
+>> a channel (short of a move).
+>>
+>> Is the second option in line with what you had in mind?
+>>
+>
+> There are a few less-savoury options as well (multiple-destruction, etc.)
+> but I agree with your judgment of the best cases. Our current proposed (but
+> only weakly sketched-out) approach is the latter: distinguish the copyable
+> from the non-copyable.
+
+
+This thread brings to mind a couple of issues that I'd like to just float
+for your consideration.
+
+1) Many apps build up massive immutable data structures that need to be
+accessed by tons of tasks (e.g. video games, my field). Copying these values
+would be prohibitively impractical, so any general-purpose language
+*must* support
+real sharing of immutable data somehow. Realistically, before Rust sees
+mainstream use we'll have >64 cores to keep busy, so anything that imposes
+limits on read-only data sharing between actual *cores* is going to be a big
+burden too.
+
+2) I'd also argue that sharing of immutable data is the simpler and more
+obvious semantics. Especially when you take destructors into account. I
+think you should therefore have to opt-in for "copy, don't share" semantics
+as an optimization when you have data that ends up getting loads of
+incref/decref operations on them.
+
+3) The cost of reference counting in a multi-core scenario is a concern.
+Rust already limits the number of reference operations using aliases, which
+presumably gets rid of a lot of the cost. Is Rust wedded to the idea of
+having accrate refcounts at all times? As far as I can tell, modern
+ref-counting algorithms seem to be about on par with modern GC algorithms
+for performance (just barely) even in the context of multithreading, but
+they achieve this feat through deferred ref-counting and things like that.
+Should Rust not do that instead? I kind of think refcounts may be the way
+forward in the future, because the cost of GC'ing in a ref-count system is
+proportional to the amount of actual garbage, rather than being proportional
+to the size of the heap, but it seems like the consensus on this issue in
+the literature is that refcounts are only performant when they're not being
+constantly kept up to date. Am I wrong?
+
+4) If the cost of atomic ref counts are still too high, perhaps all
+allocations should be task-local unless you explicitly tag it as being
+shared (with task-local data not being allowed over channels)? This seems
+conceptually simple and impossible to mess up. You tag shared data in some
+special way and only for that data you pay the extra cost of more expensive
+ref-counting. If you forget to tag something as shared, then you'll get a
+compile-time error when you try to send it to another task. Note that you're
+still sharing data here, so you support the scenario in 1), you're just not
+incurring the cost for everything. I'd prefer if this wasn't necessary (i.e.
+if refcount operations could be statically or dynamically elided often
+enough that any immutable data can be sent over a channel), but you could
+always make the "shared" keyword a no-op in the future if that materializes.
+
+
+Happy holidays!
+Sebastian
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101218/18d60ed9/attachment.html>
+
+From pwalton at mozilla.com  Sat Dec 18 09:32:23 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 18 Dec 2010 09:32:23 -0800
+Subject: [rust-dev] Immutable shared boxes and destructors
+In-Reply-To: <AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>
+References: <4D0A92E6.5060208@mozilla.com>	<4D0A9A87.1010102@mozilla.com>
+	<AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>
+Message-ID: <4D0CF027.20507@mozilla.com>
+
+On 12/18/2010 09:03 AM, Sebastian Sylvan wrote:
+> 3) The cost of reference counting in a multi-core scenario is a concern.
+> Rust already limits the number of reference operations using aliases,
+> which presumably gets rid of a lot of the cost. Is Rust wedded to the
+> idea of having accrate refcounts at all times? As far as I can tell,
+> modern ref-counting algorithms seem to be about on par with modern GC
+> algorithms for performance (just barely) even in the context of
+> multithreading, but they achieve this feat through deferred ref-counting
+> and things like that. Should Rust not do that instead? I kind of think
+> refcounts may be the way forward in the future, because the cost of
+> GC'ing in a ref-count system is proportional to the amount of actual
+> garbage, rather than being proportional to the size of the heap, but it
+> seems like the consensus on this issue in the literature is that
+> refcounts are only performant when they're not being constantly kept up
+> to date. Am I wrong?
+
+So my thinking lately is that, instead of DRC (which is essentially a 
+form of garbage collection) we should have some sort of safe 
+unique_ptr/auto_ptr work-alike. The details haven't been fully ironed 
+out, but I think it's going to be important for performance. The end 
+result is that reference counting would only be used where you really 
+need it; i.e. roughly where you'd use shared_ptr in C++ right now, 
+except that unique pointers would work in the standard data structures, 
+eliminating that common C++ pain point.
+
+> 4) If the cost of atomic ref counts are still too high, perhaps all
+> allocations should be task-local unless you explicitly tag it as being
+> shared (with task-local data not being allowed over channels)? This
+> seems conceptually simple and impossible to mess up. You tag shared data
+> in some special way and only for that data you pay the extra cost of
+> more expensive ref-counting. If you forget to tag something as shared,
+> then you'll get a compile-time error when you try to send it to another
+> task. Note that you're still sharing data here, so you support the
+> scenario in 1), you're just not incurring the cost for everything. I'd
+> prefer if this wasn't necessary (i.e. if refcount operations could be
+> statically or dynamically elided often enough that any immutable data
+> can be sent over a channel), but you could always make the "shared"
+> keyword a no-op in the future if that materializes.
+
+I've thought about such things (a sort of "shared box" operator, 
+perhaps), but I'm unsure as to what the precise semantics would be. It 
+would also complicate what's already a very complicated type system :( 
+Note that right now (AIUI) you can still share reference counted data 
+among green threads.
+
+Patrick
+
+From sebastian.sylvan at gmail.com  Sat Dec 18 09:41:58 2010
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Sat, 18 Dec 2010 17:41:58 +0000
+Subject: [rust-dev] Immutable shared boxes and destructors
+In-Reply-To: <4D0CF027.20507@mozilla.com>
+References: <4D0A92E6.5060208@mozilla.com> <4D0A9A87.1010102@mozilla.com>
+	<AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>
+	<4D0CF027.20507@mozilla.com>
+Message-ID: <AANLkTi=9zvaOvUKioabaaDKz9UoUz++4YVDzuv4rehgK@mail.gmail.com>
+
+On Sat, Dec 18, 2010 at 5:32 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+
+> On 12/18/2010 09:03 AM, Sebastian Sylvan wrote:
+>
+>> 3) The cost of reference counting in a multi-core scenario is a concern.
+>> Rust already limits the number of reference operations using aliases,
+>> which presumably gets rid of a lot of the cost. Is Rust wedded to the
+>> idea of having accrate refcounts at all times? As far as I can tell,
+>> modern ref-counting algorithms seem to be about on par with modern GC
+>> algorithms for performance (just barely) even in the context of
+>> multithreading, but they achieve this feat through deferred ref-counting
+>> and things like that. Should Rust not do that instead? I kind of think
+>> refcounts may be the way forward in the future, because the cost of
+>> GC'ing in a ref-count system is proportional to the amount of actual
+>> garbage, rather than being proportional to the size of the heap, but it
+>> seems like the consensus on this issue in the literature is that
+>> refcounts are only performant when they're not being constantly kept up
+>> to date. Am I wrong?
+>>
+>
+> So my thinking lately is that, instead of DRC (which is essentially a form
+> of garbage collection) we should have some sort of safe unique_ptr/auto_ptr
+> work-alike. The details haven't been fully ironed out, but I think it's
+> going to be important for performance. The end result is that reference
+> counting would only be used where you really need it; i.e. roughly where
+> you'd use shared_ptr in C++ right now, except that unique pointers would
+> work in the standard data structures, eliminating that common C++ pain
+> point.
+
+
+If you use non-deferred reference counting it seems like there are still
+optimizations that can be done. I just found this linked from an article on
+LtU: http://www.hpl.hp.com/personal/Pramod_Joisha/Publications/vee08.pdf
+Perhaps there are more things that can be done on the language level to
+support these kinds of optimizations.
+
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101218/cdbb1a43/attachment-0001.html>
+
+From sebastian.sylvan at gmail.com  Sat Dec 18 09:43:18 2010
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Sat, 18 Dec 2010 17:43:18 +0000
+Subject: [rust-dev] Immutable shared boxes and destructors
+In-Reply-To: <AANLkTi=9zvaOvUKioabaaDKz9UoUz++4YVDzuv4rehgK@mail.gmail.com>
+References: <4D0A92E6.5060208@mozilla.com> <4D0A9A87.1010102@mozilla.com>
+	<AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>
+	<4D0CF027.20507@mozilla.com>
+	<AANLkTi=9zvaOvUKioabaaDKz9UoUz++4YVDzuv4rehgK@mail.gmail.com>
+Message-ID: <AANLkTimQ64vAqBAig0ZdQY_Ce1+HjCBZ7AsuvjipGKet@mail.gmail.com>
+
+On Sat, Dec 18, 2010 at 5:41 PM, Sebastian Sylvan <
+sebastian.sylvan at gmail.com> wrote:
+
+>
+>
+> On Sat, Dec 18, 2010 at 5:32 PM, Patrick Walton <pwalton at mozilla.com>wrote:
+>
+>> On 12/18/2010 09:03 AM, Sebastian Sylvan wrote:
+>>
+>>> 3) The cost of reference counting in a multi-core scenario is a concern.
+>>> Rust already limits the number of reference operations using aliases,
+>>> which presumably gets rid of a lot of the cost. Is Rust wedded to the
+>>> idea of having accrate refcounts at all times? As far as I can tell,
+>>> modern ref-counting algorithms seem to be about on par with modern GC
+>>> algorithms for performance (just barely) even in the context of
+>>> multithreading, but they achieve this feat through deferred ref-counting
+>>> and things like that. Should Rust not do that instead? I kind of think
+>>> refcounts may be the way forward in the future, because the cost of
+>>> GC'ing in a ref-count system is proportional to the amount of actual
+>>> garbage, rather than being proportional to the size of the heap, but it
+>>> seems like the consensus on this issue in the literature is that
+>>> refcounts are only performant when they're not being constantly kept up
+>>> to date. Am I wrong?
+>>>
+>>
+>> So my thinking lately is that, instead of DRC (which is essentially a form
+>> of garbage collection) we should have some sort of safe unique_ptr/auto_ptr
+>> work-alike. The details haven't been fully ironed out, but I think it's
+>> going to be important for performance. The end result is that reference
+>> counting would only be used where you really need it; i.e. roughly where
+>> you'd use shared_ptr in C++ right now, except that unique pointers would
+>> work in the standard data structures, eliminating that common C++ pain
+>> point.
+>
+>
+> If you use non-deferred reference counting it seems like there are still
+> optimizations that can be done. I just found this linked from an article on
+> LtU: http://www.hpl.hp.com/personal/Pramod_Joisha/Publications/vee08.pdf
+> Perhaps there are more things that can be done on the language level to
+> support these kinds of optimizations.
+>
+
+Sorry, meant to link this one too (which has the actual optimizations):
+http://www.hpl.hp.com/personal/Pramod_Joisha/Publications/ismm06.pdf
+
+
+<http://www.hpl.hp.com/personal/Pramod_Joisha/Publications/ismm06.pdf>
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101218/15214291/attachment.html>
+
+From brendan at mozilla.org  Sat Dec 18 11:18:18 2010
+From: brendan at mozilla.org (Brendan Eich)
+Date: Sat, 18 Dec 2010 11:18:18 -0800
+Subject: [rust-dev] Immutable shared boxes and destructors
+In-Reply-To: <AANLkTi=9zvaOvUKioabaaDKz9UoUz++4YVDzuv4rehgK@mail.gmail.com>
+References: <4D0A92E6.5060208@mozilla.com> <4D0A9A87.1010102@mozilla.com>
+	<AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>
+	<4D0CF027.20507@mozilla.com>
+	<AANLkTi=9zvaOvUKioabaaDKz9UoUz++4YVDzuv4rehgK@mail.gmail.com>
+Message-ID: <A871EFA0-8B6F-4898-BD36-7A66754B9697@mozilla.org>
+
+On Dec 18, 2010, at 9:41 AM, Sebastian Sylvan wrote:
+
+> http://www.hpl.hp.com/personal/Pramod_Joisha/
+
+Thanks, we noticed these -- a Mozilla Research guest speaker, Stefan Brunthaler of the Technical University of Vienna, pointed Joisha's work out to some of us a couple of months ago.
+
+FWIW there are patent clouds visible at the URL I cut above.
+
+The unique_ptr idea seems worth exploring in any event.
+
+/be
+
+From respindola at mozilla.com  Mon Dec 20 07:36:00 2010
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Mon, 20 Dec 2010 10:36:00 -0500
+Subject: [rust-dev] Immutable shared boxes and destructors
+In-Reply-To: <AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>
+References: <4D0A92E6.5060208@mozilla.com>	<4D0A9A87.1010102@mozilla.com>
+	<AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>
+Message-ID: <4D0F77E0.4030600@mozilla.com>
+
+> This thread brings to mind a couple of issues that I'd like to just
+> float for your consideration.
+>
+> 1) Many apps build up massive immutable data structures that need to be
+> accessed by tons of tasks (e.g. video games, my field). Copying these
+> values would be prohibitively impractical, so any general-purpose
+> language /must/ support real sharing of immutable data somehow.
+> Realistically, before Rust sees mainstream use we'll have >64 cores to
+> keep busy, so anything that imposes limits on read-only data sharing
+> between actual /cores/ is going to be a big burden too.
+
+If we have destructors only on non copyable data then there is no other 
+user visible side effect on copying versus sharing and that can be 
+optimized by the compiler and run time, no? In particular:
+
+*) In a green thread, share and ref-count
+*) If the data is small, copy.
+*) If the data is big, share with atomic ops
+
+If the change in performance characteristics are too big and we cannot 
+optimize them in a reliable way, we can make an option at send to force 
+sharing. Given that that should have no other user visible change, I 
+think we can deffer this particular decision a bit.
+
+>
+> Happy holidays!
+> Sebastian
+> --
+> Sebastian Sylvan
+
+Thanks,
+Rafael
+
+From graydon at mozilla.com  Mon Dec 20 08:25:05 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 20 Dec 2010 08:25:05 -0800
+Subject: [rust-dev] Immutable shared boxes and destructors
+In-Reply-To: <AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>
+References: <4D0A92E6.5060208@mozilla.com>	<4D0A9A87.1010102@mozilla.com>
+	<AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>
+Message-ID: <4D0F8361.8020907@mozilla.com>
+
+On 18/12/2010 9:03 AM, Sebastian Sylvan wrote:
+
+> This thread brings to mind a couple of issues that I'd like to just
+> float for your consideration.
+
+Sure! Appreciate the comments. Even if it's just a forum to air some 
+design discussion; I realize there's always going to be a bit of an 
+imbalance between what's written down vs. discussed/planned, so I'm 
+happy to shed some light. Should do some roadmap-writing at some point too.
+
+> 1) Many apps build up massive immutable data structures that need to be
+> accessed by tons of tasks (e.g. video games, my field). Copying these
+> values would be prohibitively impractical, so any general-purpose
+> language /must/ support real sharing of immutable data somehow.
+> Realistically, before Rust sees mainstream use we'll have >64 cores to
+> keep busy, so anything that imposes limits on read-only data sharing
+> between actual /cores/ is going to be a big burden too.
+
+Yeah. There's some truth to this. Games and browser rendering trees both :)
+
+Keep in mind, however, that there are multiple forms of parallelism. 
+Task parallelism is essentially MIMD; we're building task parallelism 
+into the language but it's not the only option. Rust also tracks 
+function purity as an effect; it's quite conceivable that we might 
+introduce an openMP-like parallel for loop, if we played some games with 
+deferring refcounts in the loop body, we could do SIMD-like fork/join on 
+(say) pure loop bodies. Semantically plausible and possibly a better fit 
+than forcing everything into the task model.
+
+I have a couple ideas for the task model as well, of course. More below:
+
+> 2) I'd also argue that sharing of immutable data is the simpler and more
+> obvious semantics. Especially when you take destructors into account. I
+> think you should therefore have to opt-in for "copy, don't share"
+> semantics as an optimization when you have data that ends up getting
+> loads of incref/decref operations on them.
+
+The dtor story is a bit in flux at the moment, but we'll probably wind 
+up shifting it around so it's only viable on non-shared values. At that 
+point Rafael is right that it's semantically equivalent (though 
+performance-observable) whether a true copy is made. There's some leeway 
+in implementation, however...
+
+> 3) The cost of reference counting in a multi-core scenario is a concern.
+> Rust already limits the number of reference operations using aliases,
+> which presumably gets rid of a lot of the cost. Is Rust wedded to the
+> idea of having accrate refcounts at all times? As far as I can tell,
+> modern ref-counting algorithms seem to be about on par with modern GC
+> algorithms for performance (just barely) even in the context of
+> multithreading, but they achieve this feat through deferred ref-counting
+> and things like that. Should Rust not do that instead? I kind of think
+> refcounts may be the way forward in the future, because the cost of
+> GC'ing in a ref-count system is proportional to the amount of actual
+> garbage, rather than being proportional to the size of the heap, but it
+> seems like the consensus on this issue in the literature is that
+> refcounts are only performant when they're not being constantly kept up
+> to date. Am I wrong?
+
+You make three points here and I'll address them independently.
+
+1. multi-threaded RC operations are going to be atomic -> expensive. 
+Yes. We're trying to avoid atomic RC, though as Rafael points out we can 
+conceivably fall back to it in cases where we have performance evidence 
+that the hurt will be less than the hurt of doing a full copy. There's a 
+knob to turn. But I'd prefer not to turn it at all. There are a couple 
+other options (more below, honest!)
+
+2. It's true that on massive heaps, the GC-research consensus I've seen 
+lately is that you want to do primary RC and secondary cycle collection, 
+due to walking the heap less. And that fits with our model, generally, 
+in a performance-characteristic sense.
+
+3. DRC is definitely an option we've discussed. There are multiple 
+schemes for it that have different relationships with whatever other GC 
+it's interacting with. It's not (IMO) essential that we "always have 
+100% accurate refcounts at all times", merely that we can say with 
+certainty when we will next have them. Similar to our preemption story; 
+we're going to say that 2 tasks on 1 thread will only preempt at 
+particular (well defined, easily controlled) points, not "any single 
+instruction".
+
+> 4) If the cost of atomic ref counts are still too high, perhaps all
+> allocations should be task-local unless you explicitly tag it as being
+> shared (with task-local data not being allowed over channels)? This
+> seems conceptually simple and impossible to mess up. You tag shared data
+> in some special way and only for that data you pay the extra cost of
+> more expensive ref-counting. If you forget to tag something as shared,
+> then you'll get a compile-time error when you try to send it to another
+> task. Note that you're still sharing data here, so you support the
+> scenario in 1), you're just not incurring the cost for everything. I'd
+> prefer if this wasn't necessary (i.e. if refcount operations could be
+> statically or dynamically elided often enough that any immutable data
+> can be sent over a channel), but you could always make the "shared"
+> keyword a no-op in the future if that materializes.
+
+Finally, the "more below" issue! Yes. Assuming we're just talking 
+independent control paths (so *some* task-parallelism) and assuming we 
+want to avoid heavy atomic RC (both also possibilities, but discussed 
+above) we can *also* twiddle the semantics of sharing a bit to talk 
+about thread-sharing vs. non-thread-sharing.
+
+The scheme you propose would entail two things I'd prefer to avoid 
+(though it'd work): lots of atomic RC on the shared bits, and another 
+layer in the memory-layer system (the "shared") layer.
+
+I'll describe a scheme I'd prefer to explore, you tell me if you think 
+it'd be tolerable:
+
+We make a native data type called pinned[T]. A pinned[T] value holds a T 
+value as well as a list of viewers (in C code; pinned[T] is opaque to 
+rust clients). When you put a T value into a pinned[T], the system walks 
+the data structure (once) and does a detachment operation (make sure 
+each node is singly referenced, copying as required; necessary for the 
+'freeze' operator to work) then writes the magic constant-refcount 
+(already existing; to handle compile-time constant data) into every rc 
+field in the structure. The structure is now "pinned": it can be safely 
+shared with multiple concurrent readers. It's more than just frozen; 
+uninformed parties will think it's in read-only memory!
+
+ From a given pinned[T] value, multiple view[T] values can be 
+manufactured (helper function, also native). A view[T] is atomically 
+added to the pinned[T] 'viewer' list, and when a pinned[T] is destructed 
+it enters an "expiring" state that walks the viewer list, invalidates 
+all inactive views, then waits for the last active view to end, and 
+destructs the T. All view/pinned synchronization is atomic (or 
+effectively so; at best carefully-reasoned lockless C code).
+
+Meanwhile, if I send a view[T] to some other thread, that thread can 
+pull (via an iterator / one-shot reference-returning accessor, as Dave 
+and Patrick have been discussing) an &option[T] out of the view[T]. If 
+the underlying pinned[T] is dead, the view[T] has been invalidated, then 
+the option[T] will come back none. Sorry. No data to view. But if it 
+comes back as &some[T](?t) then the viewing thread can work with the 
+target 't' data "as though it's const". No rc traffic to keep 
+reconciled. It's working as though the data is a compile-time constant 
+in read-only memory.
+
+There are atomic operations in this scheme, but only at the "root" of 
+the data structure, the pinned[T] / view[T] values do atomic ops, 
+everything else works with aliases-and-constants while the view[T] is 
+"in use".
+
+This scheme has the added advantage that you can do "dataflow" 
+multi-version publish/subscribe with it as well: the pinned value can be 
+updated to a new one and the viewers -- if they're pulling from a 
+view[T] via an iterator -- could just "get the next version" next time 
+around the loop, after the writer updates.
+
+Again, as I said up top, there are multiple forms of parallelism, and 
+I'm not sure it'll be necessary to force everything into the MIMD 
+task-parallel model. I want to support the task-parallel variant *well*, 
+because even when running serially/multiplexed, I think it's an 
+essential ingredient in correctness: isolating tasks as a basic 
+mechanism for decoupling their effects, isolating their failures. But 
+it's not the only way; I've sketched in this email some variants we 
+explore to support any/all of:
+
+SIMD - some kind of openMP-like pure-parallel loop
+MISD - some kind of pin/view, publish/subscribe dataflow model
+MIMD - existing task model
+
+(And of course lonely old serial SISD, which we already do just fine)
+
+-Graydon
+
+From marijnh at gmail.com  Mon Dec 20 08:39:45 2010
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 20 Dec 2010 17:39:45 +0100
+Subject: [rust-dev]  Immutable shared boxes and destructors
+In-Reply-To: <AANLkTimPioLtJKn8MPKEhYsuf-kZuHBJ=Unzu3KxPrRp@mail.gmail.com>
+References: <4D0A92E6.5060208@mozilla.com> <4D0A9A87.1010102@mozilla.com>
+	<AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>
+	<4D0F8361.8020907@mozilla.com>
+	<AANLkTimPioLtJKn8MPKEhYsuf-kZuHBJ=Unzu3KxPrRp@mail.gmail.com>
+Message-ID: <AANLkTinFs3QnZQN7=DZ7GbzSsPweO-GUuQhyYQmKaWcu@mail.gmail.com>
+
+> 1. multi-threaded RC operations are going to be atomic -> expensive.
+
+In case this idea hasn't been floated before (I didn't read the list
+archives) -- wouldn't it be a very good idea to have a task-local
+refcount, and only atomically decrease the central refcount once the
+task-local one reaches zero. This would require the references to be
+(pointer, local-refcount) pairs, so it adds some indirection and
+overhead, but seems vastly superior to an approach that would do
+atomic central counting.
+
+From sebastian.sylvan at gmail.com  Mon Dec 20 08:48:15 2010
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Mon, 20 Dec 2010 16:48:15 +0000
+Subject: [rust-dev] Immutable shared boxes and destructors
+In-Reply-To: <AANLkTinFs3QnZQN7=DZ7GbzSsPweO-GUuQhyYQmKaWcu@mail.gmail.com>
+References: <4D0A92E6.5060208@mozilla.com> <4D0A9A87.1010102@mozilla.com>
+	<AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>
+	<4D0F8361.8020907@mozilla.com>
+	<AANLkTimPioLtJKn8MPKEhYsuf-kZuHBJ=Unzu3KxPrRp@mail.gmail.com>
+	<AANLkTinFs3QnZQN7=DZ7GbzSsPweO-GUuQhyYQmKaWcu@mail.gmail.com>
+Message-ID: <AANLkTi=vCC6y=i-G946=gu+OLYZChSexKEYZM0uXkS43@mail.gmail.com>
+
+On Mon, Dec 20, 2010 at 4:39 PM, Marijn Haverbeke <marijnh at gmail.com> wrote:
+
+> > 1. multi-threaded RC operations are going to be atomic -> expensive.
+>
+> In case this idea hasn't been floated before (I didn't read the list
+> archives) -- wouldn't it be a very good idea to have a task-local
+> refcount, and only atomically decrease the central refcount once the
+> task-local one reaches zero. This would require the references to be
+> (pointer, local-refcount) pairs, so it adds some indirection and
+> overhead, but seems vastly superior to an approach that would do
+> atomic central counting.
+>
+
+You might even be able to do pointer-tagging to store e.g. a 2-bit ref count
+in the lower bits of the pointer (corresponding to 1, 2, 3 references, or
+"unknown, consult global refcount", i.e. 0). This adds a bunch of extra
+instructions per refcount op, but at least doesn't require global
+synchronisation for many cases (only twice for objects with less than 4
+local ref counts), you'd probably still want to only do this for shared
+objects, though.
+
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101220/cce55fe8/attachment.html>
+
+From sebastian.sylvan at gmail.com  Mon Dec 20 09:18:53 2010
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Mon, 20 Dec 2010 17:18:53 +0000
+Subject: [rust-dev] Immutable shared boxes and destructors
+In-Reply-To: <4D0F8361.8020907@mozilla.com>
+References: <4D0A92E6.5060208@mozilla.com> <4D0A9A87.1010102@mozilla.com>
+	<AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>
+	<4D0F8361.8020907@mozilla.com>
+Message-ID: <AANLkTimYz6z3skRV=rROHw5Hv3G2nHmvFpV438vQJPLe@mail.gmail.com>
+
+On Mon, Dec 20, 2010 at 4:25 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+>
+>  4) If the cost of atomic ref counts are still too high, perhaps all
+>> allocations should be task-local unless you explicitly tag it as being
+>> shared (with task-local data not being allowed over channels)? This
+>> seems conceptually simple and impossible to mess up. You tag shared data
+>> in some special way and only for that data you pay the extra cost of
+>> more expensive ref-counting. If you forget to tag something as shared,
+>> then you'll get a compile-time error when you try to send it to another
+>> task. Note that you're still sharing data here, so you support the
+>> scenario in 1), you're just not incurring the cost for everything. I'd
+>> prefer if this wasn't necessary (i.e. if refcount operations could be
+>> statically or dynamically elided often enough that any immutable data
+>> can be sent over a channel), but you could always make the "shared"
+>> keyword a no-op in the future if that materializes.
+>
+>
+> I'll describe a scheme I'd prefer to explore, you tell me if you think it'd
+> be tolerable:
+>
+> We make a native data type called pinned[T]. A pinned[T] value holds a T
+> value as well as a list of viewers (in C code; pinned[T] is opaque to rust
+> clients). When you put a T value into a pinned[T], the system walks the data
+> structure (once) and does a detachment operation (make sure each node is
+> singly referenced, copying as required; necessary for the 'freeze' operator
+> to work) then writes the magic constant-refcount (already existing; to
+> handle compile-time constant data) into every rc field in the structure. The
+> structure is now "pinned": it can be safely shared with multiple concurrent
+> readers. It's more than just frozen; uninformed parties will think it's in
+> read-only memory!
+>
+> From a given pinned[T] value, multiple view[T] values can be manufactured
+> (helper function, also native). A view[T] is atomically added to the
+> pinned[T] 'viewer' list, and when a pinned[T] is destructed it enters an
+> "expiring" state that walks the viewer list, invalidates all inactive views,
+> then waits for the last active view to end, and destructs the T. All
+> view/pinned synchronization is atomic (or effectively so; at best
+> carefully-reasoned lockless C code).
+>
+> Meanwhile, if I send a view[T] to some other thread, that thread can pull
+> (via an iterator / one-shot reference-returning accessor, as Dave and
+> Patrick have been discussing) an &option[T] out of the view[T]. If the
+> underlying pinned[T] is dead, the view[T] has been invalidated, then the
+> option[T] will come back none. Sorry. No data to view. But if it comes back
+> as &some[T](?t) then the viewing thread can work with the target 't' data
+> "as though it's const". No rc traffic to keep reconciled. It's working as
+> though the data is a compile-time constant in read-only memory.
+>
+
+Not sure I understand this. What happens if I grab the value from a view[T],
+and then store a reference to some internal sub-part of that T (e.g. let's
+say the data is a tree, and I want to keep a reference to some sub-tree)? I
+can't increment its ref-count, but does that mean I can't keep a hold of a
+reference to it at all? I'd have to assume so since the view[T] only tracks
+the root and can only give me a "none" for that, which means I must be
+prohibited from taking a reference to any sub-structure?
+
+
+
+> Again, as I said up top, there are multiple forms of parallelism, and I'm
+> not sure it'll be necessary to force everything into the MIMD task-parallel
+> model. I want to support the task-parallel variant *well*, because even when
+> running serially/multiplexed, I think it's an essential ingredient in
+> correctness: isolating tasks as a basic mechanism for decoupling their
+> effects, isolating their failures. But it's not the only way; I've sketched
+> in this email some variants we explore to support any/all of:
+>
+> SIMD - some kind of openMP-like pure-parallel loop
+>
+
+You might want to look at Nested Data Parallel Haskell here. It has the
+appealing property that it can flatten/fuse nested data parallel algorithms
+for you (e.g. want to walk a binary tree? Just kick off two jobs for the two
+children in each node in an almost task-parallel fashion, and the compiler
+will flatten it and create one "pass" for each "level" in the tree
+automatically).
+
+IMO the OpenCL, DirectCompute, CUDA crew are all getting this wrong. The
+biggest hurdle with GPGPU isn't that you have to work through a graphics
+interface (although that sucks too), which is what they keep spending all
+their effort on fixing. The biggest hurdle for me has always been that you
+have to manually turn your algorithms inside-out to create a series of
+"flat" data parallel passes, rather than have the compiler do that work for
+you. It took me something like two days to get a correct version of a simple
+odd-even merge sort a few years ago (before there were code samples around
+for it!). This is a really, really, difficult.
+
+I realise this is highly "researchy"/"unproven" at the moment, but it might
+be worth keeping it in mind so you don't make any design decisions that
+would rule it out in the future.
+
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101220/8601875c/attachment-0001.html>
+
+From graydon at mozilla.com  Mon Dec 20 09:19:43 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 20 Dec 2010 09:19:43 -0800
+Subject: [rust-dev] Immutable shared boxes and destructors
+In-Reply-To: <AANLkTi=vCC6y=i-G946=gu+OLYZChSexKEYZM0uXkS43@mail.gmail.com>
+References: <4D0A92E6.5060208@mozilla.com>
+	<4D0A9A87.1010102@mozilla.com>	<AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>	<4D0F8361.8020907@mozilla.com>	<AANLkTimPioLtJKn8MPKEhYsuf-kZuHBJ=Unzu3KxPrRp@mail.gmail.com>	<AANLkTinFs3QnZQN7=DZ7GbzSsPweO-GUuQhyYQmKaWcu@mail.gmail.com>
+	<AANLkTi=vCC6y=i-G946=gu+OLYZChSexKEYZM0uXkS43@mail.gmail.com>
+Message-ID: <4D0F902F.8050900@mozilla.com>
+
+On 20/12/2010 8:48 AM, Sebastian Sylvan wrote:
+
+> You might even be able to do pointer-tagging to store e.g. a 2-bit ref
+> count in the lower bits of the pointer (corresponding to 1, 2, 3
+> references, or "unknown, consult global refcount", i.e. 0). This adds a
+> bunch of extra instructions per refcount op, but at least doesn't
+> require global synchronisation for many cases (only twice for objects
+> with less than 4 local ref counts), you'd probably still want to only do
+> this for shared objects, though.
+
+Yeah. Many valid, relatively simple optimizations are possible; 
+optimizing rc traffic is an old field with many tricks. But I'd like to 
+defer actually implementing most such tricks until we've got the rest of 
+the language a bit more under control (and implemented), just as a 
+question of time-spending :)
+
+Thankfully none of the rc-trickery is likely to be very 
+semantics-altering -- worst case maybe moving rc ops to scope boundaries 
+or something -- so I'm happy to let the data lead us where and when it does.
+
+-Graydon
+
+From graydon at mozilla.com  Mon Dec 20 09:44:11 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 20 Dec 2010 09:44:11 -0800
+Subject: [rust-dev] Immutable shared boxes and destructors
+In-Reply-To: <AANLkTimYz6z3skRV=rROHw5Hv3G2nHmvFpV438vQJPLe@mail.gmail.com>
+References: <4D0A92E6.5060208@mozilla.com>	<4D0A9A87.1010102@mozilla.com>	<AANLkTim84i3VMHwsJxUA4pqzqCf-Wq5mm-FFBTpS4hEk@mail.gmail.com>	<4D0F8361.8020907@mozilla.com>
+	<AANLkTimYz6z3skRV=rROHw5Hv3G2nHmvFpV438vQJPLe@mail.gmail.com>
+Message-ID: <4D0F95EB.7080804@mozilla.com>
+
+On 20/12/2010 9:18 AM, Sebastian Sylvan wrote:
+
+> Not sure I understand this. What happens if I grab the value from a
+> view[T], and then store a reference to some internal sub-part of that T
+> (e.g. let's say the data is a tree, and I want to keep a reference to
+> some sub-tree)? I can't increment its ref-count, but does that mean I
+> can't keep a hold of a reference to it at all? I'd have to assume so
+> since the view[T] only tracks the root and can only give me a "none" for
+> that, which means I must be prohibited from taking a reference to any
+> sub-structure?
+
+There are a few options. One is that we develop a linear (non-copyable) 
+layer, which patrick's been working on semantics of (it's useful for 
+modeling resources and dtors) and your view data is one of those. No 
+heap-copies allowed, only aliases. Another option is that each pin 
+'view' acquired by the viewer actually survives until its *domain* dies 
+(for one-shot worker threads, this is plausible). Another is you use a 
+'pinned' magic rc that differs from the 'const' magic rc, and causes a 
+local copy (again: detachment) when you do a heap-store of a pointer to 
+a pinned box (aliases are free though).
+
+As with optimizing rc traffic, there's a pretty wide variety of tricks 
+to try here, none of which is particularly painful to try out and measure.
+
+> You might want to look at Nested Data Parallel Haskell here. It has the
+> appealing property that it can flatten/fuse nested data parallel
+> algorithms for you (e.g. want to walk a binary tree? Just kick off two
+> jobs for the two children in each node in an almost task-parallel
+> fashion, and the compiler will flatten it and create one "pass" for each
+> "level" in the tree automatically).
+
+Very different evaluation model, deep changes to semantics, etc. I don't 
+disagree with the research programme -- and it might keep getting 
+better, attracting programmers, etc. -- but it's not the path I want to 
+follow.
+
+> IMO the OpenCL, DirectCompute, CUDA crew are all getting this wrong. The
+> biggest hurdle with GPGPU isn't that you have to work through a graphics
+> interface (although that sucks too), which is what they keep spending
+> all their effort on fixing. The biggest hurdle for me has always been
+> that you have to manually turn your algorithms inside-out to create a
+> series of "flat" data parallel passes, rather than have the compiler do
+> that work for you. It took me something like two days to get a
+> correct version of a simple odd-even merge sort a few years ago (before
+> there were code samples around for it!). This is a really, really,
+> difficult.
+
+I don't know how to avoid some problems in programming remaining hard 
+for the programmer, and am not (yet) aware of completely satisfactory 
+ways to automate such reasoning. We've been waiting for the "magical 
+parallelizing compiler" for 40 years or so. They keep getting better, 
+but there always seems to be a pretty hard limit to the tech.
+
+Maybe the compilers aren't even the issue, and some kind of reduceron 
+haskell-hardware monster will get us there! I'd love to wind up wrong on 
+some tech bets, wind up in a future with "easy parallelism", because 
+that alternative future would be very pretty. But I'm still betting with 
+the more likely (to me) path of a heterogeneous collection of techniques 
+that ease, but do not "make easy", the parallelism problem.
+
+> I realise this is highly "researchy"/"unproven" at the moment, but it
+> might be worth keeping it in mind so you don't make any design decisions
+> that would rule it out in the future.
+
+Nah, not ruling out. I just don't like depending on too many 
+hypotheticals. If they arise and work well (and are simple, well 
+understood and patent-free) a good research result is hard to turn down :)
+
+-Graydon
+
+From peterhull90 at gmail.com  Tue Dec 21 13:49:15 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Tue, 21 Dec 2010 21:49:15 +0000
+Subject: [rust-dev] leaked memory in rust main loop?
+Message-ID: <AANLkTi=EeABNypLiVDyEzxTrCoXW0aAsbifBHKyuevWG@mail.gmail.com>
+
+Hi all,
+I've done a git pull upstream master, then
+make clean
+make all
+make check
+and I get this:
+
+cfg: using built ./rustboot for rust deps
+check: formatting
+compile [boot x86]: test/run-pass/native-mod.rc
+? loads more compiles and passed tests, then ...
+compile [boot x86]: test/compile-fail/wrong-ret-type.rs
+compile [rustc]: test/run-pass/alt-pattern-simple.rs
+rt: fatal, 'leaked memory in rust main loop (51 objects)' failed,
+rt/memory_region.cpp:99 51 objects
+make: *** [test/run-pass/alt-pattern-simple.bc] Error 1
+
+Any ideas why this is? make -k check gives a load of these errors.
+
+This is OCaml 3.12 LLVM 2.9svn OS X 10.6.5
+
+Pete
+
+From pwalton at mozilla.com  Tue Dec 21 13:50:58 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Tue, 21 Dec 2010 13:50:58 -0800
+Subject: [rust-dev] leaked memory in rust main loop?
+In-Reply-To: <AANLkTi=EeABNypLiVDyEzxTrCoXW0aAsbifBHKyuevWG@mail.gmail.com>
+References: <AANLkTi=EeABNypLiVDyEzxTrCoXW0aAsbifBHKyuevWG@mail.gmail.com>
+Message-ID: <4D112142.9040904@mozilla.com>
+
+On 12/21/10 1:49 PM, Peter Hull wrote:
+> Hi all,
+> I've done a git pull upstream master, then
+> make clean
+> make all
+> make check
+> and I get this:
+>
+> cfg: using built ./rustboot for rust deps
+> check: formatting
+> compile [boot x86]: test/run-pass/native-mod.rc
+> ? loads more compiles and passed tests, then ...
+> compile [boot x86]: test/compile-fail/wrong-ret-type.rs
+> compile [rustc]: test/run-pass/alt-pattern-simple.rs
+> rt: fatal, 'leaked memory in rust main loop (51 objects)' failed,
+> rt/memory_region.cpp:99 51 objects
+> make: *** [test/run-pass/alt-pattern-simple.bc] Error 1
+
+Typically this indicates that rustc couldn't find your LLVM library. 
+Make sure that libLLVM-2.8svn.so (or similar) is in your LD_LIBRARY_PATH.
+
+Patrick
+
+From respindola at mozilla.com  Wed Dec 22 11:35:42 2010
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Wed, 22 Dec 2010 14:35:42 -0500
+Subject: [rust-dev] [patch] Add support for parsing "use"
+Message-ID: <4D12530E.5060306@mozilla.com>
+
+With the attached patch rustc can parse:
+
+------------
+use std;
+use std();
+use std(name = "foo");
+use std(name = "foo", bar = "zed");
+
+fn main() {
+}
+------------
+
+I am setting up a github account and repo, but for now the patch is attached
+
+Questions:
+
+*) Are use and imports allowed anywhere in the file?
+*) How do I add a test that uses rustc?
+*) Is there a syntax only mode? I had to add the main function to 
+prevent a crash.
+
+Cheers,
+Rafael
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: use.patch
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101222/1ce02fb1/attachment.pl>
+
+From graydon at mozilla.com  Wed Dec 22 11:54:04 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 22 Dec 2010 11:54:04 -0800
+Subject: [rust-dev] [patch] Add support for parsing "use"
+In-Reply-To: <4D12530E.5060306@mozilla.com>
+References: <4D12530E.5060306@mozilla.com>
+Message-ID: <4D12575C.3030803@mozilla.com>
+
+On 22/12/2010 11:35 AM, Rafael ?vila de Esp?ndola wrote:
+> With the attached patch rustc can parse:
+>
+> ------------
+> use std;
+> use std();
+> use std(name = "foo");
+> use std(name = "foo", bar = "zed");
+>
+> fn main() {
+> }
+
+Great. Some comments on the patch:
+
+  - in parse_meta_item, p.err("foobar") is no good; need a real error
+    message. Or call unexpected(p, p.peek()).
+
+  - parse_meta should use the parse_seq helper, rather than manually
+    stepping through the commas.
+
+  - It might be good to sink parse_use_and_imports down to the module
+    level, as we at least support imports (possibly 'use' clasuses as
+    well) within sub-modules. See below re: allowed locations.
+
+> I am setting up a github account and repo, but for now the patch is
+> attached
+
+Ok. We'll need at least the mozilla foundation committer paperwork from 
+you as well, unless you've been vetted for a mozilla project commit 
+level yet. I'll file a bug if not.
+
+> Questions:
+>
+> *) Are use and imports allowed anywhere in the file?
+
+In the present grammar they're only accepted in a sort of "preamble" 
+section before any actual items are declared in a module. This is not 
+something everyone agrees with; some prefer to be able to toss imports 
+and 'use' clauses anywhere they like. I don't really care at this point, 
+trivial change.
+
+I'm not sure if there'll be a big problem permitting imports in other 
+block forms, but for now at least please limit it to module bodies, not 
+any of the items within them.
+
+> *) How do I add a test that uses rustc?
+
+The Makefile contains test-driver logic based on files it finds in 
+test/*/*. So just drop a .rs or .rc file in one of the test 
+subdirectories, and it'll start doing something (with parallel testing 
+support via make -j as well):
+
+   test/run-pass/  for tests you expect to run and exit ok
+
+   test/run-fail/  for tests you expect to run and exit in failure
+
+   test/compile-fail/  for tests you expect to fail compilation
+                       (including an error-pattern comment in the file,
+                        that tells the test driver logic what sort of
+                        error to expect)
+
+By default, the test driver logic runs all tests not listed in the 
+Makefile as XFAIL'ed, so it'll run the rustboot one automatically. If 
+you don't want to run the rustboot one, add the file name to 
+TEST_XFAILS_X86.
+
+Since we have so few tests runnning on rustc at the moment, we currently 
+abuse the XFAIL concept and enumerate a list of the tests that *are* 
+passing in TEST_XFAILS_SELF, wrapping the whole thing in a $(filter-out 
+...) call. So by default rustc will not run a test until you list it in 
+TEST_XFAILS_SELF. At some point we'll invert this back and make it a 
+proper XFAIL list.
+
+> *) Is there a syntax only mode? I had to add the main function to
+> prevent a crash.
+
+No, but I wouldn't object to one. Part of the point of moving to a more 
+functional form in rustc is to make the passes more independently 
+testable. Feel free to add command-line processing to 
+comp/driver/rustc.rs that supports partial pass-execution like that.
+
+-Graydon
+
+From respindola at mozilla.com  Thu Dec 23 08:11:33 2010
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Thu, 23 Dec 2010 11:11:33 -0500
+Subject: [rust-dev] [patch] Add support for parsing "use"
+In-Reply-To: <4D12575C.3030803@mozilla.com>
+References: <4D12530E.5060306@mozilla.com> <4D12575C.3030803@mozilla.com>
+Message-ID: <4D1374B5.9000905@mozilla.com>
+
+> Great. Some comments on the patch:
+
+I will reply on the patch itself in a second.
+
+>> I am setting up a github account and repo, but for now the patch is
+>> attached
+
+I manged to reset my password *and* forget it at home today :-(. Will 
+make sure to have it tomorrow, but for now more attached patches.
+
+> Ok. We'll need at least the mozilla foundation committer paperwork from
+> you as well, unless you've been vetted for a mozilla project commit
+> level yet. I'll file a bug if not.
+
+I should have all the paperwork in place, but don't have any commit 
+access yet (as rust is my first project). How do I check if the 
+paperwork was already processed?
+
+> Since we have so few tests runnning on rustc at the moment, we currently
+> abuse the XFAIL concept and enumerate a list of the tests that *are*
+> passing in TEST_XFAILS_SELF, wrapping the whole thing in a $(filter-out
+> ...) call. So by default rustc will not run a test until you list it in
+> TEST_XFAILS_SELF. At some point we'll invert this back and make it a
+> proper XFAIL list.
+
+I noticed that rustc was never being used and that was because I had the 
+bindings disabled. I assume this is from the days llvm was used via the 
+ocaml bindings. The attached patch should fix that.
+
+>> *) Is there a syntax only mode? I had to add the main function to
+>> prevent a crash.
+>
+> No, but I wouldn't object to one. Part of the point of moving to a more
+> functional form in rustc is to make the passes more independently
+> testable. Feel free to add command-line processing to
+> comp/driver/rustc.rs that supports partial pass-execution like that.
+
+Nice. For now I changed the test to use valid crates so that rustboot is 
+happy with it.
+
+> -Graydon
+
+Cheers,
+Rafael
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: bind.patch
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101223/504feced/attachment.pl>
+
+From respindola at mozilla.com  Thu Dec 23 08:16:45 2010
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Thu, 23 Dec 2010 11:16:45 -0500
+Subject: [rust-dev] [patch] Add support for parsing "use"
+In-Reply-To: <4D12575C.3030803@mozilla.com>
+References: <4D12530E.5060306@mozilla.com> <4D12575C.3030803@mozilla.com>
+Message-ID: <4D1375ED.8080505@mozilla.com>
+
+On 10-12-22 2:54 PM, Graydon Hoare wrote:
+> Great. Some comments on the patch:
+>
+
+Thanks for complete review and explanation!
+
+The attached patch should contain all your suggestions and a test. 
+Should I also add negative tests to check that uses are rejected in 
+other contexts?
+
+> -Graydon
+
+Cheers,
+Rafael
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: use.patch
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101223/c0bb1fdd/attachment.pl>
+
+From respindola at mozilla.com  Fri Dec 24 21:30:34 2010
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sat, 25 Dec 2010 00:30:34 -0500
+Subject: [rust-dev] Linking
+Message-ID: <4D15817A.4020207@mozilla.com>
+
+I have spent some time thinking about how we should implement linking. 
+This is a request for comments on what I have found (don't worry, will 
+be back to the parser in one sec :-) ).
+
+* Introduction
+
+There are two rust features that make it "strange" from the linker's 
+perspective.
+
+*) No global namespace. Every crate has a local namespace, but there is 
+no global one.
+*) Flexible way to select crates. The user can ask for a version, a name 
+or any other metadata.
+
+Not having a global namespace is not a big problem for exporting 
+symbols. We just mangle them. For example, a crate could export the 
+function "mod1.foo" and the constant "mod2.foo".
+
+* Handling undefined references on the shared libraries/executables.
+
+Not having a global namespace is a problem for declaring dependencies. 
+It requires that the symbol table map each undefined reference to a 
+symbol in a particular crate.
+
+No current linker (static or dynamic) supports all this. I propose that 
+we design a system that can be implemented by providing our own linkers, 
+but that can degrade somewhat gracefully to use the system linkers when 
+possible.
+
+Consider first  the namespace problem. A program that uses the function 
+foo from crate1 and the function foo from crate2 will have two undefined 
+references to foo. Both Mach-O and PE/COFF should work. It is possible 
+to implement direct binding on ELF, but It think only Solaris did it.
+
+I tested that this works on OS X by creating a C program that references 
+symbols from two libraries and then using an hex editor to rename the 
+references :-)
+
+The original C program:
+
+int main(void) {
+   foobar1();
+   foobar2();
+   printf("%d %d\n", foozed1, foozed2);
+}
+
+after editing it:
+
+$ dyldinfo -lazy_bind main
+lazy binding information (from lazy_bind part of dyld info):
+segment section          address    index  dylib            symbol
+__DATA  __la_symbol_ptr  0x100001048 0x0000 libSystem        _exit
+__DATA  __la_symbol_ptr  0x100001050 0x000C libf1            _foobar2
+__DATA  __la_symbol_ptr  0x100001058 0x001B libf2            _foobar2
+__DATA  __la_symbol_ptr  0x100001060 0x002A libSystem        _printf
+$ dyldinfo -bind main
+bind information:
+segment section          address        type   weak  addend 
+dylib            symbol
+__DATA  __nl_symbol_ptr  0x100001028    pointer           0 
+libf1            _foozed2
+__DATA  __nl_symbol_ptr  0x100001030    pointer           0 
+libf2            _foozed2
+__DATA  __nl_symbol_ptr  0x100001038    pointer           0 
+libSystem        dyld_stub_binder
+
+Note how now we have two undefined references to foobar2 and foozed2, 
+but each points to a different library. The dynamic linker does the 
+expected and two different functions and variables are used. A similar 
+trick should work on Windows but I haven't tested it.
+
+On ELF things are a bit harder. Hopefully we will get direct binding on 
+Linux some day, but we have to decide what to do before that.
+
+One way to do it is to write a table mapping undefined references to 
+DT_NEEDED. Just like how it is done to implement direct binding. The 
+startup code can then patch up the GOT and PLT. It is wasteful, but 
+probably better then creating a new format. Using the regular symbol 
+table also lets the user run nm, objdump, readelf, etc.
+
+* How to create the shared libraries/executables.
+
+Using an hex editor is probably not something we want in the build 
+pipeline :-) We have to figure out how to generate these strange libraries.
+
+The normal pipeline is *.rs -> .bc -> .s -> .o -> .so/.dylib/.dll
+
+While rust and the shared objects are able to represent the dependencies 
+we want, the middle stages are not since those dependencies are normally 
+computed by the static linker.
+
+There was a bit of discussion about making LLVM able to produce 
+libraries and executables directly. To get there the IL would have to be 
+extended a bit so that a declaration could say what module it resoles 
+to. While this would probably be the perfect solution for us, we need 
+something before that.
+
+We could extend the IL, the assembly files and the static linker, but 
+that doesn't look a lot easier then implementing direct .so emission anyway.
+
+A possible hack is to mangle the undefined references, link normally and 
+then edit the shared library. In the example of a crate using a function 
+'foo' from  crate 'bar' and another function 'foo' from crate 'zed', we 
+wold first produce a .o that had undefined references to bar.foo and 
+zed.foo (the prefixes can be arbitrary). The linker will propagate these 
+undefined references to the .so/.dylib/.dll and we can edit them.
+
+* How to handle the selection of crates
+
+During static linking our linker can do any search we want, but we don't 
+always control the dynamic linker. Even if we do implement a new dynamic 
+linker, having support for searching every system library for the one 
+that declares the metadata item 'color = "blue"' is probably a bit too 
+expensive.
+
+We should define a small set of metadata items (name and version most 
+likely), that a crate must define. These can then be added to the name 
+of the file (crate-foobar-2.3.dylib) and are the only metadata that we 
+search for at runtime. The startup code could still check that 'color = 
+"blue"' and produce an error if not.
+
+* A Hack to avoid most of this for now.
+
+  We can just add a global_prefix item to the crate files. If not 
+declared it could default to a sha1 for example. This would already be a 
+lot better than what we have in java since the user would still say
+
+use foo;
+import foo.bar;
+
+and just have to add a
+
+global_prefix "org.mozilla....."
+
+once to foo's crate.
+
+Opinions?
+
+Cheers,
+Rafael
+
+
+From andersrb at gmail.com  Sun Dec 26 19:58:15 2010
+From: andersrb at gmail.com (Brian Anderson)
+Date: Sun, 26 Dec 2010 22:58:15 -0500
+Subject: [rust-dev] unit testing
+In-Reply-To: <4CC0B368.1060104@mozilla.com>
+References: <4CC0B368.1060104@mozilla.com>
+Message-ID: <AANLkTik5ts947gojTppf8XTh-wFnF8xbCqgnVpkkHSXq@mail.gmail.com>
+
+Hi Graydon,
+
+This is in response to an old thread about unit testing.
+
+I'm not familiar with D. What's the advantage of integrating unit testing so
+tightly with the compiler? What does this provide over xunit-style
+frameworks that just use reflection to find and run tests?
+
+Googling doesn't turn up much. The only interesting thing I see is that
+compiling in unit tests causes the test suite to be run prior to main(), and
+that really doesn't seem very compelling since no user is going to have an
+interest in doing that.
+
+It seems like if you went this route, where you're defining the canonical
+test framework for the language, that it should be done in a very neutral,
+minimal and extensible way so that other test frameworks can piggyback on
+it.
+
+Regards,
+Brian
+
+On Thu, Oct 21, 2010 at 5:40 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> Hi,
+>
+> Rust presently has no "standard" mechanism for unit testing. I'd like to
+> adopt one, or at least move towards having one. We're getting enough library
+> written-in-rust code now that it makes sense.
+>
+> I'm interested in pursuing a slightly-structured technique, and have been
+> considering a mechanism similar to the D 'version' and 'unittest' system(s).
+>
+> The idea has three parts:
+>
+> 1. Add a command-line flag to specify a set of configuration flags to
+> enable during a particular build. say -cfg win32 or such. These are not
+> structured values, just opaque strings.
+>
+> 2. Add a syntax extension also called cfg that marks an item as
+> to-be-included only if one of its arguments appears in the set of
+> configuration flags.
+>
+> With 1 and 2, we'd be at the point where a module marked as, say,
+> "#cfg(test) mod test { ... }" would wind up conditionally compiled only if
+> you ran the compiler with -cfg test. (This would also double as a mechanism
+> for including modules on a per-platform basis, including debug code, that
+> sort of thing.) But programmers are lazy. So let's go one step further:
+>
+> 3. Add a *further* command-line flag called '-test' that does two things:
+>
+>  - Adds #cfg(test) to the set of config flags, so all test-conditional
+>    code gets included.
+>
+>  - Changes the target the compiler's building. Instead of groveling
+>    for a main function, or just building a library (as in -shared),
+>    the -test target is a synthetic target that runs every function
+>    marked with #test, passing in a value of type std.test.harness,
+>    a basic xUnit-ish test harness.
+>
+>    (should also provide runtime subset-selection of tests in the
+>     harness, etc, etc., but you get the idea)
+>
+> If this works out nicely, we can expand the interface a bit in the future
+> to include specifying a test harness rather than hard-wiring it to the one
+> in std. For the time being I'd be happy to have any sort of structured
+> system, and I'd prefer to err on the side of "discoverable" rather than
+> "configurable" for testing.
+>
+> (Also, this way we increase the odds of the standard-library one maturing
+> along with community needs, rather than rotting away. Nothing sadder than a
+> standard library component nobody uses!)
+>
+> Comments? Preferences?
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101226/f7121072/attachment.html>
+
+From respindola at mozilla.com  Wed Dec 29 10:49:31 2010
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Wed, 29 Dec 2010 13:49:31 -0500
+Subject: [rust-dev] the vector += operator
+Message-ID: <4D1B82BB.2020300@mozilla.com>
+
+While hacking in the parser I noticed that
+
+  ...ast.ident id....
+  let vec[ast.ident] identifiers = vec();
+  identifiers += id;
+
+works, but that
+
+let vec[@ast.meta_item] v = vec();
+let @ast.meta_item x = @spanned(lo, hi, rec(name = name, value = name));
+v += x;
+
+doesn't. Is there a rationale for it? Chatting with dherman he expressed 
+a preference for + always requiring two vectors. I would second that, as 
+it looks more natural and is what is done in other languages. We can 
+always add an append method for when there is a single element to be added.
+
+Cheers,
+Rafael
+
+From graydon at mozilla.com  Wed Dec 29 13:22:37 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 29 Dec 2010 13:22:37 -0800
+Subject: [rust-dev] the vector += operator
+In-Reply-To: <4D1B82BB.2020300@mozilla.com>
+References: <4D1B82BB.2020300@mozilla.com>
+Message-ID: <4D1BA69D.4040806@mozilla.com>
+
+On 10-12-29 10:49 AM, Rafael ?vila de Esp?ndola wrote:
+> While hacking in the parser I noticed that
+>
+> ...ast.ident id....
+> let vec[ast.ident] identifiers = vec();
+> identifiers += id;
+>
+> works, but that
+>
+> let vec[@ast.meta_item] v = vec();
+> let @ast.meta_item x = @spanned(lo, hi, rec(name = name, value = name));
+> v += x;
+>
+> doesn't. Is there a rationale for it? Chatting with dherman he expressed
+> a preference for + always requiring two vectors. I would second that, as
+> it looks more natural and is what is done in other languages. We can
+> always add an append method for when there is a single element to be added.
+>
+
+Yeah. Our conversation on IRC led us to the conclusion that it's 
+probably not worth ripping out of rustboot in the short term, but we'll 
+not support it in rustc (and probably figure out some kind of static 
+binding mechanism for method-call-izing basic plain-data types).
+
+If it annoys you enough, feel free to rip it out of rustboot and adjust 
+the testcases to match. Or I can do it. Actually I'm in a kinda delete-y 
+mood today. Maybe I'll do it.
+
+-Graydon
+
+From graydon at mozilla.com  Wed Dec 29 13:53:24 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 29 Dec 2010 13:53:24 -0800
+Subject: [rust-dev] unit testing
+In-Reply-To: <AANLkTik5ts947gojTppf8XTh-wFnF8xbCqgnVpkkHSXq@mail.gmail.com>
+References: <4CC0B368.1060104@mozilla.com>
+	<AANLkTik5ts947gojTppf8XTh-wFnF8xbCqgnVpkkHSXq@mail.gmail.com>
+Message-ID: <4D1BADD4.9020301@mozilla.com>
+
+On 10-12-26 07:58 PM, Brian Anderson wrote:
+
+> I'm not familiar with D. What's the advantage of integrating unit testing so
+> tightly with the compiler? What does this provide over xunit-style
+> frameworks that just use reflection to find and run tests?
+
+What I said in the email: I'd like to err on the side of "discoverable" 
+over "configurable". Configuring a unit testing framework is nice; but 
+I've seen far too many projects fall down the slope of "didn't even 
+agree on how to do unit testing, decided someone else would get around 
+to it, resulting system has no tests".
+
+I want our library and ecosystem of programs to have a 
+falling-down-easy, standard, discoverable-as-stdio kind of mechanism for 
+doing unit tests, so it always gets done. Likewise logging. It's more 
+important to have a system that gets used than to have a maximally 
+flexible one.
+
+(At least *some* amount of integration with the compiler or build 
+process is necessary in a systems language like this, because ultimately 
+the output file has to say where the OS drops a PC when the image is 
+loaded into memory. Someone has to tell the compiler not to jump to 
+'main'. This is why we have a -shared flag currently in rustboot as 
+well, for libraries.)
+
+> It seems like if you went this route, where you're defining the canonical
+> test framework for the language, that it should be done in a very neutral,
+> minimal and extensible way so that other test frameworks can piggyback on
+> it.
+
+Well, a bit. How about "defining *a* canonical test framework". Maybe 
+lightly extensible (an obj interface you can provide your own impl for), 
+but I mean, basic test-reporting interfaces shouldn't be that hard. If a 
+standard library can provide things like containers, PRNGs, IO systems, 
+file formats, OS interfaces, i18n and debug interfaces ... it seems like 
+it can provide a unit test framework. Many languages provide such now.
+
+-Graydon
+
+From graydon at mozilla.com  Wed Dec 29 15:50:34 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 29 Dec 2010 15:50:34 -0800
+Subject: [rust-dev] Linking
+In-Reply-To: <4D15817A.4020207@mozilla.com>
+References: <4D15817A.4020207@mozilla.com>
+Message-ID: <4D1BC94A.9060806@mozilla.com>
+
+On 10-12-24 09:30 PM, Rafael ?vila de Esp?ndola wrote:
+
+> Not having a global namespace is not a big problem for exporting
+> symbols. We just mangle them. For example, a crate could export the
+> function "mod1.foo" and the constant "mod2.foo".
+
+Agreed.
+
+> Consider first the namespace problem. A program that uses the function
+> foo from crate1 and the function foo from crate2 will have two undefined
+> references to foo. Both Mach-O and PE/COFF should work. It is possible
+> to implement direct binding on ELF, but It think only Solaris did it.
+
+Ok. Let's develop a workaround for ELF and then maybe someday petition 
+ELF's linker-authors to support direct binding. Michael Meeks appears to 
+have already authored a patch, though Ulrich doesn't like it.
+
+http://sourceware.org/ml/binutils/2005-10/msg00436.html
+
+> I tested that this works on OS X by creating a C program that references
+> symbols from two libraries and then using an hex editor to rename the
+> references :-)
+
+Can't you coax their linker into doing so with some kind of 
+direct-binding flag?
+
+
+> On ELF things are a bit harder. Hopefully we will get direct binding on
+> Linux some day, but we have to decide what to do before that.
+>
+> One way to do it is to write a table mapping undefined references to
+> DT_NEEDED. Just like how it is done to implement direct binding. The
+> startup code can then patch up the GOT and PLT. It is wasteful, but
+> probably better then creating a new format. Using the regular symbol
+> table also lets the user run nm, objdump, readelf, etc.
+
+Yeah. That's what Michael's patch does, I think.
+
+> * How to create the shared libraries/executables.
+>
+> Using an hex editor is probably not something we want in the build
+> pipeline :-) We have to figure out how to generate these strange libraries.
+>
+> The normal pipeline is *.rs -> .bc -> .s -> .o -> .so/.dylib/.dll
+
+His patch encoded a new .direct section, I think. But we could approach 
+it differently. I don't particularly want to *depend* on a solution that 
+requires glibc changes. I think you're right that we'll need to work 
+around for ELF, at least. Maybe everything, since LLVM itself has 
+similar limitations.
+
+> A possible hack is to mangle the undefined references, link normally and
+> then edit the shared library. In the example of a crate using a function
+> 'foo' from crate 'bar' and another function 'foo' from crate 'zed', we
+> wold first produce a .o that had undefined references to bar.foo and
+> zed.foo (the prefixes can be arbitrary). The linker will propagate these
+> undefined references to the .so/.dylib/.dll and we can edit them.
+
+Nah, too painful.
+
+> During static linking our linker can do any search we want, but we don't
+> always control the dynamic linker. Even if we do implement a new dynamic
+> linker, having support for searching every system library for the one
+> that declares the metadata item 'color = "blue"' is probably a bit too
+> expensive.
+
+Agreed, sigh. This is the part where it's actually useful to have a 
+'-Bdirect' flag supported in the linker, eh?
+
+> We should define a small set of metadata items (name and version most
+> likely), that a crate must define. These can then be added to the name
+> of the file (crate-foobar-2.3.dylib) and are the only metadata that we
+> search for at runtime. The startup code could still check that 'color =
+> "blue"' and produce an error if not.
+>
+> * A Hack to avoid most of this for now.
+>
+> We can just add a global_prefix item to the crate files. If not declared
+> it could default to a sha1 for example. This would already be a lot
+> better than what we have in java since the user would still say
+>
+> use foo;
+> import foo.bar;
+>
+> and just have to add a
+>
+> global_prefix "org.mozilla....."
+>
+> once to foo's crate.
+>
+> Opinions?
+
+Going down this road makes me further question whether we are just 
+fighting a losing battle against baked-in assumptions in the system tools.
+
+(We discussed this today on IRC, so I'm just writing up what we got to)
+
+Let's propose this instead: "ideally no global namespace, but we're 
+going to fake it just a bit on this toolchain": IOW provide only 
+"vanishingly small chance of collision in the top-level global 
+namespace". Assume CHF is some cryptographic hash, sha1 or sha3 or 
+whatever. Perhaps truncated to something non-horrible like 16 hex digits 
+(64-bits). Then:
+
+1. Define two crate metadata tags as mandatory. Name + version. Call
+    these CNAME and CVERS.
+2. Define CMETA as CHF(all non-$CNAME, non-$CVERS metadata in a crate).
+3. Define $CMH as CHF($CMETA)
+4. Compile a crate down to $CNAME-$CMH-$CVERS.dylib
+
+Each crate is "almost globally uniquely named" and the search done by 
+the compiler will almost-always (with vanishingly small odds against) be 
+repeated precisely by the runtime linker. If the linker supports 
+versioned symbols, it can use that logic to handle type-compatible 
+version upgrades on the same-named crate.
+
+Then for symbols:
+
+1. Define typeof(sym) to be a canonical encoding of a type, with nominal
+    types expanding out to a mangled name as below:
+1. Define STH(sym) as CHF($CNAME,$CMH,typeof(symbol))
+2. Flatten names by module path, so
+       mod M { fn x() { .. } }
+    gets flattened to:
+       M.x
+3. Define mangled(M.x) as $STH.M.x@$CVERS
+4. Emit the contents of symbol M.x named by global symbol mangled(M.x)
+5. Emit a string typeof(M.x) into local symbol "M.x", put in a
+    non-mapped section that is only made use of during compilation and/or
+    debugging.
+6. .ll, .s, .o and .dylib don't need to learn anything new. Debuggers
+    need to learn how to work with the local symbols to extract type info
+    and how to demangle the global names.
+
+This means that the linker, if it's clever enough to do per-symbol 
+versioning, can do so and support an upgrade on a type-compatible 
+function. Each function winds up prefixed by the crate metadata and its 
+type signature compressed to a fixed size, but the full type info can be 
+recovered (eg. by the compiler or debugger) by reading the local symbols.
+
+Sound ok? Is this what we were agreeing to on IRC?
+
+-Graydon
+
+
+
+From andersrb at gmail.com  Wed Dec 29 22:30:23 2010
+From: andersrb at gmail.com (Brian Anderson)
+Date: Thu, 30 Dec 2010 01:30:23 -0500
+Subject: [rust-dev] unit testing
+In-Reply-To: <4D1BADD4.9020301@mozilla.com>
+References: <4CC0B368.1060104@mozilla.com>
+	<AANLkTik5ts947gojTppf8XTh-wFnF8xbCqgnVpkkHSXq@mail.gmail.com>
+	<4D1BADD4.9020301@mozilla.com>
+Message-ID: <AANLkTik+vP7kmEoXVh3_YZfQgO9Hx+_xwe5ctZZhmUb0@mail.gmail.com>
+
+On Wed, Dec 29, 2010 at 4:53 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> On 10-12-26 07:58 PM, Brian Anderson wrote:
+>
+>  I'm not familiar with D. What's the advantage of integrating unit testing
+>> so
+>> tightly with the compiler? What does this provide over xunit-style
+>> frameworks that just use reflection to find and run tests?
+>>
+>
+> What I said in the email: I'd like to err on the side of "discoverable"
+> over "configurable". Configuring a unit testing framework is nice; but I've
+> seen far too many projects fall down the slope of "didn't even agree on how
+> to do unit testing, decided someone else would get around to it, resulting
+> system has no tests".
+>
+> I want our library and ecosystem of programs to have a falling-down-easy,
+> standard, discoverable-as-stdio kind of mechanism for doing unit tests, so
+> it always gets done. Likewise logging. It's more important to have a system
+> that gets used than to have a maximally flexible one.
+>
+> (At least *some* amount of integration with the compiler or build process
+> is necessary in a systems language like this, because ultimately the output
+> file has to say where the OS drops a PC when the image is loaded into
+> memory. Someone has to tell the compiler not to jump to 'main'. This is why
+> we have a -shared flag currently in rustboot as well, for libraries.)
+
+
+That's what I was missing. I guess I'm pretty used to the JVM and CLR where
+there's not really a distinction between executables and libraries.
+I think I understand now.
+
+
+
+>
+>  It seems like if you went this route, where you're defining the canonical
+>> test framework for the language, that it should be done in a very neutral,
+>> minimal and extensible way so that other test frameworks can piggyback on
+>> it.
+>>
+>
+> Well, a bit. How about "defining *a* canonical test framework". Maybe
+> lightly extensible (an obj interface you can provide your own impl for), but
+> I mean, basic test-reporting interfaces shouldn't be that hard. If a
+> standard library can provide things like containers, PRNGs, IO systems, file
+> formats, OS interfaces, i18n and debug interfaces ... it seems like it can
+> provide a unit test framework. Many languages provide such now.
+
+
+I agree that providing a unit testing framework in the standard library is a
+good thing, and leaving the interface for defining tests open to other
+implementations is possibly all that's needed as an extension mechanism. I
+was thinking about the diversity of test frameworks in Java and how many of
+them provide some kind of JUnit adapter to ease adoption. It's good to leave
+people the option of building sprawling BDD frameworks and such on top of
+the standard one.
+
+-Brian
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101230/332c3ee6/attachment.html>
+
+From respindola at mozilla.com  Thu Dec 30 09:04:01 2010
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Thu, 30 Dec 2010 12:04:01 -0500
+Subject: [rust-dev] Linking
+In-Reply-To: <4D1BC94A.9060806@mozilla.com>
+References: <4D15817A.4020207@mozilla.com> <4D1BC94A.9060806@mozilla.com>
+Message-ID: <4D1CBB81.602@mozilla.com>
+
+> Ok. Let's develop a workaround for ELF and then maybe someday petition
+> ELF's linker-authors to support direct binding. Michael Meeks appears to
+> have already authored a patch, though Ulrich doesn't like it.
+>
+> http://sourceware.org/ml/binutils/2005-10/msg00436.html
+
+I would advice against any plan that involves Ulrich. We need a 
+workaround for ELF for now, but it is a useful thought experiment to 
+know that the workaround can be dropped one day. Maybe when LLVM support 
+for object files develops. They intend to support a static linker, the 
+dynamic one is not that much harder. Another option is eglibc that might 
+be more open to it.
+
+>> I tested that this works on OS X by creating a C program that references
+>> symbols from two libraries and then using an hex editor to rename the
+>> references :-)
+>
+> Can't you coax their linker into doing so with some kind of
+> direct-binding flag?
+
+The static linker? How do you even get the information to it? Lets say a 
+file has a call to two functions called foo in two different crates. 
+Without crate dependent mangling, the .s file will have two "call foo" 
+statements.
+
+
+>> Using an hex editor is probably not something we want in the build
+>> pipeline :-) We have to figure out how to generate these strange
+>> libraries.
+>>
+>> The normal pipeline is *.rs -> .bc -> .s -> .o -> .so/.dylib/.dll
+>
+> His patch encoded a new .direct section, I think. But we could approach
+> it differently. I don't particularly want to *depend* on a solution that
+> requires glibc changes. I think you're right that we'll need to work
+> around for ELF, at least. Maybe everything, since LLVM itself has
+> similar limitations.
+
+Michael's patch adds that functionally to .so files. So they become as 
+good as .dll or .dylib. The problem is that the information put in there 
+is created by the static linker, not provide by the compiler. The 
+compiler has no channel to pass it.
+
+A simple way to look at it is that the "compile, link" stages can looked 
+at as "compile, resolve, link". In rust we want the compiler to do the 
+first two. In a traditional ELF system most of the resolve is done at 
+runtime after the link and in darwin and windows it is done at static 
+link time.
+
+>> A possible hack is to mangle the undefined references, link normally and
+>> then edit the shared library. In the example of a crate using a function
+>> 'foo' from crate 'bar' and another function 'foo' from crate 'zed', we
+>> wold first produce a .o that had undefined references to bar.foo and
+>> zed.foo (the prefixes can be arbitrary). The linker will propagate these
+>> undefined references to the .so/.dylib/.dll and we can edit them.
+>
+> Nah, too painful.
+
+Agreed.
+
+>> During static linking our linker can do any search we want, but we don't
+>> always control the dynamic linker. Even if we do implement a new dynamic
+>> linker, having support for searching every system library for the one
+>> that declares the metadata item 'color = "blue"' is probably a bit too
+>> expensive.
+>
+> Agreed, sigh. This is the part where it's actually useful to have a
+> '-Bdirect' flag supported in the linker, eh?
+
+More or less, that flag would bind a name to a library, not control 
+exactly what runtime file provides that library.
+
+>> * A Hack to avoid most of this for now.
+>>
+>> We can just add a global_prefix item to the crate files. If not declared
+>> it could default to a sha1 for example. This would already be a lot
+>> better than what we have in java since the user would still say
+>>
+>> use foo;
+>> import foo.bar;
+>>
+>> and just have to add a
+>>
+>> global_prefix "org.mozilla....."
+>>
+>> once to foo's crate.
+>>
+>> Opinions?
+>
+> Going down this road makes me further question whether we are just
+> fighting a losing battle against baked-in assumptions in the system tools.
+
+I think it is just a very slow victory :-)
+
+> (We discussed this today on IRC, so I'm just writing up what we got to)
+>
+> Let's propose this instead: "ideally no global namespace, but we're
+> going to fake it just a bit on this toolchain": IOW provide only
+> "vanishingly small chance of collision in the top-level global
+> namespace". Assume CHF is some cryptographic hash, sha1 or sha3 or
+> whatever. Perhaps truncated to something non-horrible like 16 hex digits
+> (64-bits). Then:
+>
+> 1. Define two crate metadata tags as mandatory. Name + version. Call
+> these CNAME and CVERS.
+> 2. Define CMETA as CHF(all non-$CNAME, non-$CVERS metadata in a crate).
+> 3. Define $CMH as CHF($CMETA)
+> 4. Compile a crate down to $CNAME-$CMH-$CVERS.dylib
+ >
+> Each crate is "almost globally uniquely named" and the search done by
+> the compiler will almost-always (with vanishingly small odds against) be
+> repeated precisely by the runtime linker. If the linker supports
+> versioned symbols, it can use that logic to handle type-compatible
+> version upgrades on the same-named crate.
+>
+> Then for symbols:
+>
+> 1. Define typeof(sym) to be a canonical encoding of a type, with nominal
+> types expanding out to a mangled name as below:
+> 1. Define STH(sym) as CHF($CNAME,$CMH,typeof(symbol))
+> 2. Flatten names by module path, so
+> mod M { fn x() { .. } }
+> gets flattened to:
+> M.x
+> 3. Define mangled(M.x) as $STH.M.x@$CVERS
+> 4. Emit the contents of symbol M.x named by global symbol mangled(M.x)
+> 5. Emit a string typeof(M.x) into local symbol "M.x", put in a
+> non-mapped section that is only made use of during compilation and/or
+> debugging.
+> 6. .ll, .s, .o and .dylib don't need to learn anything new. Debuggers
+> need to learn how to work with the local symbols to extract type info
+> and how to demangle the global names.
+
+I assumed debuggers would just use DWARF as they do now..
+
+>
+> This means that the linker, if it's clever enough to do per-symbol
+> versioning, can do so and support an upgrade on a type-compatible
+> function. Each function winds up prefixed by the crate metadata and its
+> type signature compressed to a fixed size, but the full type info can be
+> recovered (eg. by the compiler or debugger) by reading the local symbols.
+>
+> Sound ok? Is this what we were agreeing to on IRC?
+
+I think so. Just one suggestion and two observation.
+
+It might be better to define CMETA with a white list. As a user I would 
+probably be surprised if fixing a typo in the my_random_note metadata 
+item required relinking all programs using this crate.
+
+The reason why we need some user visible metadata to be hashed is 
+because two equally typed and named functions in two crates can collide 
+and the user can then add a "prefix" (the name is not important) 
+metadata to at least one of the crates to avoid the collision.
+
+I do hope that we will have host tools that support multiple namespaces 
+one day (not just the dynamic linker) :-)
+
+> -Graydon
+
+Cheers,
+Rafael
+
+From peterhull90 at gmail.com  Fri Dec 31 01:49:30 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Fri, 31 Dec 2010 09:49:30 +0000
+Subject: [rust-dev] leaked memory in rust main loop?
+In-Reply-To: <4D112142.9040904@mozilla.com>
+References: <AANLkTi=EeABNypLiVDyEzxTrCoXW0aAsbifBHKyuevWG@mail.gmail.com>
+	<4D112142.9040904@mozilla.com>
+Message-ID: <AANLkTi=xUmU7r=jVJc25LSvX-7Ho9CkRKcr6x=_xVg0K@mail.gmail.com>
+
+On Tue, Dec 21, 2010 at 9:50 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+> Typically this indicates that rustc couldn't find your LLVM library. Make
+> sure that libLLVM-2.8svn.so (or similar) is in your LD_LIBRARY_PATH.
+Sorry to ask the same question again but I'm still getting that error
+and libLLVM-2.9svn.dylib is on my library path (/usr/local/lib) Using
+otool -L it seems that none of rustc, librustrt.dylib or
+librustrt.dylib load it and I can't find where it might be dlopen'd.
+Any ideas what else I can check?
+
+Pete
+
+From respindola at mozilla.com  Fri Dec 31 06:23:52 2010
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Fri, 31 Dec 2010 09:23:52 -0500
+Subject: [rust-dev] leaked memory in rust main loop?
+In-Reply-To: <AANLkTi=xUmU7r=jVJc25LSvX-7Ho9CkRKcr6x=_xVg0K@mail.gmail.com>
+References: <AANLkTi=EeABNypLiVDyEzxTrCoXW0aAsbifBHKyuevWG@mail.gmail.com>	<4D112142.9040904@mozilla.com>
+	<AANLkTi=xUmU7r=jVJc25LSvX-7Ho9CkRKcr6x=_xVg0K@mail.gmail.com>
+Message-ID: <4D1DE778.2030506@mozilla.com>
+
+On 10-12-31 4:49 AM, Peter Hull wrote:
+> On Tue, Dec 21, 2010 at 9:50 PM, Patrick Walton<pwalton at mozilla.com>  wrote:
+>> Typically this indicates that rustc couldn't find your LLVM library. Make
+>> sure that libLLVM-2.8svn.so (or similar) is in your LD_LIBRARY_PATH.
+> Sorry to ask the same question again but I'm still getting that error
+> and libLLVM-2.9svn.dylib is on my library path (/usr/local/lib) Using
+> otool -L it seems that none of rustc, librustrt.dylib or
+> librustrt.dylib load it and I can't find where it might be dlopen'd.
+> Any ideas what else I can check?
+
+Make sure link is called libLLVM-2.8svn.dylib or update comp/rustc.rc. 
+Also make sure the library is 32 bits.
+
+> Pete
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+Cheers,
+Rafael
+
+From peterhull90 at gmail.com  Fri Dec 31 08:50:44 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Fri, 31 Dec 2010 16:50:44 +0000
+Subject: [rust-dev] leaked memory in rust main loop?
+In-Reply-To: <4D1DE778.2030506@mozilla.com>
+References: <AANLkTi=EeABNypLiVDyEzxTrCoXW0aAsbifBHKyuevWG@mail.gmail.com>
+	<4D112142.9040904@mozilla.com>
+	<AANLkTi=xUmU7r=jVJc25LSvX-7Ho9CkRKcr6x=_xVg0K@mail.gmail.com>
+	<4D1DE778.2030506@mozilla.com>
+Message-ID: <AANLkTin=SvWzGVYTCbTFm-5TQAiHF2b18P=Wu7cKw97i@mail.gmail.com>
+
+2010/12/31 Rafael ?vila de Esp?ndola <respindola at mozilla.com>:
+> On 10-12-31 4:49 AM, Peter Hull wrote:
+> Make sure link is called libLLVM-2.8svn.dylib or update comp/rustc.rc. Also
+Ah, that was it. I looked in all the .cpp and  .rs files but not .rc!
+Thanks,
+Peter
+
+From respindola at mozilla.com  Fri Dec 31 12:17:15 2010
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Fri, 31 Dec 2010 15:17:15 -0500
+Subject: [rust-dev] Backtraces in gdb
+In-Reply-To: <4D0A83BB.7010508@mozilla.com>
+References: <4D0A83BB.7010508@mozilla.com>
+Message-ID: <4D1E3A4B.40202@mozilla.com>
+
+> We'll keep discussing this with gdb upstream and Go (and anyone else who
+> has this problem) until it's fixed in a nice general fashion. But our
+> ABI is likely to shift a bit before it's done. Until then, this patch is
+> an effective workaround.
+
+Attached is a patch for Apple's version of gdb if you are developing on 
+OS X.
+
+> -Graydon
+
+Cheers,
+Rafael
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: gdb-1472.patch
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101231/917390f2/attachment.pl>
+

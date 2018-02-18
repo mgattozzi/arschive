@@ -1,0 +1,817 @@
+From graydon at mozilla.com  Fri Feb 25 11:38:24 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 25 Feb 2011 11:38:24 -0800
+Subject: [rust-dev] Unicode identifiers
+Message-ID: <4D680530.4050909@mozilla.com>
+
+Hi,
+
+I came across some 3rd party discussion of my choice of ASCII-range 
+identifiers (and limitation of non-ASCII-range unicode to strings, chars 
+and comments) that cited this as a major problem in the language. This 
+prompted a little more research and reading on my part, and talking with 
+people who had differing experiences with non-English identifier use in 
+programming languages. I now believe that my earlier impression of 
+"almost universal" adoption of ASCII-range identifiers in non-English 
+programming shops was mistaken, an that there is actually substantial 
+value to such programmers in having non-ASCII range available.
+
+Moreover, looking at the approach taken by PEP 3131 (delegating to the 
+NFKC-normalization-closed sets defined in UAX 31, 
+XID_Start/XID_Continue), I see the "proper solution" has a 
+better-established consensus than I had previously understood to exist. 
+So I've updated the Rust manual to delegate to these specifications as 
+well, and filed a bug (issue 242, if anyone wants to jump on it) to get 
+the lexer patched up to handle this change.
+
+Practical implications of this change are few for people (a) already 
+comfortable with ASCII-range identifiers or (b) working outside the 
+lexer. Hopefully it'll make things more welcome for people who don't fit 
+in to case (a) though.
+
+Apologies for the trashing about on this issue, I misunderstood the 
+current state of play (possibly due to a little too much time spent in 
+despair while trying to upgrade ECMAScript 4 to "any Unicode spec after 
+1995", but that's a whole other story...)
+
+-Graydon
+
+From igor at mir2.org  Fri Feb 25 14:35:47 2011
+From: igor at mir2.org (Igor Bukanov)
+Date: Fri, 25 Feb 2011 23:35:47 +0100
+Subject: [rust-dev] Unicode identifiers
+In-Reply-To: <4D680530.4050909@mozilla.com>
+References: <4D680530.4050909@mozilla.com>
+Message-ID: <AANLkTinz9zT53hAF2EAvtWknccv0vgQbZmhkF6SjkpVe@mail.gmail.com>
+
+On 25 February 2011 20:38, Graydon Hoare <graydon at mozilla.com> wrote:
+> So I've updated the Rust manual to delegate
+> to these specifications as well
+
+With most fonts it is not possible to see that the following ES
+fragment should alert 1, not 2. I guess such problems are not
+considered high on the list of language designs.
+
+javascript:var a = 1; ? = 2; alert(a);
+
+From graydon at mozilla.com  Fri Feb 25 14:57:49 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 25 Feb 2011 14:57:49 -0800
+Subject: [rust-dev] Unicode identifiers
+In-Reply-To: <AANLkTinz9zT53hAF2EAvtWknccv0vgQbZmhkF6SjkpVe@mail.gmail.com>
+References: <4D680530.4050909@mozilla.com>
+	<AANLkTinz9zT53hAF2EAvtWknccv0vgQbZmhkF6SjkpVe@mail.gmail.com>
+Message-ID: <4D6833ED.7030006@mozilla.com>
+
+On 11-02-25 02:35 PM, Igor Bukanov wrote:
+
+> With most fonts it is not possible to see that the following ES
+> fragment should alert 1, not 2. I guess such problems are not
+> considered high on the list of language designs.
+>
+> javascript:var a = 1; ? = 2; alert(a);
+
+It's certainly relevant! The NFKC pass is supposed to defend against .. 
+*some* of this sort of ambiguity; but there is a limit, and as you say, 
+it's font-dependent. FWIW, the emacs buffer I pasted it in to inspect 
+showed the difference plenty well (0x0061 LATIN SMALL LETTER A vs. 
+0x0430 CYRILLIC SMALL LETTER A). But I think that's because it had to do 
+a multi-font patchwork job. A well done full-range font would probably 
+have collided, visually.
+
+I pointed out the risk of homographic "attacks" like this to the fellow 
+who raised the complaint initially, and .. I still agree it's a risk. 
+It's even a risk in IDNA, where they don't (I believe) squeeze this 
+ambiguity out even in their nameprep profile.
+
+It's just one that I've changed my feeling on the risk/reward ratio of, 
+I guess. It's substantially *less* of a risk here than in URLs, too; it 
+seems really unlikely that anyone's going to use systems-language source 
+code for phishing attacks (goodness, I hope not).
+
+In any case, if it worries you in production code I suspect it'll be a 
+small matter of adding a pragma (once the compiler plug-in interface is 
+sufficiently non-vapourware) to clamp your project's source to a 
+particular unicode range.
+
+-Graydon
+
+From dherman at mozilla.com  Fri Feb 25 15:25:50 2011
+From: dherman at mozilla.com (David Herman)
+Date: Fri, 25 Feb 2011 15:25:50 -0800
+Subject: [rust-dev] Unicode identifiers
+In-Reply-To: <4D6833ED.7030006@mozilla.com>
+References: <4D680530.4050909@mozilla.com>
+	<AANLkTinz9zT53hAF2EAvtWknccv0vgQbZmhkF6SjkpVe@mail.gmail.com>
+	<4D6833ED.7030006@mozilla.com>
+Message-ID: <8B79167E-DA35-4377-8268-976EAF899764@mozilla.com>
+
+> In any case, if it worries you in production code I suspect it'll be a small matter of adding a pragma (once the compiler plug-in interface is sufficiently non-vapourware) to clamp your project's source to a particular unicode range.
+
++1
+
+This sounds like the right approach to me: this kind of restriction is very easy to write in a lint tool, and our planned compiler plug-in approach is a perfect way to encourage people to write these plug-ins. But I'd rather be inclusive and give people the option to exclude, especially if it's not hard to express the exclusions.
+
+I also agree that the risks are different for an AOT-compiled systems language, where the code lives in a single repository and is statically inspectable, than they are for web standards.
+
+Dave
+
+
+From igor at mir2.org  Fri Feb 25 15:35:04 2011
+From: igor at mir2.org (Igor Bukanov)
+Date: Sat, 26 Feb 2011 00:35:04 +0100
+Subject: [rust-dev] Unicode identifiers
+In-Reply-To: <4D6833ED.7030006@mozilla.com>
+References: <4D680530.4050909@mozilla.com>
+	<AANLkTinz9zT53hAF2EAvtWknccv0vgQbZmhkF6SjkpVe@mail.gmail.com>
+	<4D6833ED.7030006@mozilla.com>
+Message-ID: <AANLkTinDGUc6EKkmG3YQS3=0DD79Qr-NjzNoB+Rttn=5@mail.gmail.com>
+
+On 25 February 2011 23:57, Graydon Hoare <graydon at mozilla.com> wrote:
+> it seems
+> really unlikely that anyone's going to use systems-language source code for
+> phishing attacks (goodness, I hope not).
+
+It is not about phishing attacks, it is about deliberate subverting
+software to embed, for example, a back dor.
+
+> In any case, if it worries you in production code I suspect it'll be a small
+> matter of adding a pragma (once the compiler plug-in interface is
+> sufficiently non-vapourware) to clamp your project's source to a particular
+> unicode range.
+
+That is a good idea. This can be even implemented as a syntax extension.
+
+From graydon at mozilla.com  Fri Feb 25 15:35:27 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 25 Feb 2011 15:35:27 -0800
+Subject: [rust-dev] Unicode identifiers
+In-Reply-To: <AANLkTinz9zT53hAF2EAvtWknccv0vgQbZmhkF6SjkpVe@mail.gmail.com>
+References: <4D680530.4050909@mozilla.com>
+	<AANLkTinz9zT53hAF2EAvtWknccv0vgQbZmhkF6SjkpVe@mail.gmail.com>
+Message-ID: <4D683CBF.1090007@mozilla.com>
+
+On 11-02-25 02:35 PM, Igor Bukanov wrote:
+
+> With most fonts it is not possible to see that the following ES
+> fragment should alert 1, not 2. I guess such problems are not
+> considered high on the list of language designs.
+>
+> javascript:var a = 1; ? = 2; alert(a);
+
+Also note that UAX 36 and 39 cover these issues in more detail, 
+including defining various additional restriction subsets. Some of those 
+subsets, with or without combination of locale information, could 
+provide some defense here. Particularly, as I say, as a pragma.
+
+-Graydon
+
+From fw at deneb.enyo.de  Sun Feb 27 03:14:42 2011
+From: fw at deneb.enyo.de (Florian Weimer)
+Date: Sun, 27 Feb 2011 12:14:42 +0100
+Subject: [rust-dev] Unicode identifiers
+In-Reply-To: <AANLkTinz9zT53hAF2EAvtWknccv0vgQbZmhkF6SjkpVe@mail.gmail.com>
+	(Igor Bukanov's message of "Fri, 25 Feb 2011 23:35:47 +0100")
+References: <4D680530.4050909@mozilla.com>
+	<AANLkTinz9zT53hAF2EAvtWknccv0vgQbZmhkF6SjkpVe@mail.gmail.com>
+Message-ID: <87r5atd90d.fsf@mid.deneb.enyo.de>
+
+* Igor Bukanov:
+
+> With most fonts it is not possible to see that the following ES
+> fragment should alert 1, not 2. I guess such problems are not
+> considered high on the list of language designs.
+>
+> javascript:var a = 1; ? = 2; alert(a);
+
+Same problem with ASCII and some fonts:
+
+  javascript:var l = 1; I = 2; alert(l);
+
+(Gill Sans comes to my mind, but probably no one uses that for
+programming.)
+
+AI05-0227-1 is relevant in this context because it shows the
+difficulties that come with non-ASCII identifiers in some contexts:
+
+<http://www.ada-auth.org/cgi-bin/cvsweb.cgi/ai05s/ai05-0227-1.txt?rev=HEAD>
+
+To my knowledge, no Ada implementation makes a decent attempt at
+getting this right.  There does not seem to be much commercial demand,
+so compiler vendors have different priorities.
+
+From respindola at mozilla.com  Sun Feb 27 09:53:20 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sun, 27 Feb 2011 12:53:20 -0500
+Subject: [rust-dev] Change to the LLVM type system
+Message-ID: <4D6A8F90.3000501@mozilla.com>
+
+FYI: There is a plan to change the type system in LLVM 3.0. The 
+description is in
+
+http://nondot.org/sabre/LLVMNotes/TypeSystemRewrite.txt
+
+and there is a discussion about it in the list.
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Sun Feb 27 10:16:33 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sun, 27 Feb 2011 13:16:33 -0500
+Subject: [rust-dev] Email notifications
+Message-ID: <4D6A9501.1050609@mozilla.com>
+
+It looks like the only way to get email notifications of commits in 
+github is via "Service Hooks/Email". Would it be OK to add rust-dev to 
+it (or maybe a new rust-commits?).
+
+Thanks,
+Rafael
+
+From dherman at mozilla.com  Sun Feb 27 10:29:08 2011
+From: dherman at mozilla.com (David Herman)
+Date: Sun, 27 Feb 2011 10:29:08 -0800
+Subject: [rust-dev] Email notifications
+In-Reply-To: <4D6A9501.1050609@mozilla.com>
+References: <4D6A9501.1050609@mozilla.com>
+Message-ID: <D545DB0E-AA1F-4697-8D49-0FC54A73F2AC@mozilla.com>
+
+> It looks like the only way to get email notifications of commits in github is via "Service Hooks/Email". Would it be OK to add rust-dev to it (or maybe a new rust-commits?).
+
+I'd prefer a separate rust-commits list.
+
+Dave
+
+
+From rafael.espindola at gmail.com  Sun Feb 27 09:51:55 2011
+From: rafael.espindola at gmail.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sun, 27 Feb 2011 12:51:55 -0500
+Subject: [rust-dev] Changes to the LLVM type system
+Message-ID: <4D6A8F3B.20701@gmail.com>
+
+FYI: There is a plan to change the type system in LLVM 3.0. The 
+description is in
+
+http://nondot.org/sabre/LLVMNotes/TypeSystemRewrite.txt
+
+and there is a discussion about it in the list.
+
+Cheers,
+Rafael
+
+From graydon at mozilla.com  Sun Feb 27 12:06:16 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 27 Feb 2011 12:06:16 -0800
+Subject: [rust-dev] Email notifications
+In-Reply-To: <D545DB0E-AA1F-4697-8D49-0FC54A73F2AC@mozilla.com>
+References: <4D6A9501.1050609@mozilla.com>
+	<D545DB0E-AA1F-4697-8D49-0FC54A73F2AC@mozilla.com>
+Message-ID: <4D6AAEB8.80003@mozilla.com>
+
+On 27/02/2011 10:29 AM, David Herman wrote:
+>> It looks like the only way to get email notifications of commits in github is via "Service Hooks/Email". Would it be OK to add rust-dev to it (or maybe a new rust-commits?).
+>
+> I'd prefer a separate rust-commits list.
+
+Ok. I'll set up a rust-commits sometime this week.
+
+-Graydon
+
+
+From respindola at mozilla.com  Sun Feb 27 12:51:08 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sun, 27 Feb 2011 15:51:08 -0500
+Subject: [rust-dev] Email notifications
+In-Reply-To: <4D6AAEB8.80003@mozilla.com>
+References: <4D6A9501.1050609@mozilla.com>	<D545DB0E-AA1F-4697-8D49-0FC54A73F2AC@mozilla.com>
+	<4D6AAEB8.80003@mozilla.com>
+Message-ID: <4D6AB93C.7040600@mozilla.com>
+
+> Ok. I'll set up a rust-commits sometime this week.
+
+Thanks!
+
+> -Graydon
+
+
+Cheers,
+Rafael
+
+
+From peterhull90 at gmail.com  Sun Feb 27 13:51:14 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Sun, 27 Feb 2011 21:51:14 +0000
+Subject: [rust-dev] Swapping elements in a vec
+Message-ID: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+
+Is it possible to swap elements in a vec? I tried
+  let mutable vec[int] a = vec(1,2,3);
+  let int t = a.(0);
+  a.(0) = a.(1);
+  a.(1) = t;
+but rustboot says (quite rightly I suppose) that int is not mutable.
+
+Pete
+ps. hope you're not too disappointed I stuck to ASCII for my
+identifiers, what's Chinese for 'a' anyway?!?
+
+From andersrb at gmail.com  Sun Feb 27 14:19:06 2011
+From: andersrb at gmail.com (Brian Anderson)
+Date: Sun, 27 Feb 2011 17:19:06 -0500
+Subject: [rust-dev] Swapping elements in a vec
+In-Reply-To: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+References: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+Message-ID: <AANLkTikJe5t4a0fHzj2qL5Ax3En950uVeebuqmd=PxpD@mail.gmail.com>
+
+This works, but the "mutable 1" notation sure seems odd.
+
+impure fn main() {
+  let vec[mutable int] a = vec(mutable 1,2,3);
+  let int t = a.(0);
+  a.(0) = a.(1);
+  a.(1) = t;
+  log a.(0);
+  log a.(1);
+  check (a.(0) == 2);
+  check (a.(1) == 1);
+}
+
+
+On Sun, Feb 27, 2011 at 4:51 PM, Peter Hull <peterhull90 at gmail.com> wrote:
+
+> Is it possible to swap elements in a vec? I tried
+>  let mutable vec[int] a = vec(1,2,3);
+>  let int t = a.(0);
+>  a.(0) = a.(1);
+>  a.(1) = t;
+> but rustboot says (quite rightly I suppose) that int is not mutable.
+>
+> Pete
+> ps. hope you're not too disappointed I stuck to ASCII for my
+> identifiers, what's Chinese for 'a' anyway?!?
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110227/58480edd/attachment.html>
+
+From graydon at mozilla.com  Sun Feb 27 14:19:42 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 27 Feb 2011 14:19:42 -0800
+Subject: [rust-dev] Swapping elements in a vec
+In-Reply-To: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+References: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+Message-ID: <4D6ACDFE.8080908@mozilla.com>
+
+On 27/02/2011 1:51 PM, Peter Hull wrote:
+> Is it possible to swap elements in a vec? I tried
+>    let mutable vec[int] a = vec(1,2,3);
+>    let int t = a.(0);
+>    a.(0) = a.(1);
+>    a.(1) = t;
+> but rustboot says (quite rightly I suppose) that int is not mutable.
+
+Yeah. You want vec[mutable int]. We'll probably wind up with a 'swap' 
+primitive at some point down the line when unique ownership and move 
+semantics are more thoroughly worked out.
+
+> ps. hope you're not too disappointed I stuck to ASCII for my
+> identifiers, what's Chinese for 'a' anyway?!?
+
+No need for this. We have a clear conduct guideline about insulting and 
+baiting speech. Please refrain from it in the future.
+
+-Graydon
+
+From marijnh at gmail.com  Sun Feb 27 23:44:14 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 28 Feb 2011 08:44:14 +0100
+Subject: [rust-dev] Swapping elements in a vec
+In-Reply-To: <4D6ACDFE.8080908@mozilla.com>
+References: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+	<4D6ACDFE.8080908@mozilla.com>
+Message-ID: <AANLkTik_9qyJXD=pJ4T9o9EE=FTCMN1DrdGaiD+jyG+_@mail.gmail.com>
+
+> We'll probably wind up with a 'swap'
+> primitive at some point down the line when unique ownership and move
+> semantics are more thoroughly worked out.
+
+This would be a great use case for syntactic extensions. Seems neater
+to do something like this in the standard library than in the core.
+(Context: Common Lisp's rotatef is a generalization of swap
+implemented simply as a macro.
+http://www.lispworks.com/documentation/HyperSpec/Body/m_rotate.htm )
+
+From graydon at mozilla.com  Sun Feb 27 23:59:12 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 27 Feb 2011 23:59:12 -0800
+Subject: [rust-dev] Swapping elements in a vec
+In-Reply-To: <AANLkTik_9qyJXD=pJ4T9o9EE=FTCMN1DrdGaiD+jyG+_@mail.gmail.com>
+References: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>	<4D6ACDFE.8080908@mozilla.com>
+	<AANLkTik_9qyJXD=pJ4T9o9EE=FTCMN1DrdGaiD+jyG+_@mail.gmail.com>
+Message-ID: <4D6B55D0.9030409@mozilla.com>
+
+On 27/02/2011 11:44 PM, Marijn Haverbeke wrote:
+>> We'll probably wind up with a 'swap'
+>> primitive at some point down the line when unique ownership and move
+>> semantics are more thoroughly worked out.
+>
+> This would be a great use case for syntactic extensions. Seems neater
+> to do something like this in the standard library than in the core.
+> (Context: Common Lisp's rotatef is a generalization of swap
+> implemented simply as a macro.
+> http://www.lispworks.com/documentation/HyperSpec/Body/m_rotate.htm )
+
+In this case, I'm afraid I meant 'primitive' in the more-primitive sense 
+than you'd be able to implement via syntax extension; the issue has to 
+do with whether you're dealing with copy-semantics or move-semantics.
+
+A 'swap' primitive is, like 'move', able to skip the step of refcounting 
+its referent (and zero-checking, conditionally branching to drop glue). 
+It knows that the referent has exactly as many references before the 
+swap (or move) as after.
+
+(Here I'm getting into territory we haven't even fully sketched yet, are 
+still discussing on IRC and in person, so please forgive me if it sounds 
+very unexpected! We haven't implemented any of the planned 
+move-semantics stuff yet at all.)
+
+-Graydon
+
+
+From peterhull90 at gmail.com  Mon Feb 28 00:42:49 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Mon, 28 Feb 2011 08:42:49 +0000
+Subject: [rust-dev] Fwd:  Swapping elements in a vec
+In-Reply-To: <AANLkTimZg4nwoa6YwrpaCNN2AybQRsVVj=Ta3yvfGQ7i@mail.gmail.com>
+References: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+	<4D6ACDFE.8080908@mozilla.com>
+	<AANLkTimZg4nwoa6YwrpaCNN2AybQRsVVj=Ta3yvfGQ7i@mail.gmail.com>
+Message-ID: <AANLkTimZyAA2OTZuEvEj8Zgwima=eY3kqMFCGeQoN1c4@mail.gmail.com>
+
+(sorry, sent this directly to Graydon instead of to the list)
+On Sun, Feb 27, 2011 at 10:19 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+> Yeah. You want vec[mutable int]. We'll probably wind up with a 'swap'
+> primitive at some point down the line when unique ownership and move
+> semantics are more thoroughly worked out.
+Thanks. To be more concrete, I was trying to write an iterator to
+generate all permutations of a vec:
+iter combinations[T](&vec[T] els) -> vec[T]
+by
+1. Making a mutable copy of els
+2. Performing a sequence of swaps on my copy
+3. 'put'ting a copy of each one
+I have a feeling maybe I don't understand mutability now - in code like
+let int i = 0;
+i = i + 1;
+Why doesn't i have to be mutable int?
+
+> No need for this. We have a clear conduct guideline about insulting and
+> baiting speech. Please refrain from it in the future.
+Noted.
+
+Pete
+
+From marijnh at gmail.com  Mon Feb 28 00:47:26 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 28 Feb 2011 09:47:26 +0100
+Subject: [rust-dev] Swapping elements in a vec
+In-Reply-To: <4D6B55D0.9030409@mozilla.com>
+References: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+	<4D6ACDFE.8080908@mozilla.com>
+	<AANLkTik_9qyJXD=pJ4T9o9EE=FTCMN1DrdGaiD+jyG+_@mail.gmail.com>
+	<4D6B55D0.9030409@mozilla.com>
+Message-ID: <AANLkTimhUw4htKdsotZPschCpdDrHrsDMGX9A5Yas+wp@mail.gmail.com>
+
+> A 'swap' primitive is, like 'move', able to skip the step of refcounting its
+> referent (and zero-checking, conditionally branching to drop glue). It knows
+> that the referent has exactly as many references before the swap (or move)
+> as after.
+
+Fair enough. Still, if swap can be implemented on top of move...
+
+From graydon at mozilla.com  Mon Feb 28 06:32:54 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 28 Feb 2011 06:32:54 -0800
+Subject: [rust-dev] Swapping elements in a vec
+In-Reply-To: <AANLkTimZg4nwoa6YwrpaCNN2AybQRsVVj=Ta3yvfGQ7i@mail.gmail.com>
+References: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>	<4D6ACDFE.8080908@mozilla.com>
+	<AANLkTimZg4nwoa6YwrpaCNN2AybQRsVVj=Ta3yvfGQ7i@mail.gmail.com>
+Message-ID: <4D6BB216.9030709@mozilla.com>
+
+On 28/02/2011 12:41 AM, Peter Hull wrote:
+> On Sun, Feb 27, 2011 at 10:19 PM, Graydon Hoare<graydon at mozilla.com>  wrote:
+>> Yeah. You want vec[mutable int]. We'll probably wind up with a 'swap'
+>> primitive at some point down the line when unique ownership and move
+>> semantics are more thoroughly worked out.
+> Thanks. To be more concrete, I was trying to write an iterator to
+> generate all permutations of a vec:
+> iter combinations[T](&vec[T] els) ->  vec[T]
+> by
+> 1. Making a mutable copy of els
+> 2. Performing a sequence of swaps on my copy
+> 3. 'put'ting a copy of each one
+> I have a feeling maybe I don't understand mutability now - in code like
+> let int i = 0;
+> i = i + 1;
+> Why doesn't i have to be mutable int?
+
+At least at the moment, slots created with 'auto' and 'let' are mutable. 
+Note that 'mutable' is only a 1-level-deep annotation: a mutable pointer 
+to immutable data in the heap doesn't let you mutate the heap cells 
+(say, the vec elements), only the pointer.
+
+Curiously, by-value arguments are *not* mutable by default just now. So:
+
+   fn foo(int x) {
+       x += 1;
+   }
+
+will not work, but:
+
+   fn foo(int x) {
+       let int y = x;
+       y += 1;
+   }
+
+will. I admit this is a strange distinction. It's possible we'll switch 
+by-value arguments to implicitly-mutable as well, or go the other way 
+and switch locals back to implicitly-immutable. We had locals as 
+immutable, initially, but it "felt" a little too chatty when writing 
+"essentially pure" code.
+
+A word on *that* concept might be in order: at the moment our effect 
+system considers a function "pure" if it mutates local variables. 
+Depending on your opinion, this might be fudging the notion of "purity" 
+or might be capturing its essence without getting too annoying. So long 
+as mutation doesn't leave the local frame (i.e. no writes to the heap), 
+we consider the function pure. Writing *through* a pointer to the heap 
+gains you the 'impure' effect. I admit this is also a strange 
+distinction; but it's somewhat coupled to the first, in that you're much 
+more likely to *have* a bunch of mutable locals sitting around if we 
+have 'let' mean 'let mutable'.
+
+Getting the judgment right so that it captures what a programmer 
+"usually" means by pure is a bit of a matter of taste. I'm quite willing 
+to revisit this as experience and user-consensus develops.
+
+-Graydon
+
+From sebastian.sylvan at gmail.com  Mon Feb 28 09:00:38 2011
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Mon, 28 Feb 2011 17:00:38 +0000
+Subject: [rust-dev] Swapping elements in a vec
+In-Reply-To: <4D6BB216.9030709@mozilla.com>
+References: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+	<4D6ACDFE.8080908@mozilla.com>
+	<AANLkTimZg4nwoa6YwrpaCNN2AybQRsVVj=Ta3yvfGQ7i@mail.gmail.com>
+	<4D6BB216.9030709@mozilla.com>
+Message-ID: <AANLkTimiOJMpPhGiVrM6HhHY7Nvhvo3AX67LnZz8nTvy@mail.gmail.com>
+
+On Mon, Feb 28, 2011 at 2:32 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+>
+> A word on *that* concept might be in order: at the moment our effect system
+> considers a function "pure" if it mutates local variables. Depending on your
+> opinion, this might be fudging the notion of "purity" or might be capturing
+> its essence without getting too annoying. So long as mutation doesn't leave
+> the local frame (i.e. no writes to the heap)
+
+
+FWIW even Haskell allows you to mutate the heap inside pure functions, so
+long as those effects don't escape. Conceptually each call to runST creates
+a new, local, heap that you can mutate to your heart's content because
+nobody else can see it, and none of those effects can leak (other than
+through the return value) which is enforced by some cleverness with rank-2
+types.
+
+I think that if Haskell allows it, it's unlikely to be an issue even for
+purists. :-)
+
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110228/f5a9a1d6/attachment.html>
+
+From fw at deneb.enyo.de  Mon Feb 28 11:09:51 2011
+From: fw at deneb.enyo.de (Florian Weimer)
+Date: Mon, 28 Feb 2011 20:09:51 +0100
+Subject: [rust-dev] Swapping elements in a vec
+In-Reply-To: <AANLkTimiOJMpPhGiVrM6HhHY7Nvhvo3AX67LnZz8nTvy@mail.gmail.com>
+	(Sebastian Sylvan's message of "Mon, 28 Feb 2011 17:00:38 +0000")
+References: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+	<4D6ACDFE.8080908@mozilla.com>
+	<AANLkTimZg4nwoa6YwrpaCNN2AybQRsVVj=Ta3yvfGQ7i@mail.gmail.com>
+	<4D6BB216.9030709@mozilla.com>
+	<AANLkTimiOJMpPhGiVrM6HhHY7Nvhvo3AX67LnZz8nTvy@mail.gmail.com>
+Message-ID: <87vd04ht6o.fsf@mid.deneb.enyo.de>
+
+* Sebastian Sylvan:
+
+> I think that if Haskell allows it, it's unlikely to be an issue even for
+> purists. :-)
+
+Haskell has potential side effects at every pattern match, so it can
+hardly be used as a reference point for purity.
+
+From sebastian.sylvan at gmail.com  Mon Feb 28 13:51:23 2011
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Mon, 28 Feb 2011 21:51:23 +0000
+Subject: [rust-dev] Swapping elements in a vec
+In-Reply-To: <87vd04ht6o.fsf@mid.deneb.enyo.de>
+References: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+	<4D6ACDFE.8080908@mozilla.com>
+	<AANLkTimZg4nwoa6YwrpaCNN2AybQRsVVj=Ta3yvfGQ7i@mail.gmail.com>
+	<4D6BB216.9030709@mozilla.com>
+	<AANLkTimiOJMpPhGiVrM6HhHY7Nvhvo3AX67LnZz8nTvy@mail.gmail.com>
+	<87vd04ht6o.fsf@mid.deneb.enyo.de>
+Message-ID: <AANLkTika4xGyu8p64qd2PtZTNKi2wSd_PU3cvq16E_Q_@mail.gmail.com>
+
+On Mon, Feb 28, 2011 at 7:09 PM, Florian Weimer <fw at deneb.enyo.de> wrote:
+
+> * Sebastian Sylvan:
+>
+> > I think that if Haskell allows it, it's unlikely to be an issue even for
+> > purists. :-)
+>
+> Haskell has potential side effects at every pattern match, so it can
+> hardly be used as a reference point for purity.
+>
+
+Returning _|_ isn't really a side effect. Total functional programming is a
+whole other issue and I'm not sure that it's very common to consider partial
+functions impure.
+
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110228/c0520fa6/attachment.html>
+
+From as at hacks.yi.org  Mon Feb 28 14:26:07 2011
+From: as at hacks.yi.org (austin seipp)
+Date: Mon, 28 Feb 2011 16:26:07 -0600
+Subject: [rust-dev] Swapping elements in a vec
+In-Reply-To: <87vd04ht6o.fsf@mid.deneb.enyo.de>
+References: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+	<4D6ACDFE.8080908@mozilla.com>
+	<AANLkTimZg4nwoa6YwrpaCNN2AybQRsVVj=Ta3yvfGQ7i@mail.gmail.com>
+	<4D6BB216.9030709@mozilla.com>
+	<AANLkTimiOJMpPhGiVrM6HhHY7Nvhvo3AX67LnZz8nTvy@mail.gmail.com>
+	<87vd04ht6o.fsf@mid.deneb.enyo.de>
+Message-ID: <AANLkTikxCMnFxz+oTaRkXqLiZ7z=OF0a4hrDsQ02wzOe@mail.gmail.com>
+
+On Mon, Feb 28, 2011 at 1:09 PM, Florian Weimer <fw at deneb.enyo.de> wrote:
+> * Sebastian Sylvan:
+>
+>> I think that if Haskell allows it, it's unlikely to be an issue even for
+>> purists. :-)
+>
+> Haskell has potential side effects at every pattern match, so it can
+> hardly be used as a reference point for purity.
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+Pattern-match failure resulting in _|_ is hardly a basis to say
+Haskell is 'impure', or dismiss Haskell's purity entirely if you ask
+me. On this basis, is it unreasonable to say all evaluation in Haskell
+has 'potential side effects', because _|_ is an inhabitant of every
+type? It probably isn't unreasonable to say that on such grounds, but
+it's not very useful as an observation either is it? Is a partially
+defined function still not referentially transparent, in that 'f x = f
+x' holds, even if there exists an x such that 'f x' in this case
+results in _|_ (ignoring the fact that all _|_ values are considered
+semantically equivalent)? I do not believe being a 'pure language'
+completely eschews the use of partial functions, but I could be wrong.
+
+If you wanted to complain, unsafePerformIO would have better deserved
+the pointing finger of disapproval. :) (And it has shown immense
+usefulness many times too I might add, despite being contrary to
+everything we stand for.)
+
+Partiality, as well as things like non-termination can commonly be
+considered 'effects' (and perhaps are without question considered so
+in the 'total function' view of the world,) but I believe in this case
+it may be grasping at straws a little bit - I stand that by
+Sebastian's assertion that the ST monad is a fine example of strictly
+local mutation hidden by a pure function, and that Rust doing the same
+is likely not going to upset all but those who have the most stringent
+definitions.
+
+-- 
+Regards,
+Austin
+
+From dherman at mozilla.com  Mon Feb 28 14:38:13 2011
+From: dherman at mozilla.com (David Herman)
+Date: Mon, 28 Feb 2011 14:38:13 -0800
+Subject: [rust-dev] Swapping elements in a vec
+In-Reply-To: <AANLkTikxCMnFxz+oTaRkXqLiZ7z=OF0a4hrDsQ02wzOe@mail.gmail.com>
+References: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+	<4D6ACDFE.8080908@mozilla.com>
+	<AANLkTimZg4nwoa6YwrpaCNN2AybQRsVVj=Ta3yvfGQ7i@mail.gmail.com>
+	<4D6BB216.9030709@mozilla.com>
+	<AANLkTimiOJMpPhGiVrM6HhHY7Nvhvo3AX67LnZz8nTvy@mail.gmail.com>
+	<87vd04ht6o.fsf@mid.deneb.enyo.de>
+	<AANLkTikxCMnFxz+oTaRkXqLiZ7z=OF0a4hrDsQ02wzOe@mail.gmail.com>
+Message-ID: <559EA39B-80E4-4690-B6DD-6798F55A4F2F@mozilla.com>
+
+In my experience, trying to give universal definitions for terms like "pure" or "referentially transparent" that cut across multiple programming languages is near impossible to do precisely, and devolves into philosophical "angels and pinheads" territory pretty quickly. Speaking of which, I think this thread has gone a bit far off-topic for the Rust list. Would you guys mind taking it offline from here?
+
+Thanks,
+Dave
+
+On Feb 28, 2011, at 2:26 PM, austin seipp wrote:
+
+> On Mon, Feb 28, 2011 at 1:09 PM, Florian Weimer <fw at deneb.enyo.de> wrote:
+>> * Sebastian Sylvan:
+>> 
+>>> I think that if Haskell allows it, it's unlikely to be an issue even for
+>>> purists. :-)
+>> 
+>> Haskell has potential side effects at every pattern match, so it can
+>> hardly be used as a reference point for purity.
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>> 
+> 
+> Pattern-match failure resulting in _|_ is hardly a basis to say
+> Haskell is 'impure', or dismiss Haskell's purity entirely if you ask
+> me. On this basis, is it unreasonable to say all evaluation in Haskell
+> has 'potential side effects', because _|_ is an inhabitant of every
+> type? It probably isn't unreasonable to say that on such grounds, but
+> it's not very useful as an observation either is it? Is a partially
+> defined function still not referentially transparent, in that 'f x = f
+> x' holds, even if there exists an x such that 'f x' in this case
+> results in _|_ (ignoring the fact that all _|_ values are considered
+> semantically equivalent)? I do not believe being a 'pure language'
+> completely eschews the use of partial functions, but I could be wrong.
+> 
+> If you wanted to complain, unsafePerformIO would have better deserved
+> the pointing finger of disapproval. :) (And it has shown immense
+> usefulness many times too I might add, despite being contrary to
+> everything we stand for.)
+> 
+> Partiality, as well as things like non-termination can commonly be
+> considered 'effects' (and perhaps are without question considered so
+> in the 'total function' view of the world,) but I believe in this case
+> it may be grasping at straws a little bit - I stand that by
+> Sebastian's assertion that the ST monad is a fine example of strictly
+> local mutation hidden by a pure function, and that Rust doing the same
+> is likely not going to upset all but those who have the most stringent
+> definitions.
+> 
+> -- 
+> Regards,
+> Austin
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From fw at deneb.enyo.de  Mon Feb 28 22:28:15 2011
+From: fw at deneb.enyo.de (Florian Weimer)
+Date: Tue, 01 Mar 2011 07:28:15 +0100
+Subject: [rust-dev] Swapping elements in a vec
+In-Reply-To: <AANLkTikxCMnFxz+oTaRkXqLiZ7z=OF0a4hrDsQ02wzOe@mail.gmail.com>
+	(austin seipp's message of "Mon, 28 Feb 2011 16:26:07 -0600")
+References: <AANLkTinu9wJi_Aejnk=uX0oyD1Dj_qA9gPvOOTLyxTwn@mail.gmail.com>
+	<4D6ACDFE.8080908@mozilla.com>
+	<AANLkTimZg4nwoa6YwrpaCNN2AybQRsVVj=Ta3yvfGQ7i@mail.gmail.com>
+	<4D6BB216.9030709@mozilla.com>
+	<AANLkTimiOJMpPhGiVrM6HhHY7Nvhvo3AX67LnZz8nTvy@mail.gmail.com>
+	<87vd04ht6o.fsf@mid.deneb.enyo.de>
+	<AANLkTikxCMnFxz+oTaRkXqLiZ7z=OF0a4hrDsQ02wzOe@mail.gmail.com>
+Message-ID: <87k4gjs6bk.fsf@mid.deneb.enyo.de>
+
+* austin seipp:
+
+> On Mon, Feb 28, 2011 at 1:09 PM, Florian Weimer <fw at deneb.enyo.de> wrote:
+>> * Sebastian Sylvan:
+>>
+>>> I think that if Haskell allows it, it's unlikely to be an issue even for
+>>> purists. :-)
+>>
+>> Haskell has potential side effects at every pattern match, so it can
+>> hardly be used as a reference point for purity.
+
+> Pattern-match failure resulting in _|_ is hardly a basis to say
+> Haskell is 'impure', or dismiss Haskell's purity entirely if you ask
+> me.
+
+A pattern match can trigger reading the final chunk of an external
+file, which is specified to close it, releasing any lock (including
+the internal one which prevents multiple opens of the same file).  And
+if you're writing networking code, the amount of data you read is a
+side effect, too.
+

@@ -1,0 +1,1135 @@
+From peterhull90 at gmail.com  Fri Sep  3 14:27:04 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Fri, 3 Sep 2010 22:27:04 +0100
+Subject: [rust-dev] rustboot: confusing error message?
+Message-ID: <AANLkTim+NFrryz8MbCs507fu6AKLA1=kcOjWd-ECcJMG@mail.gmail.com>
+
+I don't know if this is a bug or it's by design but I was confused by
+rustboot. I had a function taking an int argument and called it with a
+uint. The error message said "expected uint but found int" at the
+calling line but I would have expected "expected int but found uint"
+
+See http://gist.github.com/564513#file_me.rs for a minimal example.
+
+Pete
+
+From pwalton at mozilla.com  Fri Sep  3 14:42:15 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 03 Sep 2010 14:42:15 -0700
+Subject: [rust-dev] rustboot: confusing error message?
+In-Reply-To: <AANLkTim+NFrryz8MbCs507fu6AKLA1=kcOjWd-ECcJMG@mail.gmail.com>
+References: <AANLkTim+NFrryz8MbCs507fu6AKLA1=kcOjWd-ECcJMG@mail.gmail.com>
+Message-ID: <4C816BB7.8080809@mozilla.com>
+
+On 9/3/10 2:27 PM, Peter Hull wrote:
+> I don't know if this is a bug or it's by design but I was confused by
+> rustboot. I had a function taking an int argument and called it with a
+> uint. The error message said "expected uint but found int" at the
+> calling line but I would have expected "expected int but found uint"
+>
+> See http://gist.github.com/564513#file_me.rs for a minimal example.
+
+Yes, I'm not at all surprised that the "expected" and "actual" types 
+turn out backwards in some cases. Sorry about that. Feel free to file a bug.
+
+Patrick
+
+From peterhull90 at gmail.com  Mon Sep  6 13:34:02 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Mon, 6 Sep 2010 21:34:02 +0100
+Subject: [rust-dev] Shootout examples
+In-Reply-To: <AANLkTi=LcbyRC=dJEn7JVwznVHSVzu0o3_3=OOY3oJg8@mail.gmail.com>
+References: <AANLkTin6N3dJM1tcOZA6pvN4dJ8s1DeNEcy-uDtbFHm4@mail.gmail.com>
+	<4C73D925.1010407@mozilla.com>
+	<AANLkTi=LcbyRC=dJEn7JVwznVHSVzu0o3_3=OOY3oJg8@mail.gmail.com>
+Message-ID: <AANLkTi=ShWNDnaZoCrRGNjn90p+Z3U9fvDSmS4Xrvf0o@mail.gmail.com>
+
+I've written a version of fasta now, so if anyone has time to look at
+it that would be great. I have my own fork on github
+(peterhull90/rust) and I've pushed it into that. Hopefully you can see
+it.
+It uses log() for output as I couldn't see how to use the stuff in
+_io.rs to write to stdout.
+Unfortunately it also produces a runtime error:
+rt: fatal, 'leaked memory in rust main loop (2 objects)' failed,
+rt/memory_region.cpp:99 2 objects
+which I don't think is my fault (!!) - let me know if it is...
+
+All comments welcome,
+Pete
+ps. I know the development policy mentions pull request but I am still
+getting to grips with git and I couldn't see (if it's possible at all)
+to limit the pull to just the relevant commit (my fork has 192 commits
+relative to graydon's contrib because I've been pulling from graydon's
+master)
+
+On Tue, Aug 24, 2010 at 4:02 PM, Peter Hull <peterhull90 at gmail.com> wrote:
+> On Tue, Aug 24, 2010 at 3:37 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+>>
+>> Feel free. The main thing you'll likely notice at this point is that there's
+>> no FP support in rustboot, so a lot of the examples simply can't be coded.
+> I did notice that - took a while before the penny dropped and I looked
+> at the ocaml code.
+> I started on 'fasta' which does use FP but I'm using integer percents
+> for now. It probably won't give exactly the same result but can be
+> changed to floats when ready.
+>
+> Pete
+>
+
+From graydon at mozilla.com  Wed Sep  8 15:18:40 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 08 Sep 2010 15:18:40 -0700
+Subject: [rust-dev] Shootout examples
+In-Reply-To: <AANLkTi=ShWNDnaZoCrRGNjn90p+Z3U9fvDSmS4Xrvf0o@mail.gmail.com>
+References: <AANLkTin6N3dJM1tcOZA6pvN4dJ8s1DeNEcy-uDtbFHm4@mail.gmail.com>	<4C73D925.1010407@mozilla.com>	<AANLkTi=LcbyRC=dJEn7JVwznVHSVzu0o3_3=OOY3oJg8@mail.gmail.com>
+	<AANLkTi=ShWNDnaZoCrRGNjn90p+Z3U9fvDSmS4Xrvf0o@mail.gmail.com>
+Message-ID: <4C880BC0.9020407@mozilla.com>
+
+On 10-09-06 01:34 PM, Peter Hull wrote:
+> I've written a version of fasta now, so if anyone has time to look at
+> it that would be great.
+
+Very much appreciated, thanks!
+
+At the moment I'm sort of racing to get all the intern-work landed and 
+tidied up as summer terms wind down here, but hopefully that will calm 
+down in a few more days and I can get around to a more regular pace of 
+development (and helping with the matters you've noticed).
+
+> It uses log() for output as I couldn't see how to use the stuff in
+> _io.rs to write to stdout.
+
+Yeah. That's the best bet at the moment. The IO system needs a lot of love.
+
+> Unfortunately it also produces a runtime error:
+> rt: fatal, 'leaked memory in rust main loop (2 objects)' failed,
+> rt/memory_region.cpp:99 2 objects
+> which I don't think is my fault (!!) - let me know if it is...
+
+Not your fault. A lot has been shifting there in recent weeks, and many 
+tests leak now. Also (sadly) on hold while other chunks of code land 
+elsewhere. Sigh.
+
+> ps. I know the development policy mentions pull request but I am still
+> getting to grips with git and I couldn't see (if it's possible at all)
+> to limit the pull to just the relevant commit (my fork has 192 commits
+> relative to graydon's contrib because I've been pulling from graydon's
+> master)
+
+I'll dig through what you've done and try to pull in the appropriate 
+bits. Worst case I may ask you to rebase, but it probably won't be 
+necessary.
+
+Thanks again,
+
+-Graydon
+
+From dherman at mozilla.com  Mon Sep 13 19:45:55 2010
+From: dherman at mozilla.com (David Herman)
+Date: Mon, 13 Sep 2010 19:45:55 -0700
+Subject: [rust-dev] notes on nominal and structural types
+Message-ID: <C45FAFC7-318B-450D-B9B7-E0E23A97986D@mozilla.com>
+
+Graydon and Patrick recently brought up our disjoint-union types which were originally structural, and Graydon has recently redone them to be nominal. I wanted to understand the ramifications better, so I spent a little time last week digging into the design space of nominal and structural types, and also had a great conversation with Andreas Rossberg, principal designer of Alice ML and generally an expert in this area.
+
+I wrote up some sketchy notes on the wiki describing what I learned. Most of it reassures me that we've made pretty good decisions for Rust, but it did raise a few questions.
+
+Here are the links:
+
+    http://wiki.github.com/graydon/rust/disjoint-union-types
+    http://wiki.github.com/graydon/rust/object-types
+
+Here's an executive summary:
+
+- nominal disjoint union types was probably a good choice
+
+- if we allow local type declarations, it might be wise to restrict them not to escape (i.e., not to allow values of the local type to escape)
+
+- structural object types was probably a good choice
+
+- but we're currently missing recursive object types
+
+- we may want to look into self-types as a conservative middle-ground towards the expressiveness of recursive types without hopefully a bit less complexity than full-blown equirecursive types
+
+I don't mean these as absolutes, just my current thinking based on my understanding so far.
+
+Dave
+
+
+From graydon at mozilla.com  Mon Sep 13 22:53:24 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 13 Sep 2010 22:53:24 -0700
+Subject: [rust-dev] notes on nominal and structural types
+In-Reply-To: <C45FAFC7-318B-450D-B9B7-E0E23A97986D@mozilla.com>
+References: <C45FAFC7-318B-450D-B9B7-E0E23A97986D@mozilla.com>
+Message-ID: <4C8F0DD4.9030505@mozilla.com>
+
+On 13/09/2010 7:45 PM, David Herman wrote:
+
+> Here's an executive summary:
+>
+> - nominal disjoint union types was probably a good choice
+
+Yay!
+
+> - if we allow local type declarations, it might be wise to restrict them not to escape (i.e., not to allow values of the local type to escape)
+
+Ok.
+
+> - structural object types was probably a good choice
+
+Double-yay!
+
+> - but we're currently missing recursive object types
+
+Yup.
+
+> - we may want to look into self-types as a conservative middle-ground towards the expressiveness of recursive types without hopefully a bit less complexity than full-blown equirecursive types
+
+Yes, definitely would been keen on this. I'd like to support a 
+self-typed 'self' variable for self-dispatch as well. self.method(). It 
+will actually work nicely with the dynamic-overriding version of 
+operator-as I have half-finished, to give us most of what people want 
+out of 'inheritance' -- overriding and extension via FRU-like object 
+wrapping and vtbl extension -- with much more flexibility, as it'll all 
+be dynamic.
+
+-Graydon
+
+From dherman at mozilla.com  Mon Sep 13 22:58:19 2010
+From: dherman at mozilla.com (David Herman)
+Date: Mon, 13 Sep 2010 22:58:19 -0700
+Subject: [rust-dev] notes on nominal and structural types
+In-Reply-To: <4C8F0DD4.9030505@mozilla.com>
+References: <C45FAFC7-318B-450D-B9B7-E0E23A97986D@mozilla.com>
+	<4C8F0DD4.9030505@mozilla.com>
+Message-ID: <D21A9C3F-2AD6-4CE3-948E-A6826B8A88F6@mozilla.com>
+
+> Yes, definitely would been keen on this. I'd like to support a self-typed 'self' variable for self-dispatch as well. self.method(). It will actually work nicely with the dynamic-overriding version of operator-as I have half-finished, to give us most of what people want out of 'inheritance' -- overriding and extension via FRU-like object wrapping and vtbl extension -- with much more flexibility, as it'll all be dynamic.
+
+This just sounds like such a sweet spot to me. Rust FTW!
+
+Dave
+
+
+From pwalton at mozilla.com  Thu Sep 16 17:26:12 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 16 Sep 2010 17:26:12 -0700
+Subject: [rust-dev] Scoped numeric literal type directives
+Message-ID: <4C92B5A4.6030507@mozilla.com>
+
+I have an off-the-wall proposal I discussed briefly with dherman: 
+"scoped numeric literal type directives".
+
+The easiest way to explain this is by example; this:
+
+     use u32;
+     log(tup(1, 2, 3));
+
+would be equivalent to:
+
+     log(tup(1u32, 2u32, 3u32));
+
+The "use" directive would be scoped to the block it appears in. It would 
+change the type of all integer literals without an explicit type suffix 
+to the specified type.
+
+The motivation for this is the repeated type declarations in benchmarks 
+like fasta [1]. They can make code somewhat noisy.
+
+Thoughts? Apologies in advance for treading perilously close to syntax 
+bikeshedding!
+
+Patrick
+
+[1]: 
+http://github.com/graydon/rust/blob/master/src/test/bench/shootout/fasta.rs
+
+
+From graydon at mozilla.com  Fri Sep 17 13:16:10 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 17 Sep 2010 13:16:10 -0700
+Subject: [rust-dev] Scoped numeric literal type directives
+In-Reply-To: <4C92B5A4.6030507@mozilla.com>
+References: <4C92B5A4.6030507@mozilla.com>
+Message-ID: <4C93CC8A.3070106@mozilla.com>
+
+On 10-09-16 05:26 PM, Patrick Walton wrote:
+
+> The "use" directive would be scoped to the block it appears in. It would
+> change the type of all integer literals without an explicit type suffix
+> to the specified type.
+>
+> The motivation for this is the repeated type declarations in benchmarks
+> like fasta [1]. They can make code somewhat noisy.
+>
+> Thoughts? Apologies in advance for treading perilously close to syntax
+> bikeshedding!
+
+Perhaps so.  Could similarly switch the default interpretation of a 
+floating-point literal (as f32, f128, or one of the decimals when 
+they're supported). Hm.
+
+It's similar to another thing I've considered borrowing from C#, static 
+toggles for overflow checking on integer code generation within a block. 
+But .. the latter is somewhat specialized, easier to picture just 
+telling the user to call library or macro code. What you're talking 
+about seems a bit more common and aesthetic-oriented.
+
+The argument against, of course, is that it undermines legibility by 
+requiring more state in the reader's mind. Literal lexemes are no longer 
+standalone. Hard to say for sure.
+
+Willing to try it, I guess. In any case, I am not keen on overloading 
+the 'use' namespace this way. Syntactically, I think something more like 
+'pragma' would be better.
+
+-Graydon
+
+From peterhull90 at gmail.com  Fri Sep 17 13:32:05 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Fri, 17 Sep 2010 21:32:05 +0100
+Subject: [rust-dev] Scoped numeric literal type directives
+In-Reply-To: <4C92B5A4.6030507@mozilla.com>
+References: <4C92B5A4.6030507@mozilla.com>
+Message-ID: <AANLkTimcG+U=tSm4c4oMswy4+bMnATxsH81KF62BY9U4@mail.gmail.com>
+
+On Fri, Sep 17, 2010 at 1:26 AM, Patrick Walton <pwalton at mozilla.com> wrote:
+> The motivation for this is the repeated type declarations in benchmarks like
+> fasta [1]. They can make code somewhat noisy.
+I think there's two points here. I must admit I found it a bit hard
+work _writing_ fasta - I didn't realise how much I relied on C's
+integer promotion rules. But I think that can be overcome with a bit
+of mental discipline.
+The second point is whether the suffixes obscure the meaning of the
+code when _reading_ it. I think they do to some extent but not too
+badly.
+Is it possible to infer the type from the expression, e.g. in 2 + x
+the 2 matches the declared type of x?
+Also is it possible to modify the emacs rust-mode to show the suffix
+in a different colour?
+
+Pete
+
+From peterhull90 at gmail.com  Sun Sep 19 02:45:16 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Sun, 19 Sep 2010 10:45:16 +0100
+Subject: [rust-dev] Selecting tag types
+Message-ID: <AANLkTinXj18aAG4f7WoXvcR5b8S23DLiRPybDBvJfGis@mail.gmail.com>
+
+Is pattern-alt the only way to select from tag types, ie. I tried this
+code using if
+
+tag tt { a(); b();}
+
+fn main() {
+  let tt t = a();
+  if (t == a()) {
+    log "equal";
+  }
+}
+
+and got a compile error
+
+Fatal error: exception Failure("forcing non-scalar referent of type
+[b32,([]|[])] to register")
+
+Pete
+
+From peterhull90 at gmail.com  Mon Sep 20 04:25:03 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Mon, 20 Sep 2010 12:25:03 +0100
+Subject: [rust-dev] FunLoft
+Message-ID: <AANLkTinQRN3xpojYdygZ4F=6ZVagrW=Wm5jpJffccvih@mail.gmail.com>
+
+I came across a new language called FunLoft*. Has anyone else seen it?
+To me it looked quite a lot like rust both in its intent and its
+syntax.
+
+Pete
+
+* http://www-sop.inria.fr/mimosa/rp/FunLoft/index.html
+
+From graydon at mozilla.com  Mon Sep 20 10:06:44 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 20 Sep 2010 10:06:44 -0700
+Subject: [rust-dev] FunLoft
+In-Reply-To: <AANLkTinQRN3xpojYdygZ4F=6ZVagrW=Wm5jpJffccvih@mail.gmail.com>
+References: <AANLkTinQRN3xpojYdygZ4F=6ZVagrW=Wm5jpJffccvih@mail.gmail.com>
+Message-ID: <4C9794A4.2020506@mozilla.com>
+
+On 20/09/2010 4:25 AM, Peter Hull wrote:
+> I came across a new language called FunLoft*. Has anyone else seen it?
+> To me it looked quite a lot like rust both in its intent and its
+> syntax.
+
+Hard to say precisely from the very sparse information provided, but I 
+can see it has a few similarities:
+
+   - Two-level scheduling model (well, in theory we're to be doing a 3rd
+     level -- OS-level processes -- to account for resource containment)
+     with mixed preempt/coop threading, enforced by type-and-effect
+     system.
+
+   - Interest in safety and resource management.
+
+   - Support for functional style.
+
+That said, FunLoft appears to have a number of substantial differences:
+
+   - It is first-order only. Most of the constructs in Rust can't
+     be injected into that framework because there's no way to prove
+     most of the things they want to prove about their terms.
+
+   - Inter-coop-thread shared visibility; they're only concerned with
+     hard race prevention within a cooperative scheduler.
+
+   - Synchronous events for coordination; all the comprehensibility
+     issues of lock-based coordination, afaict.
+
+   - ML-style syntax, no apparent interest in accommodating people
+     coming from the C++/Java world, no support for unsafe actions.
+
+   - Perfectly willing to employ novel research in their resource proof
+     synthesis.
+
+Rust is more focused on combining simple, safe variants of practical 
+abstractions we know our target audience will want: imperative code, 
+objects, native OS interfaces, buffered communication, iteration, 
+higher-order functions, task isolation, fault isolation.
+
+-Graydon
+
+From graydon at mozilla.com  Mon Sep 20 10:59:11 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 20 Sep 2010 10:59:11 -0700
+Subject: [rust-dev] Selecting tag types
+In-Reply-To: <AANLkTinXj18aAG4f7WoXvcR5b8S23DLiRPybDBvJfGis@mail.gmail.com>
+References: <AANLkTinXj18aAG4f7WoXvcR5b8S23DLiRPybDBvJfGis@mail.gmail.com>
+Message-ID: <4C97A0EF.3040509@mozilla.com>
+
+On 10-09-19 02:45 AM, Peter Hull wrote:
+> Is pattern-alt the only way to select from tag types, ie. I tried this
+> code using if
+>
+> tag tt { a(); b();}
+>
+> fn main() {
+>    let tt t = a();
+>    if (t == a()) {
+>      log "equal";
+>    }
+> }
+>
+> and got a compile error
+>
+> Fatal error: exception Failure("forcing non-scalar referent of type
+> [b32,([]|[])] to register")
+
+Yeah. This is a bug. At the moment comparisons in general only work 
+between scalar types (int, uint, u8, char). Strings, records, tags, 
+vectors are presently non-comparable. And not in a nice way: in a 
+bug-thrown-by-compiler way.
+
+-Graydon
+
+From graydon at mozilla.com  Mon Sep 20 11:09:07 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 20 Sep 2010 11:09:07 -0700
+Subject: [rust-dev] Scoped numeric literal type directives
+In-Reply-To: <AANLkTimcG+U=tSm4c4oMswy4+bMnATxsH81KF62BY9U4@mail.gmail.com>
+References: <4C92B5A4.6030507@mozilla.com>
+	<AANLkTimcG+U=tSm4c4oMswy4+bMnATxsH81KF62BY9U4@mail.gmail.com>
+Message-ID: <4C97A343.1000709@mozilla.com>
+
+On 10-09-17 01:32 PM, Peter Hull wrote:
+
+> I think there's two points here. I must admit I found it a bit hard
+> work _writing_ fasta - I didn't realise how much I relied on C's
+> integer promotion rules. But I think that can be overcome with a bit
+> of mental discipline.
+
+There is also a matter of API choice; we presently have our various 
+indexing and length-related functions all defined in terms of uint. This 
+is "more correct" in the sense that there's no meaning to a negative 
+index; but it is awkward and in a way that a simple "pragma uint" won't 
+necessarily correct (you'd suddenly find yourself writing 3i in the 
+non-uint cases).
+
+We could also just change some portion of the relevant APIs to use ints.
+
+> The second point is whether the suffixes obscure the meaning of the
+> code when _reading_ it. I think they do to some extent but not too
+> badly.
+
+Yeah. Hard to say. It's a bit chatty.
+
+> Is it possible to infer the type from the expression, e.g. in 2 + x
+> the 2 matches the declared type of x?
+
+Plausible. Go takes a similar angle on this; their numeric literals are 
+"untyped" and acquire a type via inference from the context. I'm not 
+sure I'm really keen on that -- every additional complication to 
+inference is a bit of a penalty to implementers, tools and future 
+readers -- but it could work.
+
+Any feelings from others? Particularly .. those who have worked on the 
+type inference module :)
+
+> Also is it possible to modify the emacs rust-mode to show the suffix
+> in a different colour?
+
+Probably; I'm not an expert in CC-mode but I'd be happy to take a patch.
+
+-Graydon
+
+From pwalton at mozilla.com  Mon Sep 20 11:18:55 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Mon, 20 Sep 2010 11:18:55 -0700
+Subject: [rust-dev] Selecting tag types
+In-Reply-To: <4C97A0EF.3040509@mozilla.com>
+References: <AANLkTinXj18aAG4f7WoXvcR5b8S23DLiRPybDBvJfGis@mail.gmail.com>
+	<4C97A0EF.3040509@mozilla.com>
+Message-ID: <4C97A58F.9060500@mozilla.com>
+
+On 9/20/10 10:59 AM, Graydon Hoare wrote:
+> Yeah. This is a bug. At the moment comparisons in general only work
+> between scalar types (int, uint, u8, char). Strings, records, tags,
+> vectors are presently non-comparable. And not in a nice way: in a
+> bug-thrown-by-compiler way.
+
+To add to this, the plan is to make equality structural, like OCaml. The 
+typechecker currently allows equality on all types, in anticipation of 
+this feature working someday, but there currently isn't backend support 
+for anything other than the scalar types Graydon mentioned.
+
+Patrick
+
+From pwalton at mozilla.com  Mon Sep 20 13:25:39 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Mon, 20 Sep 2010 13:25:39 -0700
+Subject: [rust-dev] Scoped numeric literal type directives
+In-Reply-To: <4C97A343.1000709@mozilla.com>
+References: <4C92B5A4.6030507@mozilla.com>	<AANLkTimcG+U=tSm4c4oMswy4+bMnATxsH81KF62BY9U4@mail.gmail.com>
+	<4C97A343.1000709@mozilla.com>
+Message-ID: <4C97C343.6090806@mozilla.com>
+
+On 9/20/10 11:09 AM, Graydon Hoare wrote:
+>> Is it possible to infer the type from the expression, e.g. in 2 + x
+>> the 2 matches the declared type of x?
+>
+> Plausible. Go takes a similar angle on this; their numeric literals are
+> "untyped" and acquire a type via inference from the context. I'm not
+> sure I'm really keen on that -- every additional complication to
+> inference is a bit of a penalty to implementers, tools and future
+> readers -- but it could work.
+>
+> Any feelings from others? Particularly .. those who have worked on the
+> type inference module :)
+
+I'm also somewhat opposed to the proposal. To me, the strict typing of 
+numeric literals is a great feature of Rust: it lets the programmer look 
+at the code and immediately tell what's going to happen in the generated 
+instructions and memory layout. C's integer promotion rules are 
+confusing; by looking at C code I can never really tell precisely which 
+instruction is going to be emitted.
+
+Adding Go-style untyped numeric literals would also be difficult to 
+reconcile with our type inference and polymorphic binary operators: 
+what's the type of x in "auto x = 2 + 3;"?
+
+Patrick
+
+From jyasskin at gmail.com  Mon Sep 20 14:27:11 2010
+From: jyasskin at gmail.com (Jeffrey Yasskin)
+Date: Mon, 20 Sep 2010 14:27:11 -0700
+Subject: [rust-dev] Scoped numeric literal type directives
+In-Reply-To: <4C97C343.6090806@mozilla.com>
+References: <4C92B5A4.6030507@mozilla.com>
+	<AANLkTimcG+U=tSm4c4oMswy4+bMnATxsH81KF62BY9U4@mail.gmail.com>
+	<4C97A343.1000709@mozilla.com> <4C97C343.6090806@mozilla.com>
+Message-ID: <AANLkTi=Yc7pWq7G38LvYCRE3L3VoiZ6S9PXdVyQLzOK-@mail.gmail.com>
+
+On Mon, Sep 20, 2010 at 1:25 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+> On 9/20/10 11:09 AM, Graydon Hoare wrote:
+>>>
+>>> Is it possible to infer the type from the expression, e.g. in 2 + x
+>>> the 2 matches the declared type of x?
+>>
+>> Plausible. Go takes a similar angle on this; their numeric literals are
+>> "untyped" and acquire a type via inference from the context. I'm not
+>> sure I'm really keen on that -- every additional complication to
+>> inference is a bit of a penalty to implementers, tools and future
+>> readers -- but it could work.
+>>
+>> Any feelings from others? Particularly .. those who have worked on the
+>> type inference module :)
+>
+> I'm also somewhat opposed to the proposal. To me, the strict typing of
+> numeric literals is a great feature of Rust: it lets the programmer look at
+> the code and immediately tell what's going to happen in the generated
+> instructions and memory layout. C's integer promotion rules are confusing;
+> by looking at C code I can never really tell precisely which instruction is
+> going to be emitted.
+
+C's promotion rules are confusing at least partly because they apply
+to variables, not just literals. If they only applied to literals, you
+could find the type just as easily as you find a variable's type, just
+by looking at the variables the literal is used with.
+
+> Adding Go-style untyped numeric literals would also be difficult to
+> reconcile with our type inference and polymorphic binary operators: what's
+> the type of x in "auto x = 2 + 3;"?
+
+IIRC, Fortress gives each integral literal the type IntLiteral, which
+captures the exact sequence of digits and has implicit conversions to
+each particular integral type. Haskell does something similar by
+making literals a shorthand for "fromInteger (something::Integer)",
+and fromInteger is overloaded for each integral type. In both
+languages, the compiler's welcome to inline and pre-evaluate the
+overloaded conversion. In Fortress, IntLiteral can leak into
+type-parametrized functions or even data structures and so survive to
+runtime, while in Haskell, the type of "fromInteger x", "Num a=>a" has
+to be lowered to a concrete type before runtime (although it defaults
+to Integer if there's no other constraint).
+
+For Rust, if you go with magic literals, I see two places you can
+block them from leaking to runtime: either forbid functions from
+taking the literal type as a type parameter, or also forbid "auto"
+from being used with a literal type. If you allow "auto" to be used
+with the literal type, it requires more work on the compiler's part to
+always lower literals to their final type before emitting code, but I
+believe the compiler can always do it. On the other hand, if you were
+to allow the literal type as a type parameter, I think rust's lack of
+specialized functions would force it to be propagated to runtime.
+
+Jeffrey
+
+From dherman at mozilla.com  Mon Sep 20 14:38:36 2010
+From: dherman at mozilla.com (David Herman)
+Date: Mon, 20 Sep 2010 14:38:36 -0700
+Subject: [rust-dev] Scoped numeric literal type directives
+In-Reply-To: <AANLkTi=Yc7pWq7G38LvYCRE3L3VoiZ6S9PXdVyQLzOK-@mail.gmail.com>
+References: <4C92B5A4.6030507@mozilla.com>
+	<AANLkTimcG+U=tSm4c4oMswy4+bMnATxsH81KF62BY9U4@mail.gmail.com>
+	<4C97A343.1000709@mozilla.com> <4C97C343.6090806@mozilla.com>
+	<AANLkTi=Yc7pWq7G38LvYCRE3L3VoiZ6S9PXdVyQLzOK-@mail.gmail.com>
+Message-ID: <C6662485-1074-4A3B-81E4-94AD7B19A7A6@mozilla.com>
+
+FWIW, I'm with Patrick-- this all sounds too complicated to me. At least until we've written some significant code, it doesn't seem worth trying to solve a problem we may not actually have. And Patrick's suggestion of scoped literals at least sounds like a reasonably simple approach (that should be easier to implement than type system hacks) that may cover enough common cases to be sufficient. But it seems too early to tell what the actual need is, IMO.
+
+Dave
+
+On Sep 20, 2010, at 2:27 PM, Jeffrey Yasskin wrote:
+
+> On Mon, Sep 20, 2010 at 1:25 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+>> On 9/20/10 11:09 AM, Graydon Hoare wrote:
+>>>> 
+>>>> Is it possible to infer the type from the expression, e.g. in 2 + x
+>>>> the 2 matches the declared type of x?
+>>> 
+>>> Plausible. Go takes a similar angle on this; their numeric literals are
+>>> "untyped" and acquire a type via inference from the context. I'm not
+>>> sure I'm really keen on that -- every additional complication to
+>>> inference is a bit of a penalty to implementers, tools and future
+>>> readers -- but it could work.
+>>> 
+>>> Any feelings from others? Particularly .. those who have worked on the
+>>> type inference module :)
+>> 
+>> I'm also somewhat opposed to the proposal. To me, the strict typing of
+>> numeric literals is a great feature of Rust: it lets the programmer look at
+>> the code and immediately tell what's going to happen in the generated
+>> instructions and memory layout. C's integer promotion rules are confusing;
+>> by looking at C code I can never really tell precisely which instruction is
+>> going to be emitted.
+> 
+> C's promotion rules are confusing at least partly because they apply
+> to variables, not just literals. If they only applied to literals, you
+> could find the type just as easily as you find a variable's type, just
+> by looking at the variables the literal is used with.
+> 
+>> Adding Go-style untyped numeric literals would also be difficult to
+>> reconcile with our type inference and polymorphic binary operators: what's
+>> the type of x in "auto x = 2 + 3;"?
+> 
+> IIRC, Fortress gives each integral literal the type IntLiteral, which
+> captures the exact sequence of digits and has implicit conversions to
+> each particular integral type. Haskell does something similar by
+> making literals a shorthand for "fromInteger (something::Integer)",
+> and fromInteger is overloaded for each integral type. In both
+> languages, the compiler's welcome to inline and pre-evaluate the
+> overloaded conversion. In Fortress, IntLiteral can leak into
+> type-parametrized functions or even data structures and so survive to
+> runtime, while in Haskell, the type of "fromInteger x", "Num a=>a" has
+> to be lowered to a concrete type before runtime (although it defaults
+> to Integer if there's no other constraint).
+> 
+> For Rust, if you go with magic literals, I see two places you can
+> block them from leaking to runtime: either forbid functions from
+> taking the literal type as a type parameter, or also forbid "auto"
+> from being used with a literal type. If you allow "auto" to be used
+> with the literal type, it requires more work on the compiler's part to
+> always lower literals to their final type before emitting code, but I
+> believe the compiler can always do it. On the other hand, if you were
+> to allow the literal type as a type parameter, I think rust's lack of
+> specialized functions would force it to be propagated to runtime.
+> 
+> Jeffrey
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From peterhull90 at gmail.com  Wed Sep 22 14:20:43 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Wed, 22 Sep 2010 22:20:43 +0100
+Subject: [rust-dev] Tasks
+Message-ID: <AANLkTim=Mzbg5KYaVAvko9F2MRJd-4a2f_3xCq9AYT8+@mail.gmail.com>
+
+Some of the programs under 'test' give a compiler warning
+    warning: "spawn" with unused result spawns a task that immediately dies
+Does that literally mean what it sounds like it does - surely those
+programs won't run properly if so? I've edited all the affected files
+to assign all those results to auto variables, and set up a pull
+request if you want.
+
+Supplementary question - some files (e.g. task-comm-1.rs) have code
+like "spawn thread func()". What's meaning of the word "thread" in
+this context?
+
+Pete
+
+From peterhull90 at gmail.com  Wed Sep 22 14:21:00 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Wed, 22 Sep 2010 22:21:00 +0100
+Subject: [rust-dev] FunLoft
+In-Reply-To: <4C9794A4.2020506@mozilla.com>
+References: <AANLkTinQRN3xpojYdygZ4F=6ZVagrW=Wm5jpJffccvih@mail.gmail.com>
+	<4C9794A4.2020506@mozilla.com>
+Message-ID: <AANLkTi=Yr8gjG4h4Y3Qu8-j3uyLQqtAdgJ5yWQdHX+Et@mail.gmail.com>
+
+It was "Interest in safety and resource management" that I thought was
+most similar. Actually, it's not that new - most of the pages on the
+website seem to be a couple of years old?
+
+Pete
+
+From peterhull90 at gmail.com  Thu Sep 23 04:55:27 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Thu, 23 Sep 2010 12:55:27 +0100
+Subject: [rust-dev] pattern alt
+Message-ID: <AANLkTi=G26Xm_JcG_jiuKoW_F=q0J-6AgzszBz5X-N0D@mail.gmail.com>
+
+The syntax of alt ... case changed recently to drop the '()' and add
+in a '?'. Just as a matter of interest, why was this? Particularly the
+'?'.
+
+The default case is still (_) - could this be changed to (?) to make
+it more consistent?
+
+Pete
+
+From graydon at mozilla.com  Thu Sep 23 11:14:26 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 23 Sep 2010 11:14:26 -0700
+Subject: [rust-dev] Tasks
+In-Reply-To: <AANLkTim=Mzbg5KYaVAvko9F2MRJd-4a2f_3xCq9AYT8+@mail.gmail.com>
+References: <AANLkTim=Mzbg5KYaVAvko9F2MRJd-4a2f_3xCq9AYT8+@mail.gmail.com>
+Message-ID: <4C9B9902.7020409@mozilla.com>
+
+On 10-09-22 02:20 PM, Peter Hull wrote:
+> Some of the programs under 'test' give a compiler warning
+>      warning: "spawn" with unused result spawns a task that immediately dies
+> Does that literally mean what it sounds like it does - surely those
+> programs won't run properly if so? I've edited all the affected files
+> to assign all those results to auto variables, and set up a pull
+> request if you want.
+
+I believe the behavior of many of those tests is either (a) intentional, 
+in order to test sudden-death scenarios or (b) subject to future changes 
+anyways, as work proceeds on the runtime task-scheduling system.
+
+Michael Bebenita was working with them over the summer and I'm not 
+certain what the state is. Perhaps he can chime in.
+
+I'm also not certain whether we're going to maintain the notion of a 
+task's lifetime being coupled to the lifetime of the variable(s) 
+referring to it; we may instead cause all child tasks of a parent task 
+to live in an "invisible" table implicitly held in the parent, such that 
+the children are not killed until the parent explicitly requests it; in 
+that case "task" values would be weak references and the warning would 
+be obsolete. Several people have expressed surprise already that task 
+lifetime is coupled to the owning variable; perhaps this is sufficiently 
+unlike (say) the unix process model that we should
+
+IOW, I am neither sure of the need for that warning, nor the need to 
+correct cases flagged by it (nor, incidentally, the mechanism used to 
+enforce it). Input on any of these issues would be welcome.
+
+> Supplementary question - some files (e.g. task-comm-1.rs) have code
+> like "spawn thread func()". What's meaning of the word "thread" in
+> this context?
+
+It specifies a different sort of domain into which the task should be 
+spawned. In this case, a thread domain. This means that the spawned task 
+becomes the root task of a new, independent OS-level thread. I believe 
+the parser also accepts the word 'process' as a domain specifier, but 
+neither the rest of the compiler nor the runtime supports spawning into 
+a separate OS-level process yet. Our intention is to support this 
+eventually.
+
+-Graydon
+
+From graydon at mozilla.com  Thu Sep 23 11:22:41 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 23 Sep 2010 11:22:41 -0700
+Subject: [rust-dev] pattern alt
+In-Reply-To: <AANLkTi=G26Xm_JcG_jiuKoW_F=q0J-6AgzszBz5X-N0D@mail.gmail.com>
+References: <AANLkTi=G26Xm_JcG_jiuKoW_F=q0J-6AgzszBz5X-N0D@mail.gmail.com>
+Message-ID: <4C9B9AF1.9090605@mozilla.com>
+
+On 10-09-23 04:55 AM, Peter Hull wrote:
+> The syntax of alt ... case changed recently to drop the '()' and add
+> in a '?'. Just as a matter of interest, why was this? Particularly the
+> '?'.
+
+The change accompanied the shift from function-like to constant-like 
+0-ary tag constructors. Now a 0-ary tag constructor is denoted merely by 
+its name; as a consequence the pattern syntax had to change to 
+disambiguate 0-ary tag constructors from fresh slot bindings. For example:
+
+tag colour {
+     red; green; blue;
+}
+
+fn main() {
+     auto x = red;
+     alt (x) {
+         case (red) {
+             // Should this bind a new variable 'red'?
+             // or should it match tag colour, constructor 'red'?
+         }
+     }
+}
+
+With the current rule, '?red' binds a new slot whereas 'red' matches the 
+constant tag constructor. I'm happy to reconsider syntax here; it was a 
+change made in order to facilitate disambiguation, not because I am 
+particularly wedded to the ?foo syntax.
+
+> The default case is still (_) - could this be changed to (?) to make
+> it more consistent?
+
+Possible, sure. Though the wildcard symbol is not only applicable to 
+top-level, and "foo(?,?,?)" reads a fair bit worse than "foo(_,_,_)" to 
+my eyes. I'd be happy to pursue any sort of alternative, more appealing 
+pattern syntax you can think up, so long as it's unambiguous, familiar 
+looking, and easy to parse. I don't like sigils any more than the next 
+non-perl-programmer :)
+
+-Graydon
+
+From sebastian.sylvan at gmail.com  Thu Sep 23 12:13:17 2010
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Thu, 23 Sep 2010 20:13:17 +0100
+Subject: [rust-dev] pattern alt
+In-Reply-To: <4C9B9AF1.9090605@mozilla.com>
+References: <AANLkTi=G26Xm_JcG_jiuKoW_F=q0J-6AgzszBz5X-N0D@mail.gmail.com>
+	<4C9B9AF1.9090605@mozilla.com>
+Message-ID: <AANLkTinw1hdy4C=Yf2OEPRdXKheVpT2+TfMLmsd7j0x+@mail.gmail.com>
+
+On Thu, Sep 23, 2010 at 7:22 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+>
+> With the current rule, '?red' binds a new slot whereas 'red' matches the
+> constant tag constructor. I'm happy to reconsider syntax here; it was a
+> change made in order to facilitate disambiguation, not because I am
+> particularly wedded to the ?foo syntax.
+
+
+I'm sure you're already aware, but in case you're not, Haskell solves this
+ambiguity by requiring that types and constructors start with an upper case
+character, whereas everything else must start with a lower case character.
+This has downsides (mainly cosmetic), but does lead to very light weight
+syntax in plenty of cases...
+
+So you'd end up with something like:
+
+alt(x) {
+  case Red {
+  }
+  case green {
+     // green is a variable, may actually be blue!
+  }
+}
+
+Or if you don't like that, you could always just use slot declaration syntax
+to indicate that it's a slot and not a constructor (what you're doing is
+related, after all, and saves a symbol):
+
+alt(x) {
+  case red {
+    // matches constructor
+  }
+  case auto green {
+     // green is a variable, may actually be blue!
+  }
+}
+
+While we're bike-shedding, I'm not sure why the "auto" keyword is needed at
+all. Type inference is never dangerous (i.e. affects performance/semantics)
+right? So why not just make the type specifier in the "let" statement
+optional?
+
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20100923/5a6dc8b3/attachment.html>
+
+From graydon at mozilla.com  Thu Sep 23 13:11:01 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 23 Sep 2010 13:11:01 -0700
+Subject: [rust-dev] pattern alt
+In-Reply-To: <AANLkTinw1hdy4C=Yf2OEPRdXKheVpT2+TfMLmsd7j0x+@mail.gmail.com>
+References: <AANLkTi=G26Xm_JcG_jiuKoW_F=q0J-6AgzszBz5X-N0D@mail.gmail.com>	<4C9B9AF1.9090605@mozilla.com>
+	<AANLkTinw1hdy4C=Yf2OEPRdXKheVpT2+TfMLmsd7j0x+@mail.gmail.com>
+Message-ID: <4C9BB455.7050505@mozilla.com>
+
+On 10-09-23 12:13 PM, Sebastian Sylvan wrote:
+
+> I'm sure you're already aware, but in case you're not, Haskell solves this
+> ambiguity by requiring that types and constructors start with an upper case
+> character, whereas everything else must start with a lower case character.
+
+Yes, several languages do this; I'm not interested in using case 
+conventions to differentiate identifiers. It's too surprising to the 
+C-trained eyes, and besides there are several independent language rules 
+to look to for precedent (public/private, constructor/variable, 
+type/variable, module/type). I don't want to get into that game.
+
+> Or if you don't like that, you could always just use slot declaration syntax
+> to indicate that it's a slot and not a constructor (what you're doing is
+> related, after all, and saves a symbol):
+
+Possible, but it doesn't really nest well, and will get clunky when 
+there are multiple bindings. Consider:
+
+    case (foo(auto x, bar(auto p, auto q), _)) { ... }
+
+That's a lot of 'auto'. I'd prefer something lighter.
+
+> While we're bike-shedding, I'm not sure why the "auto" keyword is needed at
+> all.
+
+Somewhat historical. We used to support a form of destructuring:
+
+   auto (x, y) = foo();
+
+which would destructure the tuple returned from foo into a pair of 
+type-inferred slots x and y. Back then, tup(x,y) was spelled (x,y) as 
+well, and this had the undesirable influence of making type terms and 
+destructuring assignments ambiguous beyond single-token lookahead. A 
+design goal of the surface grammar (not articulated anywhere I suppose, 
+but I'll say so here) is to stick to single-token (or finite-token, 
+since "token" is a blurry concept) lookahead, LL(k) with minimal 
+disambiguation logic, that sort of thing. Be "well behaved". It's rude 
+to future tool-authors to pick a grammar that's too fussy to parse.
+
+At the moment though, destructuring is long dead and the corresponding 
+ambiguity in the surface syntax is absent (I think), so you're probably 
+right, we can get away with single-token peek for ';' or '=' past the 
+first identifier following 'let', to decide if we're at the head of a 
+type term or a slot decl. But that may shift again. I'm happy to arrive 
+at that point eventually -- one less token! -- but for the time being I 
+don't feel a big rush to address it. There are a dozen such small 
+syntactic shifts on the table, but changing each will eat up a day I 
+could be spending on pushing rustc further towards working :)
+
+-Graydon
+
+From pwalton at mozilla.com  Thu Sep 30 15:11:46 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 30 Sep 2010 15:11:46 -0700
+Subject: [rust-dev] effect vs. stratum
+In-Reply-To: <4CA4E43C.8050803@mozilla.com>
+References: <4CA4E43C.8050803@mozilla.com>
+Message-ID: <4CA50B22.1060801@mozilla.com>
+
+On 9/30/10 12:25 PM, Graydon Hoare wrote:
+> Part #1 of the proposal is to split the concept we're currently calling
+> an effect in two pieces: the "effect" concept should have a concept I'm
+> calling a "stratum"[1] split off and handled independently. The stratum
+> of a type is the class of storage it belongs to: "immutable, shareable,
+> pure" vs. "local, mutable, non-shareable". Where we currently say that
+> "every type has an implied effect", the revised statement under this
+> proposal would be "every function has an implied effect, every type has
+> an implied stratum".
+
+Perhaps we could allow the programmer to annotate the stratum of an 
+object? If the annotation is present, it's checked for accuracy; if not, 
+it's inferred from the type. So, instead of an *implied* stratum, we'd 
+have an *inferred* stratum. I was always a little uncomfortable with the 
+stratum of a type being something hard for the programmer to discern at 
+a glance, since it's such a critical aspect of the language.
+
+> Part #2 of the proposal is a bit juicier: add a third stratum back in,
+> "gc". We had this briefly a year or so ago, called "cyclic" back then,
+> but I think "gc" is a pithier qualifier. We merged the concept into
+> "state" when devising the current effect system, but I suspect that was
+> a mistake.
+
+How do we enforce that a state, but non-gc, type remains acyclic?
+
+> - State values could be frozen and thawed, reasonably, to and from
+> stateless values. State means acyclic-and-mutable, after all, so
+> in the singly-referenced case this would even wind up a no-op. This
+> is the easy case of freeze/thaw, and it'd be formally denoted in
+> the type system. This would provide a great utility for two idioms
+> we currently have no good way to support: freeze-and-apply-predicate
+> and freeze-and-transmit-over-channel.
+
+If we support this, it might be useful to have a compile-time "type 
+function", say, "frozen", that takes a state, non-gc type and returns a 
+deeply immutable non-state version of it. For example:
+
+     frozen int == int
+     frozen mutable int == int
+     frozen rec(int foo, mutable int bar) == rec(int foo, int bar)
+
+I could see this being handy when declaring predicates over large, 
+complex, stateful types. To write a predicate "p" over a complex type 
+"foo", the programmer could simply write:
+
+     fn p(frozen foo x) { ... }
+
+This would avoid forcing the programmer to copy and paste the type of 
+"foo" and perform s/mutable//g in order to type the predicate.
+
+> - State values could also have a our structural comparison definition
+> extended to them. Again, acyclicality wins here.[2]
+
+Yup, sounds good, assuming we can actually enforce the restriction.
+
+> [2] we could even extend comparison to gc types if we say "gc types are
+> compared by address". It would be a little unpredictable though; I'm
+> tempted to define a "std.util.addrcmp[gc T](&T a, &T b) -> order" that
+> compares anything by address, along with a memcmp that compares by
+> memory-content, and make the "built-in" operators <, =, etc. structural
+> on acyclic types and errors when applied to a gc type. Safer, no?
+
++1
+
+Patrick
+
+From graydon at mozilla.com  Thu Sep 30 12:25:48 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 30 Sep 2010 12:25:48 -0700
+Subject: [rust-dev] effect vs. stratum
+Message-ID: <4CA4E43C.8050803@mozilla.com>
+
+Hi,
+
+I spent a portion of yesterday fighting the effect system in rustboot as 
+it was ... "misclassifying" (to put it mildly) types by their effect and 
+subsequently allocating and freeing them incorrectly. This is because at 
+present the effect of a type determines its storage class (GC memory or 
+non-GC) and things generally go sideways when you treat one class of 
+memory as the other. I eventually gave up and disabled the GC entirely 
+in the runtime (which is less serious than it sounds; it wasn't actually 
+working anyways).
+
+I would, however, like to solve this problem in a more systematic way, 
+and I've been thinking in recent weeks how to address it. I have a 
+two-part proposal I'd like to run by the audience here and see if anyone 
+has opinions.
+
+Part #1 of the proposal is to split the concept we're currently calling 
+an effect in two pieces: the "effect" concept should have a concept I'm 
+calling a "stratum"[1] split off and handled independently. The stratum 
+of a type is the class of storage it belongs to: "immutable, shareable, 
+pure" vs. "local, mutable, non-shareable". Where we currently say that 
+"every type has an implied effect", the revised statement under this 
+proposal would be "every function has an implied effect, every type has 
+an implied stratum".
+
+Effects would retain the qualifiers "io" and "unsafe". Users could 
+continue to lie about the effect of a function using "auth" clauses in 
+the crate file. Writing to a non-local mutable field would be considered 
+an io action for the sake of effect calculation -- after all, mutating a 
+PRNG is more or less observationally indistinguishable from "doing IO" 
+-- but effects would strictly describe *code*, not data. If you make a 
+function into a first class value, of course, that value will have a 
+function type and that function type will have an effect. But the type 
+as a whole won't have an effect; only a function has an effect, and the 
+effect occurs when you *call* the function. You can pass the type around 
+all you want without worrying about its effect. Effect checking would 
+remain useful for helping users enforce purity and safety in their code, 
+of course.
+
+The "state" qualifier would be changed to denote the stratum of a type, 
+and would no longer be subject to "auth" clauses; users would not be 
+allowed to lie about the stratum of a type. This is important, because 
+as it stands presently the ability to lie about state means that 
+*everything* that touches a mis-classified stateful value is not only 
+"likely unsafe" (in the "crash the system" sense) but also very 
+difficult -- almost impossible -- to make safe: you would have to 
+co-ordinate with every other reader and writer in manipulating refcounts 
+and malloc/realloc/free actions, and ensure that everyone agreed on 
+statefulness any time critical combinations of those actions occurred. 
+This is not something likely achievable on a whole-program basis. IOW at 
+the moment it's likely that if there's a single lie in your program 
+about "state", the whole thing is liable to crash. We're not hitting 
+this *much* at present only because we don't use state much and we've 
+been lucky to be using it in not-as-crashy ways (mutable non-box slots 
+and such). But in general this needs to stop happening; users have to be 
+honest about which storage stratum a type belongs to.
+
+That's part #1: effect => effect+stratum, and stratum is always enforced.
+
+Part #2 of the proposal is a bit juicier: add a third stratum back in, 
+"gc". We had this briefly a year or so ago, called "cyclic" back then, 
+but I think "gc" is a pithier qualifier. We merged the concept into 
+"state" when devising the current effect system, but I suspect that was 
+a mistake.
+
+Under proposal-part-#2, the state and gc strata would both still be 
+task-local, but splitting state from gc would have three interesting 
+implications:
+
+   - State values could be frozen and thawed, reasonably, to and from
+     stateless values. State means acyclic-and-mutable, after all, so
+     in the singly-referenced case this would even wind up a no-op. This
+     is the easy case of freeze/thaw, and it'd be formally denoted in
+     the type system. This would provide a great utility for two idioms
+     we currently have no good way to support: freeze-and-apply-predicate
+     and freeze-and-transmit-over-channel.
+
+   - State values could also have a our structural comparison definition
+     extended to them. Again, acyclicality wins here.[2]
+
+   - State objects could have destructors. Acyclicality, again. Yay!
+     No more telling users to make artificial immutable sub-objects :)
+
+So .. part #1 of the proposal seems necessary to get us back to 
+"remotely safe", and part #2 has a lot of exciting prizes associated 
+with it. Does anyone approve-of or object-to either part? I'm thinking 
+of having a go at them shortly, as the current logic in rustboot around 
+all this is quite a mess.
+
+-Graydon
+
+[1] Does anyone have a better term than "stratum" to describe the 
+storage category of a type? I'm almost partial to "heap" or "pool", but 
+that is both slightly misleading and also makes for sentences with 
+strange grammar: "the heap of a type". Yuck.
+
+[2] we could even extend comparison to gc types if we say "gc types are 
+compared by address". It would be a little unpredictable though; I'm 
+tempted to define a "std.util.addrcmp[gc T](&T a, &T b) -> order" that 
+compares anything by address, along with a memcmp that compares by 
+memory-content, and make the "built-in" operators <, =, etc. structural 
+on acyclic types and errors when applied to a gc type. Safer, no?
+

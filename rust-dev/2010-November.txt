@@ -1,0 +1,2302 @@
+From graydon at mozilla.com  Fri Nov 12 11:21:50 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 12 Nov 2010 11:21:50 -0800
+Subject: [rust-dev] a little friday-norming syntax bikeshedding
+Message-ID: <4CDD93CE.10600@mozilla.com>
+
+Hi,
+
+In the process of writing rustc (the second, self-hosted compiler), 
+we're revisiting a number of minor (and some major) choices made in the 
+implementation of rustboot. One of these is the division of syntactic 
+forms into expressions and statements.
+
+The concept of a statement is a little bit arbitrary. There are 
+languages that do not have such a concept, but they're few; most 
+languages have *some* concept of a form shorter-than-a-program that 
+represents a single "chunk" of declaration-or-computation.
+
+The distinction is essentially syntactic, though at a semantic level it 
+captures the conceptual difference between forms which can, or cannot, 
+produce "values" as natural "results" of their execution. In a language 
+with a first class unit-value like rust, the concept becomes blurrier: 
+any "just for side-effects" execution can also be considered as a 
+unit-value expression.
+
+Many unit-value-equipped languages sink many more syntactic forms into 
+the expression grammar than we initially put in rustboot. In particular, 
+rustboot treats all of these as statements rather than expressions:
+
+   - Blocks
+   - All 'movement' operations (assignment, send, receive) that have
+     a guaranteed side-effect.
+   - All branches (if, alt, alt type, etc.)
+   - All loops (while, do-while, for, for-each)
+   - All non-local jumps (ret, put, break, cont).
+   - All 'diagnostic' operations (log, note, check, claim, prove)
+     that may not execute and in any case would be unit-valued.
+   - All declarations (let, auto, type, obj, tag, mod).
+
+By "treats as statement" I mean, in particular, that they "have no 
+value" and cannot syntactically nest inside any of the more "natural" 
+expression nodes (binary and unary operators, function calls).
+
+Part of the motivation here was to provide a simplified flow-graph on 
+which to run the typestate algorithm, part of it was my own bias against 
+programs that nest too deeply rather than just using more lines of text. 
+In any case In rustc we're revisiting this classification; the 
+flow-graph argument isn't strong enough to justify inconveniencing 
+users, and the bias argument is easily counterweighed by the number of 
+cases that benefit in readability from throwing (say) conditionals into 
+the expression tree.
+
+The only *essential* statements we're changing to expressions are 
+blocks: once a block can be an expression (with a terminal 
+expression-statement that provides its "value") then all other 
+statements can effectively nest into "expression position" by wrapping 
+them in a block. This is the C-with-GNU-extensions option, and it works. 
+But for convenience, we're considering making a few of the others into 
+expressions as well.
+
+I thought I'd conduct a straw poll here to see which of the above 
+enumerated statement forms you'd like to sink into the expression 
+grammar. At the extreme end, you sink *everything*, it has the syntactic 
+structure of lisp, and you can do things like:
+
+     auto x = break + type t = int;
+
+Personally that makes me a bit queasy, and I think it *might* be 
+painting us into some corners syntactically; but it is plausible. At the 
+moment the implementation is doing less than this: sinking blocks, 
+branches, loops and movement operations into expressions, but stopping 
+short of the non-local control flow operators, diagnostic operators and 
+the declarations. That is: anything that definitely, by construction, 
+does not and cannot be understood as having a "result value", remains 
+classified as a statement.
+
+This is a definable, but slightly arbitrary, place to draw the line -- 
+only one of the loops (do-while) can even *potentially* be typed as 
+non-unit -- so I'm curious where others would draw the line (if at all). 
+Opinions?
+
+-Graydon
+
+
+From ianb at mozilla.com  Mon Nov 15 12:12:53 2010
+From: ianb at mozilla.com (Ian Bicking)
+Date: Mon, 15 Nov 2010 14:12:53 -0600
+Subject: [rust-dev] Questions about using Rust
+Message-ID: <AANLkTikRN++W1QdDJAScicuWORn-N+kicPfydAi71_sP@mail.gmail.com>
+
+Hi all.  I've been interested in Rust, and thought I'd try making an XML
+parser -- seems like a fairly simple task, and is the sort of thing Rust
+should do.
+
+I've only gotten as far as assembling a bunch of questions (admittedly I
+have not even tried to compile the code).  I'm sure at least one of the
+questions will reveal a deep lack of understanding on my part... but though
+I've read through most of the docs, I've started forgetting things that I've
+read, so if I'm going to retain anything I need to try to write something.
+So if you'll indulge me...
+
+1. Is the best way to handle expected errors (like a parse error) to use a
+tag return type?  I'm thinking like:
+
+  type xml = rec(...);
+  type xml_error = rec(str message, int position);
+  tag xmlerr {
+    xml;
+    xml_error;
+  }
+
+  fn parse_xml(str input) -> xmlerr {
+  }
+
+?  I'm confused about something with tags, but I can't quite figure out
+what... looking through uses of tag in docs and source I can't figure out
+what it should be.
+
+2. Is there a way to return a record without declaring it?  I only see how
+to do:
+
+  xml_error err = rec(message="< expected", pos=0);
+  ret err;
+
+But it seems like I need that `err` variable?
+
+3. Is the difference between `for` and `for each` just iterating over a
+vector/string or an iterator?
+
+4. I see references to _vec.len[T](), which seems... complex.  So would I
+really do _vec.len[xml](children) to get a length?  What about string
+length?  I'm only finding references to the byte length of strings, not the
+character length.
+
+5. There's lots of cases in parsing where an error or a success can be
+returned by a routine; I almost always just want to pass the error up when I
+encounter it, but the only way I can see to do that is to do a complete `alt
+type` condition on success or error.  For instance:
+
+  let attrs = parse_attrs(input, pos);
+  alt type (attrs) {
+    case (xml_error err) {
+      ret err;
+    }
+  }
+  ... now I know it wasn't an error and can continue...?
+
+Anyway, just wondering if there's a quicker way.
+
+6. Is _str.eq() really the right way to do string equality?
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101115/c6a65c82/attachment.html>
+
+From graydon at mozilla.com  Mon Nov 15 12:41:25 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 15 Nov 2010 12:41:25 -0800
+Subject: [rust-dev] Questions about using Rust
+In-Reply-To: <AANLkTikRN++W1QdDJAScicuWORn-N+kicPfydAi71_sP@mail.gmail.com>
+References: <AANLkTikRN++W1QdDJAScicuWORn-N+kicPfydAi71_sP@mail.gmail.com>
+Message-ID: <4CE19AF5.1060009@mozilla.com>
+
+On 10-11-15 12:12 PM, Ian Bicking wrote:
+> Hi all.  I've been interested in Rust, and thought I'd try making an XML
+> parser -- seems like a fairly simple task, and is the sort of thing Rust
+> should do.
+
+Good luck! It'll be a challenge given its current state.
+
+> So if you'll indulge me...
+
+Of course. I'm sorry the answers are unlikely to be terribly fun.
+
+> 1. Is the best way to handle expected errors (like a parse error) to use a
+> tag return type?  I'm thinking like:
+>
+>    type xml = rec(...);
+>    type xml_error = rec(str message, int position);
+>    tag xmlerr {
+>      xml;
+>      xml_error;
+>    }
+>
+>    fn parse_xml(str input) ->  xmlerr {
+>    }
+
+This will certainly work. Or any similar structural type. For example 
+"tup(option[xml], option[xml_error]))".
+
+It depends in part on how you want your error checking to proceed. Do 
+you want to continue to process things post-error? Collect more than one 
+error? Return partial results? Try different strategies on subsystems?
+
+We argue for a crash-only design for *unexpected* and/or unrecoverable 
+errors ("exceptions") but something like structured / disjoint-sum 
+returns (as you are proposing) for expected or recoverable conditions. 
+It's a matter of taste and domain-modeling to decide which you are 
+dealing with in any given case.
+
+> ?  I'm confused about something with tags, but I can't quite figure out
+> what... looking through uses of tag in docs and source I can't figure out
+> what it should be.
+
+Feel free to ask interactively on IRC, we're around during most workdays.
+
+> 2. Is there a way to return a record without declaring it?
+
+Yes. 'rec' is both a type-constructor and a value-constructor. You can 
+just say: "ret rec(message="...", pos=0);".
+
+> 3. Is the difference between `for` and `for each` just iterating over a
+> vector/string or an iterator?
+
+'for' runs a single bounds-check at loop-entry, then a compiler-emitted 
+pointer-bumping loop over the vec-or-str. 'for each' calls an iterator 
+repeatedly. They have sufficiently different semantics that I figured 
+they should look different. There are also (or perhaps only "were", 
+historically) ambiguities about iteration on a call-expression: you'd 
+need to determine the type of the iteratee (iter or fn) before you could 
+decide whether the loop intends to iterate-by-calling or iterate over 
+the return-value from a call.
+
+Possibly this distinction in loop-forms is a mistaken design choice; I'd 
+be willing to revisit it. We could even recycle pure 'for' loops as the 
+conventional C-style "for (init; cond; step)" form.
+
+> 4. I see references to _vec.len[T](), which seems... complex.  So would I
+> really do _vec.len[xml](children) to get a length?  What about string
+> length?  I'm only finding references to the byte length of strings, not the
+> character length.
+
+There's nothing that measures the character length yet. There's very 
+little unicode functionality in the libraries.
+
+And yes, at the moment the only way to determine the length of a vector 
+or string is to call the associated len function. The need to provide 
+the type parameter is temporary and should go away as type inference 
+improves. It's also possible that we may work out a way of providing 
+sugar for operators on primitive types such that "v.len" would work, but 
+there is nothing of the sort proposed yet, and I'd want it to avoid 
+perturbing the semantics much.
+
+Practically speaking, it may make sense to wire the compiler to equip 
+the primitive types str and vec to permit indexing by a few utility 
+fields like 'len'. I'm just concerned that this will grow into a general 
+demand for utility *methods*, object-like, at which point the compiler 
+is doing work the libraries should do. So I'd prefer figuring out a 
+mapping between the desired syntax and "a call to the libraries".
+
+> 5. There's lots of cases in parsing where an error or a success can be
+> returned by a routine; I almost always just want to pass the error up when I
+> encounter it, but the only way I can see to do that is to do a complete `alt
+> type` condition on success or error.  For instance:
+>
+>    let attrs = parse_attrs(input, pos);
+>    alt type (attrs) {
+>      case (xml_error err) {
+>        ret err;
+>      }
+>    }
+>    ... now I know it wasn't an error and can continue...?
+>
+> Anyway, just wondering if there's a quicker way.
+
+Depends how you are dealing with the error. If you want to 
+unpack-and-repack it (i.e. have an attribute error that is different 
+from a general xml error) then you need to extract-and-repack, yes.
+
+If you use a record-of-an-option or such, you can do:
+
+"if (attrs.err != None) { ret attrs; }"
+
+Which is shorter. Or you can wrap the check in a helper function. In 
+general it seems like you're asking "how shall I best simulate catchable 
+exceptions", which is not something we support.
+
+An idiom you might consider is passing a "result-reporting" channel 
+downward through your parser, running your parser in a 
+sys.rustrt.unsupervise()'d sub-task, failing the task after any error is 
+transmitted out. I am hesitant to suggest that *now* because I think a 
+good quantity of the machinery to implement it is disabled, unstable or 
+otherwise not functional, you'll have a lot of stubbed toes and paper 
+cuts if you try.
+
+> 6. Is _str.eq() really the right way to do string equality?
+
+Not "the right way", no. But the current way. It's a temporary 
+workaround for the unfinished structural equality glue in the bootstrap 
+compiler. Eventually ==, !=, <, etc. will all work. At present they only 
+work on scalars, fixed-size structures and tags.
+
+Unfortunately (or, depending on your perspective, fortunately) a great 
+many foibles in the use of the language at present are short-term 
+limitations due to the limited availability of time and labour.
+
+We're focusing on bringing up the self-hosted compiler just now, so many 
+library and language-design issues are on the back burner.
+
+-Graydon
+
+From pwalton at mozilla.com  Mon Nov 15 12:49:19 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Mon, 15 Nov 2010 12:49:19 -0800
+Subject: [rust-dev] Questions about using Rust
+In-Reply-To: <AANLkTikRN++W1QdDJAScicuWORn-N+kicPfydAi71_sP@mail.gmail.com>
+References: <AANLkTikRN++W1QdDJAScicuWORn-N+kicPfydAi71_sP@mail.gmail.com>
+Message-ID: <4CE19CCF.8000904@mozilla.com>
+
+On 11/15/10 12:12 PM, Ian Bicking wrote:
+> 1. Is the best way to handle expected errors (like a parse error) to use
+> a tag return type?  I'm thinking like:
+>
+>    type xml = rec(...);
+>    type xml_error = rec(str message, int position);
+>    tag xmlerr {
+>      xml;
+>      xml_error;
+>    }
+>
+>    fn parse_xml(str input) -> xmlerr {
+>    }
+>
+> ?  I'm confused about something with tags, but I can't quite figure out
+> what... looking through uses of tag in docs and source I can't figure
+> out what it should be.
+
+I'd recommend just failing on parse errors. If someone wants to catch 
+the error they can always spawn a task to do the XML parsing (when that 
+works). Given the draconian error handling mandated by the XML spec, I'd 
+think that, most of the time, an XML parse error is something that can't 
+be sensibly handled except at a coarse-grained level.
+
+> 2. Is there a way to return a record without declaring it?  I only see
+> how to do:
+>
+>    xml_error err = rec(message="< expected", pos=0);
+>    ret err;
+>
+> But it seems like I need that `err` variable?
+
+You shouldn't. If you do, that's a bug!
+
+> 4. I see references to _vec.len[T](), which seems... complex.  So would
+> I really do _vec.len[xml](children) to get a length?  What about string
+> length?  I'm only finding references to the byte length of strings, not
+> the character length.
+
+Yeah, it's a bummer. Maybe we should have a length operator a la Lua.
+
+> 5. There's lots of cases in parsing where an error or a success can be
+> returned by a routine; I almost always just want to pass the error up
+> when I encounter it, but the only way I can see to do that is to do a
+> complete `alt type` condition on success or error.  For instance:
+>
+>    let attrs = parse_attrs(input, pos);
+>    alt type (attrs) {
+>      case (xml_error err) {
+>        ret err;
+>      }
+>    }
+>    ... now I know it wasn't an error and can continue...?
+>
+> Anyway, just wondering if there's a quicker way.
+
+Failure is the quicker way. If a caller of your library wants to be able 
+to catch errors sensibly, they can always spawn a task to do the XML 
+parsing. Tasks are cheap, use 'em :)
+
+> 6. Is _str.eq() really the right way to do string equality?
+
+No (we intend == to work), but it's the only way that works right now :)
+
+Patrick
+
+From pwalton at mozilla.com  Sat Nov 20 09:00:27 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 20 Nov 2010 09:00:27 -0800
+Subject: [rust-dev] Objects as a last resort
+Message-ID: <4CE7FEAB.9090107@mozilla.com>
+
+First off: This is a random thought and may be completely off-base. But:
+
+In the context of our performance discussions on IRC yesterday, Graydon 
+mentioned one of our performance costs over C++: that our method 
+dispatch is always virtual, through a vtable. This is potentially 
+significant: this is cited as one of the major problems of Objective-C 
+in high-performance environments, for example (despite its dispatch 
+mechanism being heavily tuned [1]).
+
+But there's another problem with objects, and one that's potentially far 
+more severe than the performance problem: sending them over channels. As 
+I understand it (and feel free to correct me here), it's not clear that 
+we're going to be able to send objects over channels at all, because 
+they (along with functions) belong to the opaque typeclass, which means 
+that we can't tell statically whether they contain mutable, shared data. 
+At a type level, all we know about an object is the interface it exports.
+
+So objects have these two significant drawbacks. This leads me to think 
+that perhaps we shouldn't be using objects in the standard library as 
+much as we are. The buf_reader, buf_writer, and rng classes in the 
+standard library are fine as objects; these are clearly abstract 
+interfaces. But hash maps and deques are the kinds of things that we may 
+well want to be able to send over channels (either frozen, or as unique 
+pointers). Right now, in order to do that, I believe we'd need some 
+flavor of "serialize" and "deserialize" functionality, which would be 
+both a pain to implement and a pain to use.
+
+In my view, making our hash maps into Plain Old Data instead of objects 
+would both improve performance (by eliminating vtable dispatch) and give 
+us a nice story for concurrency (just use a unique pointer and send your 
+hash map away on a channel when you're done with it). And we could still 
+have the object forms if we wanted to, layered on top of the lower-level 
+functions! It's possible that people might want to write functions that 
+operate on abstract collections. But I'm in favor of YAGNI here: when we 
+see code that operates on abstract collections, then we can think about 
+exposing an interface in the standard library.
+
+Note that I'm absolutely in favor of keeping objects in the language; 
+they're a powerful tool for abstraction. But in a high-performance 
+language lacking mutable state like Rust, they're a double-edged sword.
+
+Patrick
+
+[1]: http://www.friday.com/bbum/2009/12/18/objc_msgsend-part-1-the-road-map/
+
+From sebastian.sylvan at gmail.com  Sun Nov 21 03:33:49 2010
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Sun, 21 Nov 2010 11:33:49 +0000
+Subject: [rust-dev] Objects as a last resort
+In-Reply-To: <4CE7FEAB.9090107@mozilla.com>
+References: <4CE7FEAB.9090107@mozilla.com>
+Message-ID: <AANLkTim=pQ-EBgTA_JxBoX2o24OWyp=vU6Dq0FggrOPW@mail.gmail.com>
+
+On Sat, Nov 20, 2010 at 5:00 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+>
+> But there's another problem with objects, and one that's potentially far
+> more severe than the performance problem: sending them over channels. As I
+> understand it (and feel free to correct me here), it's not clear that we're
+> going to be able to send objects over channels at all, because they (along
+> with functions) belong to the opaque typeclass, which means that we can't
+> tell statically whether they contain mutable, shared data.
+
+
+Isn't the solution to make sure that you *can* tell whether an interface
+depends on mutable data? This is the distinction that e.g. D makes between
+immutable and const (immutable means the data can't be changed, const means
+that *you* won't change it - the latter is needed to make sure you can write
+one function that can be used with both immutable and mutable data).
+
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101121/0f47306e/attachment.html>
+
+From graydon at mozilla.com  Sun Nov 21 12:48:41 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 21 Nov 2010 12:48:41 -0800
+Subject: [rust-dev] Objects as a last resort
+In-Reply-To: <AANLkTim=pQ-EBgTA_JxBoX2o24OWyp=vU6Dq0FggrOPW@mail.gmail.com>
+References: <4CE7FEAB.9090107@mozilla.com>
+	<AANLkTim=pQ-EBgTA_JxBoX2o24OWyp=vU6Dq0FggrOPW@mail.gmail.com>
+Message-ID: <4CE985A9.9080808@mozilla.com>
+
+On 11/21/2010 03:33 AM, Sebastian Sylvan wrote:
+
+> On Sat, Nov 20, 2010 at 5:00 PM, Patrick Walton <pwalton at mozilla.com
+> <mailto:pwalton at mozilla.com>> wrote:
+>
+>     But there's another problem with objects, and one that's potentially
+>     far more severe than the performance problem: sending them over
+>     channels. As I understand it (and feel free to correct me here),
+>     it's not clear that we're going to be able to send objects over
+>     channels at all, because they (along with functions) belong to the
+>     opaque typeclass, which means that we can't tell statically whether
+>     they contain mutable, shared data.
+>
+>
+> Isn't the solution to make sure that you *can* tell whether an interface
+> depends on mutable data? This is the distinction that e.g. D makes
+> between immutable and const (immutable means the data can't be changed,
+> const means that *you* won't change it - the latter is needed to make
+> sure you can write one function that can be used with both immutable and
+> mutable data).
+
+Patrick exaggerated the concern here. It's not that we can't *possibly* 
+send objects over channels, it's more that there are a few subtle 
+interactions with both versioning and the stratum system that might 
+argue that way, and we've discussed it as a possibility.
+
+We definitely *can* tell when an object or fn is stateful. That's part 
+of its stratum. There are three slightly-complexifying issues:
+
+  1. We can't *freeze* a mutable fn-or-obj into an immutable one the way
+     we can with "plain" data, for the simple reason that we can't change
+     the methods! If one of the methods of an obj, or the code in a fn,
+     happens to cause some mutation, we're not really able to
+     spontaneously cook up an equivalent non-mutating version the way we
+     can with simpler types (eg. mutable 10 turns into 10 pretty easily).
+
+     But that just says we can't lower a stateful obj/fn to a stateless
+     one automatically. If we happen to *have* a stateless one, it's
+     stateless and we can sensibly consider sending it over a chan.
+
+  2. If we have a stateless obj with a dtor, its lifecycle is in some
+     sense "more observable" than one without a dtor. Like, making a copy
+     when we hit a thread boundary vs. moving the value makes an
+     observable difference. So we might not want that. One way around
+     this is just to reformulate dtors as a form of state, such that when
+     you add a dtor the obj moves to the state stratum. Problem "solved":
+     you can't send anything with a dtor since it's implicitly stateful.
+
+  3. More subtle is the issue of IPC. We haven't actually nailed down
+     the exact level of compatibility we want to require between a
+     parent process and child process when you do a "span process".
+     (This feature isn't implemented at all just now, so...)
+     It's possible that we may want it to be permitted to have a
+     subprocess load an type-compatible but code-differing crate as part
+     of a scheme for "hot upgrading" a running process. In this case we
+     might wish to prohibit fns and objs from chan types just to ensure
+     we're always sending "plain old data".
+
+     Personally I'm unsure on this point; it sort of feels like overkill
+     and I can think of other ways to achieve it (i.e. special case
+     dynamic checks in any sort of hot-upgrade system). It seems like a
+     high price to pay, and somewhat of a stretchy / speculative point
+     to be hinging such broad-reaching design choices on.
+
+In general I don't think we're painted into the "no objs go over 
+channels" corner yet. We've been talking a bit about this as an extreme 
+stance, but it's not clear that will be the correct balance. Opinions on 
+the matter would be appreciated.
+
+The vtbl and boxed-allocation costs of objs, on the other hand, are 
+indeed the price of admission in our obj system. Though again, I think 
+Patrick exaggerates here by comparing to objc. Objc has no vtbls at all 
+-- just ad-hoc bags-of-methods indexed by unique string -- so it's doing 
+something more analogous to the glib dispatch system or a PIC in 
+smalltalk: an atom-keyed method-descriptor lookup with a cache for the 
+fast-path. This is, I'd guess, a couple orders of magnitude more costly 
+than the single (hardware-predictable) indirect jump you'll get in a 
+rust obj: the objc code involves takes around 30 instructions (including 
+a cache-scan loop!) on the *fast path*.
+
+It's not clear to me yet that the boxing and vtbl'ing costs on objs will 
+really hurt, but we're not venturing into objc territory on dispatch. 
+We're doing more like "C++ with the pimpl idiom".
+
+-Graydon
+
+From mike.capp at gmail.com  Sun Nov 21 16:17:13 2010
+From: mike.capp at gmail.com (Mike Capp)
+Date: Mon, 22 Nov 2010 00:17:13 +0000
+Subject: [rust-dev] Objects as a last resort
+In-Reply-To: <4CE985A9.9080808@mozilla.com>
+References: <4CE7FEAB.9090107@mozilla.com>
+	<AANLkTim=pQ-EBgTA_JxBoX2o24OWyp=vU6Dq0FggrOPW@mail.gmail.com>
+	<4CE985A9.9080808@mozilla.com>
+Message-ID: <AANLkTinLQmpy16cX-HU1UBnVYb6PedPB131xV9OACym=@mail.gmail.com>
+
+On 21 November 2010 20:48, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> It's not clear to me yet that the boxing and vtbl'ing costs on objs will
+> really hurt, but we're not venturing into objc territory on dispatch. We're
+> doing more like "C++ with the pimpl idiom".
+
+And presumably your objs aren't so mutable that an optimizer couldn't
+cache the result of a vtbl lookup if it was going to be called in a
+tight loop?
+
+From graydon at mozilla.com  Sun Nov 21 23:08:10 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 21 Nov 2010 23:08:10 -0800
+Subject: [rust-dev] Objects as a last resort
+In-Reply-To: <AANLkTinLQmpy16cX-HU1UBnVYb6PedPB131xV9OACym=@mail.gmail.com>
+References: <4CE7FEAB.9090107@mozilla.com>	<AANLkTim=pQ-EBgTA_JxBoX2o24OWyp=vU6Dq0FggrOPW@mail.gmail.com>	<4CE985A9.9080808@mozilla.com>
+	<AANLkTinLQmpy16cX-HU1UBnVYb6PedPB131xV9OACym=@mail.gmail.com>
+Message-ID: <4CEA16DA.3090304@mozilla.com>
+
+On 21/11/2010 4:17 PM, Mike Capp wrote:
+> On 21 November 2010 20:48, Graydon Hoare<graydon at mozilla.com>  wrote:
+>
+>> It's not clear to me yet that the boxing and vtbl'ing costs on objs will
+>> really hurt, but we're not venturing into objc territory on dispatch. We're
+>> doing more like "C++ with the pimpl idiom".
+>
+> And presumably your objs aren't so mutable that an optimizer couldn't
+> cache the result of a vtbl lookup if it was going to be called in a
+> tight loop?
+
+There's no "lookup" to cache; vtbl dispatch is a register+immediate 
+indirect branch. For a dynamic callee, you can't cache it any more than 
+that. The only way in which C++ is "faster" is by statically binding 
+most of its methods (it's not virtual-by-default; you can't *override* 
+most C++ methods).
+
+Rust does something that's a little more conventional in the world of 
+languages-outside-of-C++: object methods are all virtual and object 
+bodies are all heap allocated. But dispatch is still just an indirect 
+branch through a static vtbl. This removes perhaps 90% of the complexity 
+and fragility of the C++ object model while retaining a very good -- not 
+perfect, but good -- dispatch speed.
+
+To get static binding in rust, you have to use a static function call, 
+not an object-method call.
+
+-Graydon
+
+From graydon at mozilla.com  Tue Nov 23 14:34:22 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 23 Nov 2010 14:34:22 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+Message-ID: <4CEC416E.4030809@mozilla.com>
+
+Hi,
+
+Some of you may have noticed that in the rewrite from rustboot to rustc 
+we're becoming substantially more expression-language-ish. This is 
+mostly a result of me yielding to the preferences of other developers 
+(and LLVM's semantics), as well as some hint that things get much easier 
+in syntax extensions and calculating compile-time-constants if we permit 
+more "statement-ish" forms as expressions. Particularly conditionals.
+
+We've run into a (common, seen in many other languages) sort of problem 
+along the way here, which is that some expressions are implicitly 
+ignored (or must be, due to being in an ignored context) whereas others 
+are not. We have a nil-type (), but we don't always have sensible rules 
+for forcing things to have the nil type by context.
+
+This email is a poll of alternative solutions. I'll give two example 
+cases and ask people for their input on which modification of the rules 
+feels best.
+
+Example case that does compile:
+
+   A:  auto x = if (foo()) { 10; } else { 11; };
+
+Example case that does not compile:
+
+   B:  if (foo()) { 10; } else { "hello"; }
+
+We can write this in rust at the moment, but in the rustc typechecking 
+rules it will fail to compile, because 'if' is an expression-statement, 
+expressions have types, and the types of the two branches (judged as the 
+last statement's expression value, if it's an expression, or else nil) 
+are of different types.
+
+Here are some approaches to solving this example. Please pick the one 
+you like the most:
+
+(1) Kick all branchy expressions out of the expression grammar, put them 
+back in the statement grammar. Case B will compile, and case A must be 
+rewritten like so:
+
+   A:  auto x = { auto t = 11; if (foo()) { t = 10; }; t; };
+
+This is the C-with-GNU-extensions model.
+
+(2) Hoist all statements up into the expression language and make 
+semicolon into a sequencing operator, with a trailing-semi ignored by 
+the parser. Then we need to rewrite only the second case to force unit 
+types in the to-be-ignored differing branches.
+
+   B:  if (foo()) { 10; () } else { "hello"; () }
+
+Though we'd also be *allowed* to rewrite the first case to drop the 
+semicolons:
+
+   A:  auto x = if (foo() { 10 } else { 11 };
+
+This is the Ocaml approach.
+
+(3) A slightly weaker form of (2), which is to reformulate blocks with 
+the following grammar:
+
+     block ::=  { [ stmt ; ]* expr? }
+
+In other words, every block becomes a brace-enclosed sequence of 
+semicolon-terminated statements, followed by an optional expr. If the 
+expr is missing, it is implied as (). In this case we'd be rewriting 
+only the first case:
+
+   A:  auto x = if (foo()) { 10 } else { 11 };
+
+This is similar to the Ocaml rule in practice, except that it makes the 
+presence or absence of the final semicolon in a block equivalent to 
+ending the block with the nil type. This is a possible hazard 
+(especially during refactoring or editing) to users who want to write a 
+value-producing block but accidentally semicolon-terminate the last 
+expression; but it's not a huge hazard since the typechecker will tell 
+them the value they produced is of nil type. It just might be hit a lot.
+
+(4) Statically determine the contexts in which an expression's value 
+"will be used" in an outer expression, and only typecheck those 
+contexts. This permits both of the examples to compile as-is, but it's 
+the most unorthodox approach, and poses a refactoring hazard as code may 
+become type-invalid when nested into an expression context that "uses" 
+its previously-ignored result. Again, as in (3) the typechecker will 
+catch these cases, but they might happen more or less often than those 
+in (3).
+
+We can't think of any other options. Significant whitespace is not an 
+option :)
+
+Personally my knee-jerk reaction is to embrace (1) since I like 
+statements anyway, but I can see plausible arguments for the other 3. 
+Can I get a show of hands? We have to pick something.
+
+-Graydon
+
+From pwalton at mozilla.com  Tue Nov 23 14:37:04 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Tue, 23 Nov 2010 14:37:04 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CEC416E.4030809@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>
+Message-ID: <4CEC4210.7060402@mozilla.com>
+
+On 11/23/10 2:34 PM, Graydon Hoare wrote:
+> Personally my knee-jerk reaction is to embrace (1) since I like
+> statements anyway, but I can see plausible arguments for the other 3.
+> Can I get a show of hands? We have to pick something.
+
+You know my vote :) (#3, for everyone else)
+
+Patrick
+
+From dherman at mozilla.com  Tue Nov 23 14:53:29 2010
+From: dherman at mozilla.com (David Herman)
+Date: Tue, 23 Nov 2010 14:53:29 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CEC416E.4030809@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>
+Message-ID: <C7A37BBE-9A84-4F27-A6FB-2A1FD96D5A1A@mozilla.com>
+
+Of these, I like option #3 the most.
+
+I should say, I think anywhere that we have statements in the grammar, we could actually allow them to be expressions of type (), and ISTM that would be equally workable for option #2 or option #3. I'd be open to that alternative, since in *surface* syntax you still have the look and feel of C, but you get higher refactoring flexibility.
+
+Dave
+
+On Nov 23, 2010, at 2:34 PM, Graydon Hoare wrote:
+
+> Hi,
+> 
+> Some of you may have noticed that in the rewrite from rustboot to rustc we're becoming substantially more expression-language-ish. This is mostly a result of me yielding to the preferences of other developers (and LLVM's semantics), as well as some hint that things get much easier in syntax extensions and calculating compile-time-constants if we permit more "statement-ish" forms as expressions. Particularly conditionals.
+> 
+> We've run into a (common, seen in many other languages) sort of problem along the way here, which is that some expressions are implicitly ignored (or must be, due to being in an ignored context) whereas others are not. We have a nil-type (), but we don't always have sensible rules for forcing things to have the nil type by context.
+> 
+> This email is a poll of alternative solutions. I'll give two example cases and ask people for their input on which modification of the rules feels best.
+> 
+> Example case that does compile:
+> 
+>  A:  auto x = if (foo()) { 10; } else { 11; };
+> 
+> Example case that does not compile:
+> 
+>  B:  if (foo()) { 10; } else { "hello"; }
+> 
+> We can write this in rust at the moment, but in the rustc typechecking rules it will fail to compile, because 'if' is an expression-statement, expressions have types, and the types of the two branches (judged as the last statement's expression value, if it's an expression, or else nil) are of different types.
+> 
+> Here are some approaches to solving this example. Please pick the one you like the most:
+> 
+> (1) Kick all branchy expressions out of the expression grammar, put them back in the statement grammar. Case B will compile, and case A must be rewritten like so:
+> 
+>  A:  auto x = { auto t = 11; if (foo()) { t = 10; }; t; };
+> 
+> This is the C-with-GNU-extensions model.
+> 
+> (2) Hoist all statements up into the expression language and make semicolon into a sequencing operator, with a trailing-semi ignored by the parser. Then we need to rewrite only the second case to force unit types in the to-be-ignored differing branches.
+> 
+>  B:  if (foo()) { 10; () } else { "hello"; () }
+> 
+> Though we'd also be *allowed* to rewrite the first case to drop the semicolons:
+> 
+>  A:  auto x = if (foo() { 10 } else { 11 };
+> 
+> This is the Ocaml approach.
+> 
+> (3) A slightly weaker form of (2), which is to reformulate blocks with the following grammar:
+> 
+>    block ::=  { [ stmt ; ]* expr? }
+> 
+> In other words, every block becomes a brace-enclosed sequence of semicolon-terminated statements, followed by an optional expr. If the expr is missing, it is implied as (). In this case we'd be rewriting only the first case:
+> 
+>  A:  auto x = if (foo()) { 10 } else { 11 };
+> 
+> This is similar to the Ocaml rule in practice, except that it makes the presence or absence of the final semicolon in a block equivalent to ending the block with the nil type. This is a possible hazard (especially during refactoring or editing) to users who want to write a value-producing block but accidentally semicolon-terminate the last expression; but it's not a huge hazard since the typechecker will tell them the value they produced is of nil type. It just might be hit a lot.
+> 
+> (4) Statically determine the contexts in which an expression's value "will be used" in an outer expression, and only typecheck those contexts. This permits both of the examples to compile as-is, but it's the most unorthodox approach, and poses a refactoring hazard as code may become type-invalid when nested into an expression context that "uses" its previously-ignored result. Again, as in (3) the typechecker will catch these cases, but they might happen more or less often than those in (3).
+> 
+> We can't think of any other options. Significant whitespace is not an option :)
+> 
+> Personally my knee-jerk reaction is to embrace (1) since I like statements anyway, but I can see plausible arguments for the other 3. Can I get a show of hands? We have to pick something.
+> 
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From dherman at mozilla.com  Tue Nov 23 14:58:05 2010
+From: dherman at mozilla.com (David Herman)
+Date: Tue, 23 Nov 2010 14:58:05 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <C7A37BBE-9A84-4F27-A6FB-2A1FD96D5A1A@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>
+	<C7A37BBE-9A84-4F27-A6FB-2A1FD96D5A1A@mozilla.com>
+Message-ID: <82D2528A-8C9E-424B-A27C-F9E4BA30C543@mozilla.com>
+
+Two afterthoughts:
+
+- IINM, the different syntax for blocks between option #2 and option #3 is not that drastic, so if we choose one and decide we prefer the other, it might not be too hard to change.
+
+- In option #4, we can't completely *turn off* typechecking -- that's unsound. (For example, inside the unchecked part you could assign the wrong type to a variable or data structure.) But we could avoid certain checks (like comparing the result type of the two arms of an if). Not that I'm advocating option #4. :)
+
+Dave
+
+On Nov 23, 2010, at 2:53 PM, David Herman wrote:
+
+> Of these, I like option #3 the most.
+> 
+> I should say, I think anywhere that we have statements in the grammar, we could actually allow them to be expressions of type (), and ISTM that would be equally workable for option #2 or option #3. I'd be open to that alternative, since in *surface* syntax you still have the look and feel of C, but you get higher refactoring flexibility.
+> 
+> Dave
+> 
+> On Nov 23, 2010, at 2:34 PM, Graydon Hoare wrote:
+> 
+>> Hi,
+>> 
+>> Some of you may have noticed that in the rewrite from rustboot to rustc we're becoming substantially more expression-language-ish. This is mostly a result of me yielding to the preferences of other developers (and LLVM's semantics), as well as some hint that things get much easier in syntax extensions and calculating compile-time-constants if we permit more "statement-ish" forms as expressions. Particularly conditionals.
+>> 
+>> We've run into a (common, seen in many other languages) sort of problem along the way here, which is that some expressions are implicitly ignored (or must be, due to being in an ignored context) whereas others are not. We have a nil-type (), but we don't always have sensible rules for forcing things to have the nil type by context.
+>> 
+>> This email is a poll of alternative solutions. I'll give two example cases and ask people for their input on which modification of the rules feels best.
+>> 
+>> Example case that does compile:
+>> 
+>> A:  auto x = if (foo()) { 10; } else { 11; };
+>> 
+>> Example case that does not compile:
+>> 
+>> B:  if (foo()) { 10; } else { "hello"; }
+>> 
+>> We can write this in rust at the moment, but in the rustc typechecking rules it will fail to compile, because 'if' is an expression-statement, expressions have types, and the types of the two branches (judged as the last statement's expression value, if it's an expression, or else nil) are of different types.
+>> 
+>> Here are some approaches to solving this example. Please pick the one you like the most:
+>> 
+>> (1) Kick all branchy expressions out of the expression grammar, put them back in the statement grammar. Case B will compile, and case A must be rewritten like so:
+>> 
+>> A:  auto x = { auto t = 11; if (foo()) { t = 10; }; t; };
+>> 
+>> This is the C-with-GNU-extensions model.
+>> 
+>> (2) Hoist all statements up into the expression language and make semicolon into a sequencing operator, with a trailing-semi ignored by the parser. Then we need to rewrite only the second case to force unit types in the to-be-ignored differing branches.
+>> 
+>> B:  if (foo()) { 10; () } else { "hello"; () }
+>> 
+>> Though we'd also be *allowed* to rewrite the first case to drop the semicolons:
+>> 
+>> A:  auto x = if (foo() { 10 } else { 11 };
+>> 
+>> This is the Ocaml approach.
+>> 
+>> (3) A slightly weaker form of (2), which is to reformulate blocks with the following grammar:
+>> 
+>>   block ::=  { [ stmt ; ]* expr? }
+>> 
+>> In other words, every block becomes a brace-enclosed sequence of semicolon-terminated statements, followed by an optional expr. If the expr is missing, it is implied as (). In this case we'd be rewriting only the first case:
+>> 
+>> A:  auto x = if (foo()) { 10 } else { 11 };
+>> 
+>> This is similar to the Ocaml rule in practice, except that it makes the presence or absence of the final semicolon in a block equivalent to ending the block with the nil type. This is a possible hazard (especially during refactoring or editing) to users who want to write a value-producing block but accidentally semicolon-terminate the last expression; but it's not a huge hazard since the typechecker will tell them the value they produced is of nil type. It just might be hit a lot.
+>> 
+>> (4) Statically determine the contexts in which an expression's value "will be used" in an outer expression, and only typecheck those contexts. This permits both of the examples to compile as-is, but it's the most unorthodox approach, and poses a refactoring hazard as code may become type-invalid when nested into an expression context that "uses" its previously-ignored result. Again, as in (3) the typechecker will catch these cases, but they might happen more or less often than those in (3).
+>> 
+>> We can't think of any other options. Significant whitespace is not an option :)
+>> 
+>> Personally my knee-jerk reaction is to embrace (1) since I like statements anyway, but I can see plausible arguments for the other 3. Can I get a show of hands? We have to pick something.
+>> 
+>> -Graydon
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From rfrostig at mozilla.com  Tue Nov 23 15:10:38 2010
+From: rfrostig at mozilla.com (Roy Frostig)
+Date: Tue, 23 Nov 2010 15:10:38 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <82D2528A-8C9E-424B-A27C-F9E4BA30C543@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>
+	<C7A37BBE-9A84-4F27-A6FB-2A1FD96D5A1A@mozilla.com>
+	<82D2528A-8C9E-424B-A27C-F9E4BA30C543@mozilla.com>
+Message-ID: <AANLkTimvn1cieWGyN6ZcVBHdVS5ExQi_=11d1W0Hyhh3@mail.gmail.com>
+
+I prefer option #3, just according to taste.
+
+froy
+
+On Tue, Nov 23, 2010 at 2:58 PM, David Herman <dherman at mozilla.com> wrote:
+
+> Two afterthoughts:
+>
+> - IINM, the different syntax for blocks between option #2 and option #3 is
+> not that drastic, so if we choose one and decide we prefer the other, it
+> might not be too hard to change.
+>
+> - In option #4, we can't completely *turn off* typechecking -- that's
+> unsound. (For example, inside the unchecked part you could assign the wrong
+> type to a variable or data structure.) But we could avoid certain checks
+> (like comparing the result type of the two arms of an if). Not that I'm
+> advocating option #4. :)
+>
+> Dave
+>
+> On Nov 23, 2010, at 2:53 PM, David Herman wrote:
+>
+> > Of these, I like option #3 the most.
+> >
+> > I should say, I think anywhere that we have statements in the grammar, we
+> could actually allow them to be expressions of type (), and ISTM that would
+> be equally workable for option #2 or option #3. I'd be open to that
+> alternative, since in *surface* syntax you still have the look and feel of
+> C, but you get higher refactoring flexibility.
+> >
+> > Dave
+> >
+> > On Nov 23, 2010, at 2:34 PM, Graydon Hoare wrote:
+> >
+> >> Hi,
+> >>
+> >> Some of you may have noticed that in the rewrite from rustboot to rustc
+> we're becoming substantially more expression-language-ish. This is mostly a
+> result of me yielding to the preferences of other developers (and LLVM's
+> semantics), as well as some hint that things get much easier in syntax
+> extensions and calculating compile-time-constants if we permit more
+> "statement-ish" forms as expressions. Particularly conditionals.
+> >>
+> >> We've run into a (common, seen in many other languages) sort of problem
+> along the way here, which is that some expressions are implicitly ignored
+> (or must be, due to being in an ignored context) whereas others are not. We
+> have a nil-type (), but we don't always have sensible rules for forcing
+> things to have the nil type by context.
+> >>
+> >> This email is a poll of alternative solutions. I'll give two example
+> cases and ask people for their input on which modification of the rules
+> feels best.
+> >>
+> >> Example case that does compile:
+> >>
+> >> A:  auto x = if (foo()) { 10; } else { 11; };
+> >>
+> >> Example case that does not compile:
+> >>
+> >> B:  if (foo()) { 10; } else { "hello"; }
+> >>
+> >> We can write this in rust at the moment, but in the rustc typechecking
+> rules it will fail to compile, because 'if' is an expression-statement,
+> expressions have types, and the types of the two branches (judged as the
+> last statement's expression value, if it's an expression, or else nil) are
+> of different types.
+> >>
+> >> Here are some approaches to solving this example. Please pick the one
+> you like the most:
+> >>
+> >> (1) Kick all branchy expressions out of the expression grammar, put them
+> back in the statement grammar. Case B will compile, and case A must be
+> rewritten like so:
+> >>
+> >> A:  auto x = { auto t = 11; if (foo()) { t = 10; }; t; };
+> >>
+> >> This is the C-with-GNU-extensions model.
+> >>
+> >> (2) Hoist all statements up into the expression language and make
+> semicolon into a sequencing operator, with a trailing-semi ignored by the
+> parser. Then we need to rewrite only the second case to force unit types in
+> the to-be-ignored differing branches.
+> >>
+> >> B:  if (foo()) { 10; () } else { "hello"; () }
+> >>
+> >> Though we'd also be *allowed* to rewrite the first case to drop the
+> semicolons:
+> >>
+> >> A:  auto x = if (foo() { 10 } else { 11 };
+> >>
+> >> This is the Ocaml approach.
+> >>
+> >> (3) A slightly weaker form of (2), which is to reformulate blocks with
+> the following grammar:
+> >>
+> >>   block ::=  { [ stmt ; ]* expr? }
+> >>
+> >> In other words, every block becomes a brace-enclosed sequence of
+> semicolon-terminated statements, followed by an optional expr. If the expr
+> is missing, it is implied as (). In this case we'd be rewriting only the
+> first case:
+> >>
+> >> A:  auto x = if (foo()) { 10 } else { 11 };
+> >>
+> >> This is similar to the Ocaml rule in practice, except that it makes the
+> presence or absence of the final semicolon in a block equivalent to ending
+> the block with the nil type. This is a possible hazard (especially during
+> refactoring or editing) to users who want to write a value-producing block
+> but accidentally semicolon-terminate the last expression; but it's not a
+> huge hazard since the typechecker will tell them the value they produced is
+> of nil type. It just might be hit a lot.
+> >>
+> >> (4) Statically determine the contexts in which an expression's value
+> "will be used" in an outer expression, and only typecheck those contexts.
+> This permits both of the examples to compile as-is, but it's the most
+> unorthodox approach, and poses a refactoring hazard as code may become
+> type-invalid when nested into an expression context that "uses" its
+> previously-ignored result. Again, as in (3) the typechecker will catch these
+> cases, but they might happen more or less often than those in (3).
+> >>
+> >> We can't think of any other options. Significant whitespace is not an
+> option :)
+> >>
+> >> Personally my knee-jerk reaction is to embrace (1) since I like
+> statements anyway, but I can see plausible arguments for the other 3. Can I
+> get a show of hands? We have to pick something.
+> >>
+> >> -Graydon
+> >> _______________________________________________
+> >> Rust-dev mailing list
+> >> Rust-dev at mozilla.org
+> >> https://mail.mozilla.org/listinfo/rust-dev
+> >
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org
+> > https://mail.mozilla.org/listinfo/rust-dev
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101123/eda6c540/attachment-0001.html>
+
+From tellrob at gmail.com  Tue Nov 23 18:22:17 2010
+From: tellrob at gmail.com (Rob Arnold)
+Date: Tue, 23 Nov 2010 18:22:17 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CEC416E.4030809@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>
+Message-ID: <AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>
+
+Option 3 is my favorite (2 would be too cumbersome I think).
+
+On Nov 23, 2010 2:34 PM, "Graydon Hoare" <graydon at mozilla.com> wrote:
+
+Hi,
+
+Some of you may have noticed that in the rewrite from rustboot to rustc
+we're becoming substantially more expression-language-ish. This is mostly a
+result of me yielding to the preferences of other developers (and LLVM's
+semantics), as well as some hint that things get much easier in syntax
+extensions and calculating compile-time-constants if we permit more
+"statement-ish" forms as expressions. Particularly conditionals.
+
+We've run into a (common, seen in many other languages) sort of problem
+along the way here, which is that some expressions are implicitly ignored
+(or must be, due to being in an ignored context) whereas others are not. We
+have a nil-type (), but we don't always have sensible rules for forcing
+things to have the nil type by context.
+
+This email is a poll of alternative solutions. I'll give two example cases
+and ask people for their input on which modification of the rules feels
+best.
+
+Example case that does compile:
+
+ A:  auto x = if (foo()) { 10; } else { 11; };
+
+Example case that does not compile:
+
+ B:  if (foo()) { 10; } else { "hello"; }
+
+We can write this in rust at the moment, but in the rustc typechecking rules
+it will fail to compile, because 'if' is an expression-statement,
+expressions have types, and the types of the two branches (judged as the
+last statement's expression value, if it's an expression, or else nil) are
+of different types.
+
+Here are some approaches to solving this example. Please pick the one you
+like the most:
+
+(1) Kick all branchy expressions out of the expression grammar, put them
+back in the statement grammar. Case B will compile, and case A must be
+rewritten like so:
+
+ A:  auto x = { auto t = 11; if (foo()) { t = 10; }; t; };
+
+This is the C-with-GNU-extensions model.
+
+(2) Hoist all statements up into the expression language and make semicolon
+into a sequencing operator, with a trailing-semi ignored by the parser. Then
+we need to rewrite only the second case to force unit types in the
+to-be-ignored differing branches.
+
+ B:  if (foo()) { 10; () } else { "hello"; () }
+
+Though we'd also be *allowed* to rewrite the first case to drop the
+semicolons:
+
+ A:  auto x = if (foo() { 10 } else { 11 };
+
+This is the Ocaml approach.
+
+(3) A slightly weaker form of (2), which is to reformulate blocks with the
+following grammar:
+
+   block ::=  { [ stmt ; ]* expr? }
+
+In other words, every block becomes a brace-enclosed sequence of
+semicolon-terminated statements, followed by an optional expr. If the expr
+is missing, it is implied as (). In this case we'd be rewriting only the
+first case:
+
+ A:  auto x = if (foo()) { 10 } else { 11 };
+
+This is similar to the Ocaml rule in practice, except that it makes the
+presence or absence of the final semicolon in a block equivalent to ending
+the block with the nil type. This is a possible hazard (especially during
+refactoring or editing) to users who want to write a value-producing block
+but accidentally semicolon-terminate the last expression; but it's not a
+huge hazard since the typechecker will tell them the value they produced is
+of nil type. It just might be hit a lot.
+
+(4) Statically determine the contexts in which an expression's value "will
+be used" in an outer expression, and only typecheck those contexts. This
+permits both of the examples to compile as-is, but it's the most unorthodox
+approach, and poses a refactoring hazard as code may become type-invalid
+when nested into an expression context that "uses" its previously-ignored
+result. Again, as in (3) the typechecker will catch these cases, but they
+might happen more or less often than those in (3).
+
+We can't think of any other options. Significant whitespace is not an option
+:)
+
+Personally my knee-jerk reaction is to embrace (1) since I like statements
+anyway, but I can see plausible arguments for the other 3. Can I get a show
+of hands? We have to pick something.
+
+-Graydon
+_______________________________________________
+Rust-dev mailing list
+Rust-dev at mozilla.org
+https://mail.mozilla.org/listinfo/rust-dev
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101123/bf7e6398/attachment.html>
+
+From peterhull90 at gmail.com  Wed Nov 24 00:35:26 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Wed, 24 Nov 2010 08:35:26 +0000
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>
+References: <4CEC416E.4030809@mozilla.com>
+	<AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>
+Message-ID: <AANLkTikcEjS4_svK=QQiVpDqJ6SiJx1qrRqACZK6R9aS@mail.gmail.com>
+
+I would go for #1. But, this is a bit horrible
+auto x = { auto t = 11; if (foo()) { t = 10; }; t; };
+Could it be written as
+auto x;
+if (foo()) { x = 10; } else {x = 11; }
+or would the 'auto' type determination run into problems?
+
+I imagine that 'if' and 'alt' are the most useful statements to have
+as expressions, so would it be possible to add the C ternary ?:
+operator, and something similar for alt?
+
+Pete
+
+On Wed, Nov 24, 2010 at 2:22 AM, Rob Arnold <tellrob at gmail.com> wrote:
+> Option 3 is my favorite (2 would be too cumbersome I think).
+>
+> On Nov 23, 2010 2:34 PM, "Graydon Hoare" <graydon at mozilla.com> wrote:
+>
+> Hi,
+>
+> Some of you may have noticed that in the rewrite from rustboot to rustc
+> we're becoming substantially more expression-language-ish. This is mostly a
+> result of me yielding to the preferences of other developers (and LLVM's
+> semantics), as well as some hint that things get much easier in syntax
+> extensions and calculating compile-time-constants if we permit more
+> "statement-ish" forms as expressions. Particularly conditionals.
+>
+> We've run into a (common, seen in many other languages) sort of problem
+> along the way here, which is that some expressions are implicitly ignored
+> (or must be, due to being in an ignored context) whereas others are not. We
+> have a nil-type (), but we don't always have sensible rules for forcing
+> things to have the nil type by context.
+>
+> This email is a poll of alternative solutions. I'll give two example cases
+> and ask people for their input on which modification of the rules feels
+> best.
+>
+> Example case that does compile:
+>
+> ?A: ?auto x = if (foo()) { 10; } else { 11; };
+>
+> Example case that does not compile:
+>
+> ?B: ?if (foo()) { 10; } else { "hello"; }
+>
+> We can write this in rust at the moment, but in the rustc typechecking rules
+> it will fail to compile, because 'if' is an expression-statement,
+> expressions have types, and the types of the two branches (judged as the
+> last statement's expression value, if it's an expression, or else nil) are
+> of different types.
+>
+> Here are some approaches to solving this example. Please pick the one you
+> like the most:
+>
+> (1) Kick all branchy expressions out of the expression grammar, put them
+> back in the statement grammar. Case B will compile, and case A must be
+> rewritten like so:
+>
+> ?A: ?auto x = { auto t = 11; if (foo()) { t = 10; }; t; };
+>
+> This is the C-with-GNU-extensions model.
+>
+> (2) Hoist all statements up into the expression language and make semicolon
+> into a sequencing operator, with a trailing-semi ignored by the parser. Then
+> we need to rewrite only the second case to force unit types in the
+> to-be-ignored differing branches.
+>
+> ?B: ?if (foo()) { 10; () } else { "hello"; () }
+>
+> Though we'd also be *allowed* to rewrite the first case to drop the
+> semicolons:
+>
+> ?A: ?auto x = if (foo() { 10 } else { 11 };
+>
+> This is the Ocaml approach.
+>
+> (3) A slightly weaker form of (2), which is to reformulate blocks with the
+> following grammar:
+>
+> ? ?block ::= ?{ [ stmt ; ]* expr? }
+>
+> In other words, every block becomes a brace-enclosed sequence of
+> semicolon-terminated statements, followed by an optional expr. If the expr
+> is missing, it is implied as (). In this case we'd be rewriting only the
+> first case:
+>
+> ?A: ?auto x = if (foo()) { 10 } else { 11 };
+>
+> This is similar to the Ocaml rule in practice, except that it makes the
+> presence or absence of the final semicolon in a block equivalent to ending
+> the block with the nil type. This is a possible hazard (especially during
+> refactoring or editing) to users who want to write a value-producing block
+> but accidentally semicolon-terminate the last expression; but it's not a
+> huge hazard since the typechecker will tell them the value they produced is
+> of nil type. It just might be hit a lot.
+>
+> (4) Statically determine the contexts in which an expression's value "will
+> be used" in an outer expression, and only typecheck those contexts. This
+> permits both of the examples to compile as-is, but it's the most unorthodox
+> approach, and poses a refactoring hazard as code may become type-invalid
+> when nested into an expression context that "uses" its previously-ignored
+> result. Again, as in (3) the typechecker will catch these cases, but they
+> might happen more or less often than those in (3).
+>
+> We can't think of any other options. Significant whitespace is not an option
+> :)
+>
+> Personally my knee-jerk reaction is to embrace (1) since I like statements
+> anyway, but I can see plausible arguments for the other 3. Can I get a show
+> of hands? We have to pick something.
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+
+From jyasskin at gmail.com  Wed Nov 24 07:32:54 2010
+From: jyasskin at gmail.com (Jeffrey Yasskin)
+Date: Wed, 24 Nov 2010 07:32:54 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CEC416E.4030809@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>
+Message-ID: <AANLkTikZb-zekUMpvwSXeTK2wcKhFV8ot5cKw0-ZbYLK@mail.gmail.com>
+
+I would like #4 best, but to do it right you'd have to infer the
+expected type of the branched completion from its context, and I think
+you don't yet do any top-down typechecking (except a bit in
+pattern-alt which may not help with this case). After that, #3, even
+though I'll definitely get confused when I terminate my blocks with a
+semicolon and they stop working as values.
+
+On Tue, Nov 23, 2010 at 2:34 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+> Hi,
+>
+> Some of you may have noticed that in the rewrite from rustboot to rustc
+> we're becoming substantially more expression-language-ish. This is mostly a
+> result of me yielding to the preferences of other developers (and LLVM's
+> semantics), as well as some hint that things get much easier in syntax
+> extensions and calculating compile-time-constants if we permit more
+> "statement-ish" forms as expressions. Particularly conditionals.
+>
+> We've run into a (common, seen in many other languages) sort of problem
+> along the way here, which is that some expressions are implicitly ignored
+> (or must be, due to being in an ignored context) whereas others are not. We
+> have a nil-type (), but we don't always have sensible rules for forcing
+> things to have the nil type by context.
+>
+> This email is a poll of alternative solutions. I'll give two example cases
+> and ask people for their input on which modification of the rules feels
+> best.
+>
+> Example case that does compile:
+>
+> ?A: ?auto x = if (foo()) { 10; } else { 11; };
+>
+> Example case that does not compile:
+>
+> ?B: ?if (foo()) { 10; } else { "hello"; }
+>
+> We can write this in rust at the moment, but in the rustc typechecking rules
+> it will fail to compile, because 'if' is an expression-statement,
+> expressions have types, and the types of the two branches (judged as the
+> last statement's expression value, if it's an expression, or else nil) are
+> of different types.
+>
+> Here are some approaches to solving this example. Please pick the one you
+> like the most:
+>
+> (1) Kick all branchy expressions out of the expression grammar, put them
+> back in the statement grammar. Case B will compile, and case A must be
+> rewritten like so:
+>
+> ?A: ?auto x = { auto t = 11; if (foo()) { t = 10; }; t; };
+>
+> This is the C-with-GNU-extensions model.
+>
+> (2) Hoist all statements up into the expression language and make semicolon
+> into a sequencing operator, with a trailing-semi ignored by the parser. Then
+> we need to rewrite only the second case to force unit types in the
+> to-be-ignored differing branches.
+>
+> ?B: ?if (foo()) { 10; () } else { "hello"; () }
+>
+> Though we'd also be *allowed* to rewrite the first case to drop the
+> semicolons:
+>
+> ?A: ?auto x = if (foo() { 10 } else { 11 };
+>
+> This is the Ocaml approach.
+>
+> (3) A slightly weaker form of (2), which is to reformulate blocks with the
+> following grammar:
+>
+> ? ?block ::= ?{ [ stmt ; ]* expr? }
+>
+> In other words, every block becomes a brace-enclosed sequence of
+> semicolon-terminated statements, followed by an optional expr. If the expr
+> is missing, it is implied as (). In this case we'd be rewriting only the
+> first case:
+>
+> ?A: ?auto x = if (foo()) { 10 } else { 11 };
+>
+> This is similar to the Ocaml rule in practice, except that it makes the
+> presence or absence of the final semicolon in a block equivalent to ending
+> the block with the nil type. This is a possible hazard (especially during
+> refactoring or editing) to users who want to write a value-producing block
+> but accidentally semicolon-terminate the last expression; but it's not a
+> huge hazard since the typechecker will tell them the value they produced is
+> of nil type. It just might be hit a lot.
+>
+> (4) Statically determine the contexts in which an expression's value "will
+> be used" in an outer expression, and only typecheck those contexts. This
+> permits both of the examples to compile as-is, but it's the most unorthodox
+> approach, and poses a refactoring hazard as code may become type-invalid
+> when nested into an expression context that "uses" its previously-ignored
+> result. Again, as in (3) the typechecker will catch these cases, but they
+> might happen more or less often than those in (3).
+>
+> We can't think of any other options. Significant whitespace is not an option
+> :)
+>
+> Personally my knee-jerk reaction is to embrace (1) since I like statements
+> anyway, but I can see plausible arguments for the other 3. Can I get a show
+> of hands? We have to pick something.
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+From graydon at mozilla.com  Wed Nov 24 08:04:15 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 24 Nov 2010 08:04:15 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <AANLkTikcEjS4_svK=QQiVpDqJ6SiJx1qrRqACZK6R9aS@mail.gmail.com>
+References: <4CEC416E.4030809@mozilla.com>	<AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>
+	<AANLkTikcEjS4_svK=QQiVpDqJ6SiJx1qrRqACZK6R9aS@mail.gmail.com>
+Message-ID: <4CED377F.2030709@mozilla.com>
+
+On 24/11/2010 12:35 AM, Peter Hull wrote:
+> I would go for #1. But, this is a bit horrible
+> auto x = { auto t = 11; if (foo()) { t = 10; }; t; };
+> Could it be written as
+> auto x;
+> if (foo()) { x = 10; } else {x = 11; }
+> or would the 'auto' type determination run into problems?
+
+No, that would work fine. And it is definitely the road I went down 
+during the first ... several years of this project! I have argued 
+strenuously in favour of sticking to a statement-heavy approach in the 
+past. Partly this email thread is to serve as a record to myself and 
+others reading why there's even a change-of-plan happening here. To make 
+sure "hallway conversations" (and their IRC equivalents) don't disappear 
+from the records.
+
+Where this strategy runs into acute difficulty is in contexts I 
+mentioned near the beginning of the email: initializing a (compile-time) 
+constant via a conditional, or returning a conditional from a syntax 
+extension used in an expression context. In those cases you have to have 
+at least "block as expr" to nest statement-sequences into blocks. And 
+"conditional as expr" follows easily due to not wanting to have to 
+simulate state-evolution in your constant-folding device.
+
+Particularly when it comes to constants -- and those are really 
+important, you actually wind up having a lot of compile-time-constant 
+data in a static language, think "most literals" -- it feels more 
+natural to only talk about constant expressions rather than constant 
+statements-with-side-effects.
+
+(Attentive readers will note that in rustboot there is presently a 
+"cexp" language floating outside the main grammar which handles just 
+such pure, constant, scalar-typed expressions, including conditional 
+forms for alt and if, and interprets them in a little micro-interpreter 
+in the frontend during crate construction. We want to get rid of cexp 
+and just define it as a subset of the normal expression grammar. Too 
+many similar-looking grammars will confuse users.)
+
+None of these issues *doom* the statement-centric approach, but they 
+make it increasingly unnatural-feeling inside the compiler. Combine with 
+the fact that *users* are really quite fond of a fair number of 
+larger-than-a-primitive-statement expression forms, so you're already 
+parsing such things and then "desugaring" them (which itself messes up 
+error reporting by the compiler), and it gets to be a convincing 
+argument: the statement fixation is awkward for (many) users *and* for 
+the implementers. Who's it good for? Increasingly, I found myself unable 
+to answer that question. Possibly editor modes?
+
+This is not to say that the visible structure of the grammar, or most 
+programs, is likely to change a lot. It will *permit* a more 
+nested-expressions form, but it won't actually read well if you over-do 
+it; particularly since block-local declarations end in a semi, and our 
+conditional and loop forms are braced, these are natural places to put 
+linebreaks. So most of the block-containing expressions will read best 
+arranged as a sequence of lines, not mushed into a nested expression 
+context. I'm also a bit concerned about how easy it'll be to convince 
+editor modes to handle this change, but I'm willing to give it a try. If 
+editor modes are the last issue, it ... feels like a solvable problem.
+
+> I imagine that 'if' and 'alt' are the most useful statements to have
+> as expressions, so would it be possible to add the C ternary ?:
+> operator, and something similar for alt?
+
+It would be possible, but I get a little tingle about "doing the wrong 
+thing" when considering adding expression forms that perfectly mirror 
+statement forms. The ternary operator is Not The Most Popular Idea from 
+C. Besides which, it implies control flow; it doesn't actually evaluate 
+both arms. So we'd be desugaring it anyway, the way we desugar && and || 
+in rustboot. See above wrt. "awkward for all parties".
+
+-Graydon
+
+From pwalton at mozilla.com  Wed Nov 24 09:06:12 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 24 Nov 2010 09:06:12 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <AANLkTikZb-zekUMpvwSXeTK2wcKhFV8ot5cKw0-ZbYLK@mail.gmail.com>
+References: <4CEC416E.4030809@mozilla.com>
+	<AANLkTikZb-zekUMpvwSXeTK2wcKhFV8ot5cKw0-ZbYLK@mail.gmail.com>
+Message-ID: <4CED4604.1080004@mozilla.com>
+
+On 11/24/10 7:32 AM, Jeffrey Yasskin wrote:
+> I would like #4 best, but to do it right you'd have to infer the
+> expected type of the branched completion from its context, and I think
+> you don't yet do any top-down typechecking (except a bit in
+> pattern-alt which may not help with this case). After that, #3, even
+> though I'll definitely get confused when I terminate my blocks with a
+> semicolon and they stop working as values.
+
+An alternate way of thinking about proposal #3 is that, as a rule of 
+thumb, ";" always means "ignore the result of the previous statement". 
+Formulating it this way might ease the cognitive load on users.
+
+Patrick
+
+From graydon at mozilla.com  Wed Nov 24 09:59:45 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 24 Nov 2010 09:59:45 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CED4604.1080004@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>	<AANLkTikZb-zekUMpvwSXeTK2wcKhFV8ot5cKw0-ZbYLK@mail.gmail.com>
+	<4CED4604.1080004@mozilla.com>
+Message-ID: <4CED5291.5030309@mozilla.com>
+
+On 10-11-24 09:06 AM, Patrick Walton wrote:
+
+> An alternate way of thinking about proposal #3 is that, as a rule of
+> thumb, ";" always means "ignore the result of the previous statement".
+> Formulating it this way might ease the cognitive load on users.
+
+While I always appreciate having new ways of explaining a language 
+feature, I should relate a certain pithy phrase often related by Lessig 
+about politics, which applies equally to languages: "if you're 
+explaining, you're losing".
+
+Our business here is, in a large measure, to anticipate what users will 
+*already* be thinking, and to figure out something that fits well enough 
+to be unsurprising, palatable.
+
+(While, of course, having superior precision and safety properties than 
+the sum of their vague and contradictory expectations :)
+
+The problem is that our target market is largely people from statement 
+languages, who simply don't have this issue. So modeling their 
+assumptions directly means "various other techniques" to solve the same 
+design pressures -- ternary expressions, use of subordinate functions 
+with inlining and constexpr modifiers ... -- and we're sort of taking a 
+sober second look at that whole path and wondering if the 
+expression-language people live in a substantially better world. And if 
+so, how to get there without losing the statement-language audience.
+
+Hard/subtle/tradeoffy design issue.
+
+-Graydon
+
+From dherman at mozilla.com  Wed Nov 24 10:12:12 2010
+From: dherman at mozilla.com (David Herman)
+Date: Wed, 24 Nov 2010 10:12:12 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CED5291.5030309@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>	<AANLkTikZb-zekUMpvwSXeTK2wcKhFV8ot5cKw0-ZbYLK@mail.gmail.com>
+	<4CED4604.1080004@mozilla.com> <4CED5291.5030309@mozilla.com>
+Message-ID: <BEB3468D-013D-4A0C-9170-18FD968CE485@mozilla.com>
+
+Perhaps another way to look at it is the programmer's migration path, or how to get them from where they are today to a place where they're using Rust even more effectively.
+
+In that regard, programmers can get off the ground immediately with traditional C-style programs:
+
+    auto tmp;
+    if (p) {
+        foo();
+        tmp = bar();
+    } else {
+        tmp = baz();
+    }
+
+But then you can show them that, as an *additional* feature, you can use a block as an expression by leaving off the final semicolon:
+
+    auto tmp = if (p) { foo(); bar() } else { baz() };
+
+Not the best example, but hopefully I'm halfway getting the point across? I guess what I'm saying is, rather than trying to explain how the whole system ties together, the language can be presented in stages -- start with traditional C-like syntax, then add a moderate dose of expressionliness.
+
+Dave
+
+On Nov 24, 2010, at 9:59 AM, Graydon Hoare wrote:
+
+> On 10-11-24 09:06 AM, Patrick Walton wrote:
+> 
+>> An alternate way of thinking about proposal #3 is that, as a rule of
+>> thumb, ";" always means "ignore the result of the previous statement".
+>> Formulating it this way might ease the cognitive load on users.
+> 
+> While I always appreciate having new ways of explaining a language feature, I should relate a certain pithy phrase often related by Lessig about politics, which applies equally to languages: "if you're explaining, you're losing".
+> 
+> Our business here is, in a large measure, to anticipate what users will *already* be thinking, and to figure out something that fits well enough to be unsurprising, palatable.
+> 
+> (While, of course, having superior precision and safety properties than the sum of their vague and contradictory expectations :)
+> 
+> The problem is that our target market is largely people from statement languages, who simply don't have this issue. So modeling their assumptions directly means "various other techniques" to solve the same design pressures -- ternary expressions, use of subordinate functions with inlining and constexpr modifiers ... -- and we're sort of taking a sober second look at that whole path and wondering if the expression-language people live in a substantially better world. And if so, how to get there without losing the statement-language audience.
+> 
+> Hard/subtle/tradeoffy design issue.
+> 
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From graydon at mozilla.com  Thu Nov 25 07:35:02 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 25 Nov 2010 07:35:02 -0800
+Subject: [rust-dev] Objects as a last resort
+In-Reply-To: <4CEA16DA.3090304@mozilla.com>
+References: <4CE7FEAB.9090107@mozilla.com>	<AANLkTim=pQ-EBgTA_JxBoX2o24OWyp=vU6Dq0FggrOPW@mail.gmail.com>	<4CE985A9.9080808@mozilla.com>
+	<AANLkTinLQmpy16cX-HU1UBnVYb6PedPB131xV9OACym=@mail.gmail.com>
+	<4CEA16DA.3090304@mozilla.com>
+Message-ID: <4CEE8226.70305@mozilla.com>
+
+On 21/11/2010 11:08 PM, Graydon Hoare wrote:
+
+> To get static binding in rust, you have to use a static function call,
+> not an object-method call.
+
+A final followup here. Brendan asked me in private email afterward if we 
+had considered any static binding forms for methods. We have considered 
+it, and I thought I'd point out how to do it here; it's not beautiful 
+but it would get us to a place where we could present much more C++-like 
+performance for a user-selected static subset of 
+things-that-look-like-method-calls.
+
+The trick is to overload the 'self' keyword we're planning on 
+introducing to support self-typing inside objs. In the obj context it 
+indicates a recursive obj-type as well as the self-value for 
+self-dispatch; but it doesn't need to be limited to the obj context. If 
+you permit an additional use of 'self' *outside* the context of an obj 
+-- in static module functions -- you can do something cute:
+
+   mod _str {
+     fn append(self &mutable str s, &str other) -> str { ... }
+   }
+
+then in any context where you've imported this symbol, visibility-wise, 
+we can tell the compiler to do a second-phase lookup on method calls to 
+see if they resolve via self-qualified functions in scope:
+
+   import _str.*;
+   log "hello".append(" there");
+
+What would be going on here is not remotely like vtbl dispatch -- it's 
+just sugar for calling _str.append("hello", " there"), which you could 
+still call -- but it lets the user write in a "more OO style". You'd 
+want to run this lookup after primary field lookup, so you could mix 
+records-full-of-functions with static-bound methods like this. But it 
+could be done.
+
+You could even go further and make a crate-level declaration between 
+datatypes and static method suites, such that a particular module is 
+automatically imported for static method binding -- solely for static 
+method binding -- anywhere the type is used. Something like this:
+
+   self mod str = std._str;
+
+Advantages would be a blurring of the distinction between OO and non-OO 
+style; you'd get the OO syntax advantage in places you wanted it without 
+having to pay the obj-abstraction price (say, when you want to use a 
+particular concrete representation type in all cases, so it can be 
+interior-allocated, or just want faster dispatch).
+
+Disadvantages would be the flip side of "blurring": you would have a 
+harder time knowing, when you look at a method-like call, how it is 
+dispatched. We already blur this to some extent by doing both module, 
+vtbl and record-field lookup using the same "." operator; this would 
+further muddy those waters.
+
+Anyway, since it's completely compatible with existing plans either way, 
+I'm going to defer *implementing* this, but I thought I'd mention it in 
+passing. If anyone's really keen on it I'd accept patches to rustboot, 
+but until then I'm going to assume it can wait till after we're 
+bootstrapped.
+
+-Graydon
+
+From igor at mir2.org  Thu Nov 25 08:50:33 2010
+From: igor at mir2.org (Igor Bukanov)
+Date: Thu, 25 Nov 2010 17:50:33 +0100
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CEC416E.4030809@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>
+Message-ID: <AANLkTintxam8AB4Nuyv3DwA62d38fxyw8LYP-0R1AVun@mail.gmail.com>
+
+My preference is the option 1.
+
+From igor at mir2.org  Thu Nov 25 09:25:01 2010
+From: igor at mir2.org (Igor Bukanov)
+Date: Thu, 25 Nov 2010 18:25:01 +0100
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CED377F.2030709@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>
+	<AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>
+	<AANLkTikcEjS4_svK=QQiVpDqJ6SiJx1qrRqACZK6R9aS@mail.gmail.com>
+	<4CED377F.2030709@mozilla.com>
+Message-ID: <AANLkTinHagdRby8Aa9xfJztPhtWMae6mbr6UG4GjhMyX@mail.gmail.com>
+
+On 24 November 2010 17:04, Graydon Hoare <graydon at mozilla.com> wrote:
+> It would be possible, but I get a little tingle about "doing the wrong
+> thing" when considering adding expression forms that perfectly mirror
+> statement forms.
+
+IMO it is easier to follow
+
+ auto x = foo() ? 10 : 11;
+
+rather than
+
+ auto x = if (foo()) { 10 } else { 11 };
+
+The if-else has too much extra parenthesis. And even if one can omit
+{} and write:
+
+ auto x = if (foo()) 10 else 11;
+
+it is still has 2 extra parenthesis making it harder to perceive. And
+note that the ternary does not match the "if" as its else part must
+always present making it sufficiently different IMO.
+
+The case would be different if the "if" would have the if-then-else
+syntax without parenthesis like in
+
+  auto x = if for() then 10 else 11;
+
+But that would be foreign for programmers in C-based languages.
+
+> The ternary operator is Not The Most Popular Idea from C
+
+The worst abuses that I have seen came from the use of the comma to
+initialize the temporaries in the middle of the nested ?. Without the
+comas it is harder to write ugly ternaries.
+
+> Besides which, it implies control flow; it doesn't actually evaluate both
+> arms. So we'd be desugaring it anyway, the way we desugar && and || in
+> rustboot. See above wrt. "awkward for all parties".
+
+That would be an argument if rust would not have && and ||. But with
+latter available the control flaw implied by the ternary does not look
+like an issue IMO.
+
+From graydon at mozilla.com  Thu Nov 25 10:54:57 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 25 Nov 2010 10:54:57 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <AANLkTinHagdRby8Aa9xfJztPhtWMae6mbr6UG4GjhMyX@mail.gmail.com>
+References: <4CEC416E.4030809@mozilla.com>	<AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>	<AANLkTikcEjS4_svK=QQiVpDqJ6SiJx1qrRqACZK6R9aS@mail.gmail.com>	<4CED377F.2030709@mozilla.com>
+	<AANLkTinHagdRby8Aa9xfJztPhtWMae6mbr6UG4GjhMyX@mail.gmail.com>
+Message-ID: <4CEEB101.9050800@mozilla.com>
+
+On 10-11-25 08:50 AM, Igor Bukanov wrote:
+ > My preference is the option 1.
+
+Aw man! We were almost drifting towards a consensus. Nuts!
+
+So C-with-gnu-extensions. Hm. That does complexify the putative 
+constant-folder in the front-end, but I guess a vote is a vote.
+
+-Graydon
+
+From graydon at mozilla.com  Thu Nov 25 11:00:54 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 25 Nov 2010 11:00:54 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <AANLkTinHagdRby8Aa9xfJztPhtWMae6mbr6UG4GjhMyX@mail.gmail.com>
+References: <4CEC416E.4030809@mozilla.com>	<AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>	<AANLkTikcEjS4_svK=QQiVpDqJ6SiJx1qrRqACZK6R9aS@mail.gmail.com>	<4CED377F.2030709@mozilla.com>
+	<AANLkTinHagdRby8Aa9xfJztPhtWMae6mbr6UG4GjhMyX@mail.gmail.com>
+Message-ID: <4CEEB266.6000002@mozilla.com>
+
+On 10-11-25 09:25 AM, Igor Bukanov wrote:
+> On 24 November 2010 17:04, Graydon Hoare<graydon at mozilla.com>  wrote:
+>> It would be possible, but I get a little tingle about "doing the wrong
+>> thing" when considering adding expression forms that perfectly mirror
+>> statement forms.
+>
+> IMO it is easier to follow
+>
+>   auto x = foo() ? 10 : 11;
+>
+> rather than
+>
+>   auto x = if (foo()) { 10 } else { 11 };
+
+Ok. Well, ternary is ... sort of orthogonal to the entire discussion of 
+"how to solve the general statement-in-expression-context problem". So 
+let's do a secondary survey perhaps:
+
+Who feels like adding a ternary operator?
+
+>> The ternary operator is Not The Most Popular Idea from C
+>
+> The worst abuses that I have seen came from the use of the comma to
+> initialize the temporaries in the middle of the nested ?. Without the
+> comas it is harder to write ugly ternaries.
+
+Oh yeah, I didn't necessarily mean "prone to abuse", just "not widely 
+copied". But then I went and checked and that's not true; lots of 
+languages picked it up.
+
+So I guess it's just a personal bias. I don't like the ternary operator; 
+I was raised in lisp-land and it always felt like a less-legible variant 
+of better expressions. :)
+
+>> Besides which, it implies control flow; it doesn't actually evaluate both
+>> arms. So we'd be desugaring it anyway, the way we desugar&&  and || in
+>> rustboot. See above wrt. "awkward for all parties".
+>
+> That would be an argument if rust would not have&&  and ||. But with
+> latter available the control flaw implied by the ternary does not look
+> like an issue IMO.
+
+It's an argument that it falls into the same category as || and &&, 
+nothing deeper. Maybe I wasn't clear; I realize they have control flow 
+as well. I wrote the desugaring code in rustboot :(
+
+-Graydon
+
+From pwalton at mozilla.com  Thu Nov 25 11:39:35 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 25 Nov 2010 11:39:35 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CEEB266.6000002@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>	<AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>	<AANLkTikcEjS4_svK=QQiVpDqJ6SiJx1qrRqACZK6R9aS@mail.gmail.com>	<4CED377F.2030709@mozilla.com>	<AANLkTinHagdRby8Aa9xfJztPhtWMae6mbr6UG4GjhMyX@mail.gmail.com>
+	<4CEEB266.6000002@mozilla.com>
+Message-ID: <4CEEBB77.6060807@mozilla.com>
+
+On 11/25/2010 11:00 AM, Graydon Hoare wrote:
+> Who feels like adding a ternary operator?
+
+Not I. My instinctive argument against it is that if-then-else is the 
+weaker of the two branching constructs we have in the language. The more 
+powerful one (eventually) will be the "alt" construct, which allows the 
+programmer to do everything that "if" does via pattern guards, as well 
+as allowing destructuring and pattern matching on data values. Blessing 
+"if-then-else" but not "alt" with the expression form seems strange to me.
+
+Patrick
+
+From igor at mir2.org  Thu Nov 25 14:16:00 2010
+From: igor at mir2.org (Igor Bukanov)
+Date: Thu, 25 Nov 2010 23:16:00 +0100
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <AANLkTikZb-zekUMpvwSXeTK2wcKhFV8ot5cKw0-ZbYLK@mail.gmail.com>
+References: <4CEC416E.4030809@mozilla.com>
+	<AANLkTikZb-zekUMpvwSXeTK2wcKhFV8ot5cKw0-ZbYLK@mail.gmail.com>
+Message-ID: <AANLkTi=t62TnS6Kn7dZ0ZEWHKdMwcgiGY+EwNSDn6eWV@mail.gmail.com>
+
+On 24 November 2010 16:32, Jeffrey Yasskin <jyasskin at gmail.com> wrote:
+> I would like #4 best, but to do it right you'd have to infer the
+> expected type of the branched completion from its context, and I think
+> you don't yet do any top-down typechecking (except a bit in
+> pattern-alt which may not help with this case). After that, #3, even
+> though I'll definitely get confused when I terminate my blocks with a
+> semicolon and they stop working as values.
+
+For me the semicoln-as-separator, not terminator, was the worst
+feature of programming in Pascal. Everybody hated it as the extra
+semicolon was way to often the sole reason for compilation errors. I
+suspect that was part of the reasons to switch to Borland C++.
+
+From sebastian.sylvan at gmail.com  Thu Nov 25 14:47:42 2010
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Thu, 25 Nov 2010 22:47:42 +0000
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CEEB101.9050800@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>
+	<AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>
+	<AANLkTikcEjS4_svK=QQiVpDqJ6SiJx1qrRqACZK6R9aS@mail.gmail.com>
+	<4CED377F.2030709@mozilla.com>
+	<AANLkTinHagdRby8Aa9xfJztPhtWMae6mbr6UG4GjhMyX@mail.gmail.com>
+	<4CEEB101.9050800@mozilla.com>
+Message-ID: <AANLkTi=XC2q-y1t9_cyS=qNUe_Q5Fv2KanNij6SDUOFX@mail.gmail.com>
+
+On Thu, Nov 25, 2010 at 6:54 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> On 10-11-25 08:50 AM, Igor Bukanov wrote:
+> > My preference is the option 1.
+>
+> Aw man! We were almost drifting towards a consensus. Nuts!
+>
+
+More dissenting opinions then!
+
+How about 2, but with a tweak to the type checker so it only unifies the
+types of the two arms if it *really* needs to?
+
+So, if the type of the whole if-expression is (), then the type of each arm
+can be different (implicitly ignoring any non-() value, perhaps by just
+inserting a "()" at the end of each arm), but if the type is anything else,
+then it needs to match with both arms.
+
+I.e.
+
+if (b) { getInt() } else { getFloat() } // fine, implicitly ignores the
+values/types
+auto x = if (b) { getInt() } else { getFloat()  // Error, the arms of the if
+have different types
+
+The trailing semi-colon would be an aesthetic optional that wouldn't impact
+semantics.
+
+As far as I can tell, this would seem to avoid subtle problems due to
+missing a semi-colon and trivial mistakes like that, while also matching
+intuition about what should be legal. The downside is that the type-checking
+becomes a bit unorthodox.
+
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101125/06b79577/attachment.html>
+
+From pwalton at mozilla.com  Thu Nov 25 15:56:40 2010
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 25 Nov 2010 15:56:40 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <AANLkTi=t62TnS6Kn7dZ0ZEWHKdMwcgiGY+EwNSDn6eWV@mail.gmail.com>
+References: <4CEC416E.4030809@mozilla.com>	<AANLkTikZb-zekUMpvwSXeTK2wcKhFV8ot5cKw0-ZbYLK@mail.gmail.com>
+	<AANLkTi=t62TnS6Kn7dZ0ZEWHKdMwcgiGY+EwNSDn6eWV@mail.gmail.com>
+Message-ID: <4CEEF7B8.9040005@mozilla.com>
+
+On 11/25/2010 2:16 PM, Igor Bukanov wrote:
+> On 24 November 2010 16:32, Jeffrey Yasskin<jyasskin at gmail.com>  wrote:
+>> I would like #4 best, but to do it right you'd have to infer the
+>> expected type of the branched completion from its context, and I think
+>> you don't yet do any top-down typechecking (except a bit in
+>> pattern-alt which may not help with this case). After that, #3, even
+>> though I'll definitely get confused when I terminate my blocks with a
+>> semicolon and they stop working as values.
+>
+> For me the semicoln-as-separator, not terminator, was the worst
+> feature of programming in Pascal. Everybody hated it as the extra
+> semicolon was way to often the sole reason for compilation errors. I
+> suspect that was part of the reasons to switch to Borland C++.
+
+Keep in mind proposal #3 allows you to write code exactly as you would 
+in C++. You always use the semicolon as a statement terminator. It's 
+just that if you want to use a block as an expression (which is 
+forbidden in ordinary C++), you can leave off the final semicolon. So 
+it's really an extension to C++'s syntax, not a different sort of 
+behavior entirely.
+
+Patrick
+
+From graydon at mozilla.com  Thu Nov 25 16:07:59 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 25 Nov 2010 16:07:59 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CEEF7B8.9040005@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>	<AANLkTikZb-zekUMpvwSXeTK2wcKhFV8ot5cKw0-ZbYLK@mail.gmail.com>	<AANLkTi=t62TnS6Kn7dZ0ZEWHKdMwcgiGY+EwNSDn6eWV@mail.gmail.com>
+	<4CEEF7B8.9040005@mozilla.com>
+Message-ID: <4CEEFA5F.8010102@mozilla.com>
+
+On 10-11-25 03:56 PM, Patrick Walton wrote:
+> On 11/25/2010 2:16 PM, Igor Bukanov wrote:
+>> For me the semicoln-as-separator, not terminator, was the worst
+>> feature of programming in Pascal. Everybody hated it as the extra
+>> semicolon was way to often the sole reason for compilation errors. I
+>> suspect that was part of the reasons to switch to Borland C++.
+>
+> Keep in mind proposal #3 allows you to write code exactly as you would
+> in C++. You always use the semicolon as a statement terminator. It's
+> just that if you want to use a block as an expression (which is
+> forbidden in ordinary C++), you can leave off the final semicolon. So
+> it's really an extension to C++'s syntax, not a different sort of
+> behavior entirely.
+
+Yeah. Only option 2 is "separators", and so far nobody likes that. Which 
+is good! I don't like it either. Let's assume it's dead.
+
+Option 3 is the most-forgiving, in the sense that it disturbs the fewest 
+existing uses: expression-y lisp and ML people can write how they like, 
+statement-y C and C++ people can write how they like. The only users who 
+will be surprised are those expecting gnu-C-extensions; they will have 
+to leave a semicolon off to get the semantics they want.
+
+And *all* proposals are compatible with adding a ternary operator (as a 
+shorthand). That's an orthogonal question.
+
+-Graydon
+
+From graydon at mozilla.com  Thu Nov 25 16:19:45 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 25 Nov 2010 16:19:45 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CEEBB77.6060807@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>	<AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>	<AANLkTikcEjS4_svK=QQiVpDqJ6SiJx1qrRqACZK6R9aS@mail.gmail.com>	<4CED377F.2030709@mozilla.com>	<AANLkTinHagdRby8Aa9xfJztPhtWMae6mbr6UG4GjhMyX@mail.gmail.com>	<4CEEB266.6000002@mozilla.com>
+	<4CEEBB77.6060807@mozilla.com>
+Message-ID: <4CEEFD21.8080907@mozilla.com>
+
+On 10-11-25 11:39 AM, Patrick Walton wrote:
+> On 11/25/2010 11:00 AM, Graydon Hoare wrote:
+>> Who feels like adding a ternary operator?
+>
+> Not I. My instinctive argument against it is that if-then-else is the
+> weaker of the two branching constructs we have in the language. The more
+> powerful one (eventually) will be the "alt" construct, which allows the
+> programmer to do everything that "if" does via pattern guards, as well
+> as allowing destructuring and pattern matching on data values. Blessing
+> "if-then-else" but not "alt" with the expression form seems strange to me.
+
+I think Igor's argument is merely one of brevity: by analogy to || and 
+&&, it's "very terse" sugar for a short conditional structure you wind 
+up writing a lot, not a general solution to general conditionals.
+
+IOW, I think the issue should be considered completely independent of 
+how we solve statements-in-expression-contexts. We have to solve the 
+latter *anyways*, and with any of the proposed solutions to that 
+more-general problem, I suspect Igor -- perhaps others as well -- will 
+still want a ternary operator for brevity's sake.
+
+It's a valid point, if you wind up writing lots of short ternary 
+expressions. They're definitely shorter than if/then/else. The fact that 
+I don't like it or use it much doesn't negate its presence in C, C++, 
+C#, Java, Javascript, Perl, PHP and Ruby. Someone out there loves it.
+
+(We're also probably going to wind up gaining ++ and --, for the same 
+sort of reason. Too many copies of "x += 1" and you just naturally start 
+to itch for it.)
+
+-Graydon
+
+From graydon at mozilla.com  Thu Nov 25 16:22:53 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 25 Nov 2010 16:22:53 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <AANLkTi=XC2q-y1t9_cyS=qNUe_Q5Fv2KanNij6SDUOFX@mail.gmail.com>
+References: <4CEC416E.4030809@mozilla.com>	<AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>	<AANLkTikcEjS4_svK=QQiVpDqJ6SiJx1qrRqACZK6R9aS@mail.gmail.com>	<4CED377F.2030709@mozilla.com>	<AANLkTinHagdRby8Aa9xfJztPhtWMae6mbr6UG4GjhMyX@mail.gmail.com>	<4CEEB101.9050800@mozilla.com>
+	<AANLkTi=XC2q-y1t9_cyS=qNUe_Q5Fv2KanNij6SDUOFX@mail.gmail.com>
+Message-ID: <4CEEFDDD.5090707@mozilla.com>
+
+On 10-11-25 02:47 PM, Sebastian Sylvan wrote:
+> On Thu, Nov 25, 2010 at 6:54 PM, Graydon Hoare<graydon at mozilla.com>  wrote:
+>
+>> On 10-11-25 08:50 AM, Igor Bukanov wrote:
+>>> My preference is the option 1.
+>>
+>> Aw man! We were almost drifting towards a consensus. Nuts!
+>>
+>
+> More dissenting opinions then!
+>
+> How about 2, but with a tweak to the type checker so it only unifies the
+> types of the two arms if it *really* needs to?
+
+I'm reasonably sure this means "option 4". Can you read it carefully and 
+clarify exactly how what you're asking for differs?
+
+(Trying to minimize live options here)
+
+-Graydon
+
+From sebastian.sylvan at gmail.com  Fri Nov 26 00:10:06 2010
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Fri, 26 Nov 2010 08:10:06 +0000
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CEEFDDD.5090707@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>
+	<AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>
+	<AANLkTikcEjS4_svK=QQiVpDqJ6SiJx1qrRqACZK6R9aS@mail.gmail.com>
+	<4CED377F.2030709@mozilla.com>
+	<AANLkTinHagdRby8Aa9xfJztPhtWMae6mbr6UG4GjhMyX@mail.gmail.com>
+	<4CEEB101.9050800@mozilla.com>
+	<AANLkTi=XC2q-y1t9_cyS=qNUe_Q5Fv2KanNij6SDUOFX@mail.gmail.com>
+	<4CEEFDDD.5090707@mozilla.com>
+Message-ID: <AANLkTim5iv=bWoP6+HzhOvPtWPddbtXrCN=MXemz=Kph@mail.gmail.com>
+
+On Fri, Nov 26, 2010 at 12:22 AM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> On 10-11-25 02:47 PM, Sebastian Sylvan wrote:
+>
+>> On Thu, Nov 25, 2010 at 6:54 PM, Graydon Hoare<graydon at mozilla.com>
+>>  wrote:
+>>
+>>  On 10-11-25 08:50 AM, Igor Bukanov wrote:
+>>>
+>>>> My preference is the option 1.
+>>>>
+>>>
+>>> Aw man! We were almost drifting towards a consensus. Nuts!
+>>>
+>>>
+>> More dissenting opinions then!
+>>
+>> How about 2, but with a tweak to the type checker so it only unifies the
+>> types of the two arms if it *really* needs to?
+>>
+>
+> I'm reasonably sure this means "option 4". Can you read it carefully and
+> clarify exactly how what you're asking for differs?
+>
+> (Trying to minimize live options here)
+>
+>
+>
+Yes, sorry, must've misread proposal 4 the first time through. I'm in favour
+of proposal 4 then.
+
+
+
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20101126/64c38359/attachment.html>
+
+From igor at mir2.org  Fri Nov 26 04:48:02 2010
+From: igor at mir2.org (Igor Bukanov)
+Date: Fri, 26 Nov 2010 13:48:02 +0100
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CEEFD21.8080907@mozilla.com>
+References: <4CEC416E.4030809@mozilla.com>
+	<AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>
+	<AANLkTikcEjS4_svK=QQiVpDqJ6SiJx1qrRqACZK6R9aS@mail.gmail.com>
+	<4CED377F.2030709@mozilla.com>
+	<AANLkTinHagdRby8Aa9xfJztPhtWMae6mbr6UG4GjhMyX@mail.gmail.com>
+	<4CEEB266.6000002@mozilla.com> <4CEEBB77.6060807@mozilla.com>
+	<4CEEFD21.8080907@mozilla.com>
+Message-ID: <AANLkTi=NuRC+OJSR4k9P_UXT9j8p4SF+iB5veF+EtNoN@mail.gmail.com>
+
+On 26 November 2010 01:19, Graydon Hoare <graydon at mozilla.com> wrote:
+> I think Igor's argument is merely one of brevity: by analogy to || and &&,
+> it's "very terse" sugar for a short conditional structure you wind up
+> writing a lot, not a general solution to general conditionals.
+
+Yes - you wrote my argument better than myself :)
+
+I still personally prefer option 1 with extra sugar in form of of the
+ternary. It and && || should allow to avoid using the explicit {}
+block in many useful cases. When it will be used the explicitness and
+verboseness of the code would alert the reader about complexity.
+
+My second preference is for the option 4. As long as an extra
+semicolon is not an error it should not pose any bad compilation
+experience.
+
+From graydon at mozilla.com  Fri Nov 26 10:55:53 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 26 Nov 2010 10:55:53 -0800
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <AANLkTi=NuRC+OJSR4k9P_UXT9j8p4SF+iB5veF+EtNoN@mail.gmail.com>
+References: <4CEC416E.4030809@mozilla.com>	<AANLkTinyOTBCBXnng+=drbh=aiaROD15koi4QDz-YJ1Q@mail.gmail.com>	<AANLkTikcEjS4_svK=QQiVpDqJ6SiJx1qrRqACZK6R9aS@mail.gmail.com>	<4CED377F.2030709@mozilla.com>	<AANLkTinHagdRby8Aa9xfJztPhtWMae6mbr6UG4GjhMyX@mail.gmail.com>	<4CEEB266.6000002@mozilla.com>	<4CEEBB77.6060807@mozilla.com>	<4CEEFD21.8080907@mozilla.com>
+	<AANLkTi=NuRC+OJSR4k9P_UXT9j8p4SF+iB5veF+EtNoN@mail.gmail.com>
+Message-ID: <4CF002B9.7070107@mozilla.com>
+
+Ok. As predicted this thread has grown to N^2 or ackerman(N,N) or 
+something -- syntax, jeez! -- but I think the rough idea is now clear.
+
+It seems like we wind up with two camps:
+
+   - Those who want to at least *accommodate* the expression-y style
+     (who favour option 3). This would be Dave, Patrick, Roy and Rob.
+
+   - Those who do not wish to accommodate expression-y style (who favour
+     option 4 and/or 1). This would be Peter, Igor, Sebastian and
+     Jeffrey (though he'd also be ok with 3).
+
+Split poll! However, I note that camp #1 has done more of the work so 
+far, and I have done the majority, so I am going to play tie-breaker 
+(which I not-so-secretly assumed I'd wind up doing anyway). I initially 
+thought I'd go with #1 or #4, but have reconsidered:
+
+   - The type checking procedure for 3 has more precedent in other
+     languages, 4 has very little and I'd be Making Stuff Up to get it
+     right. I've a stated and very real goal of trying to stick to
+     precedent when I can. It improves the odds of other tools, proofs,
+     and program-transformers working correctly when applied to Rust.
+
+   - With {}-exprs we wind up pretty much unable to desugar, so we need
+     most of the machinery to support 3 anyway. This makes 3 actually
+     appear to be less work for me than 4; the only one that's less work
+     still is 1.
+
+   - I'm a pluralist anyway, and prefer to accommodate larger numbers of
+     styles rather than restrict them. We *do* advertise support for
+     writing in pure-functional style. Those people are well represented
+     in group #1 above, and they have a pretty clear aesthetic
+     preference. It seems a bit deceptive to say "yes, we support your
+     stylistic preferences" and then dodge and say "actually only if you
+     write in nutty gnu-C style". Nobody actually *likes* writing
+     expressions in that style.
+
+So I'm going to go with 3 for now. Thanks for the feedback. If it turns 
+out to be a usability disaster in practice for people who prefer 
+imperative style, of course, I'm happy to revisit this. The imperative 
+users carry more weight collectively; I'm just not convinced any of them 
+will *notice* that we support expression style. They have to write it 
+intentionally, and (by assumption) it's not a style they're going to write.
+
+Since this is the "less work" approach -- since we're assuming {}-exprs 
+persist -- we can always punt stuff back out of the expression grammar 
+again, pushing them back to statements, without having to overhaul the 
+whole compiler. Just changing the relevant AST node and ... devising 
+some novel 4-like algorithm for the typechecker.
+
+NB: I'm completely willing to add ternary in any case. Now that I take 
+an honest look at the language landscape I can see I was leaving it out 
+until now due to my own bigotry, not the absence of any consensus among 
+languages. Seems most languages held on to it.
+
+-Graydon
+
+From fw at deneb.enyo.de  Sat Nov 27 12:48:14 2010
+From: fw at deneb.enyo.de (Florian Weimer)
+Date: Sat, 27 Nov 2010 21:48:14 +0100
+Subject: [rust-dev] statement-expressions and block-terminators
+In-Reply-To: <4CEC416E.4030809@mozilla.com> (Graydon Hoare's message of "Tue, 
+	23 Nov 2010 14:34:22 -0800")
+References: <4CEC416E.4030809@mozilla.com>
+Message-ID: <87tyj2ebn5.fsf@mid.deneb.enyo.de>
+
+* Graydon Hoare:
+
+> (4) Statically determine the contexts in which an expression's value
+> "will be used" in an outer expression, and only typecheck those
+> contexts.
+
+I think you can view this differently: there are two "if" constructs
+with different typing rules and identical syntax, but the grammar
+still unambiguously chooses one of them.  Kind of what Javascript does
+with the "function foo() { }" notation.
+
+> We can't think of any other options.
+
+Force programmers to write "ignore foo()" when they want to ignore a
+function result would be an option, too.
+
+From bogus@does.not.exist.com  Tue Nov 30 08:21:01 2010
+From: bogus@does.not.exist.com ()
+Date: Tue, 30 Nov 2010 16:21:01 -0000
+Subject: No subject
+Message-ID: <mailman.4.1292865536.20697.rust-dev@mozilla.org>
+
+helper function, also native). A view[T] is atomically added to the pinned[=
+T] &#39;viewer&#39; list, and when a pinned[T] is destructed it enters an &=
+quot;expiring&quot; state that walks the viewer list, invalidates all inact=
+ive views, then waits for the last active view to end, and destructs the T.=
+ All view/pinned synchronization is atomic (or effectively so; at best care=
+fully-reasoned lockless C code).<br>
+
+<br>
+Meanwhile, if I send a view[T] to some other thread, that thread can pull (=
+via an iterator / one-shot reference-returning accessor, as Dave and Patric=
+k have been discussing) an &amp;option[T] out of the view[T]. If the underl=
+ying pinned[T] is dead, the view[T] has been invalidated, then the option[T=
+] will come back none. Sorry. No data to view. But if it comes back as &amp=
+;some[T](?t) then the viewing thread can work with the target &#39;t&#39; d=
+ata &quot;as though it&#39;s const&quot;. No rc traffic to keep reconciled.=
+ It&#39;s working as though the data is a compile-time constant in read-onl=
+y memory.<br>
+</blockquote><div><br></div><div>Not sure I understand this. What happens i=
+f I grab the value from a view[T], and then store a reference to some inter=
+nal sub-part of that T (e.g. let&#39;s say the data is a tree, and I want t=
+o keep a reference to some sub-tree)? I can&#39;t increment its ref-count, =
+but does that mean I can&#39;t keep a hold of a reference to it at all? I&#=
+39;d have to assume so since the view[T] only tracks the root and can only =
+give me a &quot;none&quot; for that, which means I must be prohibited from =
+taking a reference to any sub-structure?</div>
+<div><br></div><div>=A0=A0</div><blockquote class=3D"gmail_quote" style=3D"=
+margin:0 0 0 .8ex;border-left:1px #ccc solid;padding-left:1ex;">Again, as I=
+ said up top, there are multiple forms of parallelism, and I&#39;m not sure=
+ it&#39;ll be necessary to force everything into the MIMD task-parallel mod=
+el. I want to support the task-parallel variant *well*, because even when r=
+unning serially/multiplexed, I think it&#39;s an essential ingredient in co=
+rrectness: isolating tasks as a basic mechanism for decoupling their effect=
+s, isolating their failures. But it&#39;s not the only way; I&#39;ve sketch=
+ed in this email some variants we explore to support any/all of:<br>
+
+<br>
+SIMD - some kind of openMP-like pure-parallel loop<br></blockquote><div><br=
+></div><div>You might want to look at Nested Data Parallel Haskell here. It=
+ has the appealing property that it can flatten/fuse nested data parallel a=
+lgorithms for you (e.g. want to walk a binary tree? Just kick off two jobs =
+for the two children in each node in an almost task-parallel fashion, and t=
+he compiler will flatten it and create one &quot;pass&quot; for each &quot;=
+level&quot; in the tree automatically).=A0</div>
+<div><br></div><div>IMO the OpenCL, DirectCompute, CUDA crew are all gettin=
+g this wrong. The biggest hurdle with GPGPU isn&#39;t that you have to work=
+ through a graphics interface (although that sucks too), which is what they=
+ keep spending all their effort on fixing. The biggest hurdle for me has al=
+ways been that you have to manually turn your algorithms inside-out to crea=
+te a series of &quot;flat&quot; data parallel passes, rather than have the =
+compiler do that work for you. It took me something like two days to get a =
+correct=A0version=A0of a simple odd-even merge sort a few=A0years ago (befo=
+re there were code samples around for it!). This is a really, really, diffi=
+cult.</div>
+<div><br></div><div>I realise this is highly &quot;researchy&quot;/&quot;un=
+proven&quot; at the moment, but it might be worth keeping it in mind so you=
+ don&#39;t make any design decisions that would rule it out in the future.<=
+/div>
+<div><br></div></div>-- <br>Sebastian Sylvan<br>
+
+--00163630f849deb6820497dab60a--
+

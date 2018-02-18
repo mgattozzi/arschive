@@ -1,0 +1,3387 @@
+From p.schellart at gmail.com  Thu Jan  1 02:49:20 2015
+From: p.schellart at gmail.com (Pim Schellart)
+Date: Thu, 1 Jan 2015 11:49:20 +0100
+Subject: [rust-dev] Why .iter() for looping over arrays
+Message-ID: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+
+Dear Rust developers,
+
+I have just started using rust so this is obviously a stupid question but I was wondering why .iter() is needed when looping over the elements of an array? In the following example:
+
+    let a = [1i, 2i, 3i];
+
+    for e in a.iter() {
+        println!("{}", e);
+    }
+
+why can?t one simply write:
+
+    let a = [1i, 2i, 3i];
+
+    for e in a {
+        println!("{}", e);
+    }
+
+and have the compiler figure out that ?a? has ?.iter()? and use it? The form without .iter() just feels more natural to me in this case.
+Please feel free to tell me to RTFM or ask this question elsewhere.
+
+Regards,
+
+Pim
+
+From farcaller at gmail.com  Thu Jan  1 03:08:06 2015
+From: farcaller at gmail.com (Vladimir Pouzanov)
+Date: Thu, 1 Jan 2015 11:08:06 +0000
+Subject: [rust-dev] Problems cross-compiling to ARM9
+In-Reply-To: <54A28B30.9080602@gmail.com>
+References: <20141215075108.GW17441@shirio>
+	<20141217053017.GA24395@antiproton.jfet.org>
+	<20141229200121.GI17441@shirio> <20141230110921.GJ17441@shirio>
+	<54A28B30.9080602@gmail.com>
+Message-ID: <CAOrN+s6k+Ph-=rALtWwyyGmoEKcB+tEQCvm=r8P-S4iWCJv3dA@mail.gmail.com>
+
+FWIW, we're just disabling segmented stack in zinc for now exactly because
+of the same problem. I have a patch for llvm but I didn't really push it
+upstream hard enough.
+
+On Tue, Dec 30, 2014 at 11:23 AM, Valerii Hiora <valerii.hiora at gmail.com>
+wrote:
+
+> Hi Tomi,
+>
+> > Anyone have any idea if that's a larger problem, or simply something
+> > nobody has written the small handcoded ASMs needed for ARMv5 or v4?
+> > If latter, I might be able to wrap my head around this.
+>
+>   The problem you've got is related to segmented stack support. It need
+> fix on 2 levels:
+>
+> - Rust - can be relatively easy fixed by providing (or patching) a
+> target and marking it as a target which doesn't support segmented
+> stacks, see example [1]
+>
+>    Once it works you can play a bit to provide a correct implementation
+> in record_sp.S and morestack.S
+>
+> - LLVM - as I remember some time ago LLVM generated a function prologue
+> which uses the same instruction for any ARM device, may be that was
+> patched in upstream, may be not. You can also ask Vladimir Pouzanov and
+> zinc.rs [2] team, AFAIK they had the similar problem too and definitely
+> have a workaround.
+>
+> [1]
+>
+> https://github.com/rust-lang/rust/blob/master/src/librustc_back/target/arm_apple_ios.rs#L33
+> [2]  https://zinc.rs/
+>
+> --
+>
+>   Valerii
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+
+
+-- 
+Sincerely,
+Vladimir "Farcaller" Pouzanov
+http://farcaller.net/
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150101/719d9b59/attachment.html>
+
+From manishsmail at gmail.com  Thu Jan  1 03:10:43 2015
+From: manishsmail at gmail.com (Manish Goregaokar)
+Date: Thu, 1 Jan 2015 16:40:43 +0530
+Subject: [rust-dev] Why .iter() for looping over arrays
+In-Reply-To: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+References: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+Message-ID: <CACpkpxnqzo56oai8A+XiUmGShZgtr4SHsnzAHpMX-3f0H7XTpg@mail.gmail.com>
+
+For loops only work with objects that implement the Iterator
+<http://doc.rust-lang.org/std/iter/trait.Iterator.html> trait.
+
+An array in itself is not an iterator (it doesn't have a "state" as to
+which element it currently is on), however .iter() gives you an Iter<T>
+<http://doc.rust-lang.org/std/slice/struct.Iter.html>, which is iterable
+and has a "state".
+
+-Manish Goregaokar
+
+On Thu, Jan 1, 2015 at 4:19 PM, Pim Schellart <p.schellart at gmail.com> wrote:
+
+> Dear Rust developers,
+>
+> I have just started using rust so this is obviously a stupid question but
+> I was wondering why .iter() is needed when looping over the elements of an
+> array? In the following example:
+>
+>     let a = [1i, 2i, 3i];
+>
+>     for e in a.iter() {
+>         println!("{}", e);
+>     }
+>
+> why can?t one simply write:
+>
+>     let a = [1i, 2i, 3i];
+>
+>     for e in a {
+>         println!("{}", e);
+>     }
+>
+> and have the compiler figure out that ?a? has ?.iter()? and use it? The
+> form without .iter() just feels more natural to me in this case.
+> Please feel free to tell me to RTFM or ask this question elsewhere.
+>
+> Regards,
+>
+> Pim
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150101/1eb3ee17/attachment.html>
+
+From ptalbot at hyc.io  Thu Jan  1 03:16:04 2015
+From: ptalbot at hyc.io (Pierre Talbot)
+Date: Thu, 01 Jan 2015 12:16:04 +0100
+Subject: [rust-dev] Why .iter() for looping over arrays
+In-Reply-To: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+References: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+Message-ID: <54A52C74.6040208@hyc.io>
+
+Hi,
+
+I guess it is a language design choice due to the low-level nature of 
+the Rust memory model. It's not like in Java where everything is garbage 
+collected and there is merely one way to iterate over a collection (by 
+reference). In Rust you can decide to move elements (with into_iter()) 
+or to get a reference to it (with iter()), choosing a default between 
+these two may not be desirable. However I'm just supposing since I did 
+not design the language ^^.
+
+Cheers,
+Pierre
+
+On 01/01/2015 11:49 AM, Pim Schellart wrote:
+> Dear Rust developers,
+>
+> I have just started using rust so this is obviously a stupid question but I was wondering why .iter() is needed when looping over the elements of an array? In the following example:
+>
+>      let a = [1i, 2i, 3i];
+>
+>      for e in a.iter() {
+>          println!("{}", e);
+>      }
+>
+> why can?t one simply write:
+>
+>      let a = [1i, 2i, 3i];
+>
+>      for e in a {
+>          println!("{}", e);
+>      }
+>
+> and have the compiler figure out that ?a? has ?.iter()? and use it? The form without .iter() just feels more natural to me in this case.
+> Please feel free to tell me to RTFM or ask this question elsewhere.
+>
+> Regards,
+>
+> Pim
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From jeanpierreda at gmail.com  Thu Jan  1 03:15:57 2015
+From: jeanpierreda at gmail.com (Devin Jeanpierre)
+Date: Thu, 1 Jan 2015 03:15:57 -0800
+Subject: [rust-dev] Why .iter() for looping over arrays
+In-Reply-To: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+References: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+Message-ID: <CABicbJ+f8CJQ2-SbT=x5J_YeWyFjU6cb3uEXK3D4jFUg-srisQ@mail.gmail.com>
+
+On Thu, Jan 1, 2015 at 2:49 AM, Pim Schellart <p.schellart at gmail.com> wrote:
+> why can?t one simply write:
+>
+>     let a = [1i, 2i, 3i];
+>
+>     for e in a {
+>         println!("{}", e);
+>     }
+>
+> and have the compiler figure out that ?a? has ?.iter()? and use it? The form without .iter() just feels more natural to me in this case.
+> Please feel free to tell me to RTFM or ask this question elsewhere.
+
+That's what Python does. But then, in order to be able to iterate over
+iterators, iterators must also have iter() methods, which presumably
+return self, which is an additional source of implementation errors
+and isn't really reasonable because it would have to consume the
+original reference, invalidating it, which is super annoying. (You
+couldn't do "for x in a {...} a.foobar()"
+
+FWIW there are side benefits to not doing this automatically -- in
+Python, the difference between an iterable and an iterator is subtle,
+and the selection of "default" iterators for many types is also
+confusing. e.g. for dictionaries/mappings, one might reasonably
+iterate over keys, values, or key-value pairs, which is the default?
+
+-- Devin
+
+From farcaller at gmail.com  Thu Jan  1 03:17:09 2015
+From: farcaller at gmail.com (Vladimir Pouzanov)
+Date: Thu, 1 Jan 2015 11:17:09 +0000
+Subject: [rust-dev] Declaring the API unsafe while keeping the internal
+	safety checks
+Message-ID: <CAOrN+s6Hez5ejzKOdjDmB2kSLOcn0ZahQnWuUkBvf-vLZc5TXQ@mail.gmail.com>
+
+I had this idea for some time and I'd like to discuss it to see if it is
+something reasonable to be proposed for rust to implement or there are
+other ways around the problem.
+
+Let's say I have a low level function that manipulates the hardware clock
+using some platform-specific argument. Internally this function will do an
+unsafe volatile mem write to store value in the register, but this is the
+only part of the code that is unsafe compiler-wise, whatever else is in
+there in the function is safe and I want the compiler to warn me if any
+other unsafe operation happens.
+
+Now, given that this function is actually unsafe in terms of its realtime
+consequences (it does not do any validation of the input for speed) I want
+to mark it as unsafe fn and make a safer wrapper for end users, while
+keeping this for the little subset of users that will need the actual speed
+benefits.
+
+Unfortunately, marking it unsafe will now allow any other unsafe operation
+in the body of the function, when what I wanted is just to force users of
+it to be aware of unsafety via compiler validation.
+
+A safe {} block could have helped me in this case. But is it a good idea
+overall?
+
+Some pseudo-code to illustrate
+
+pub unsafe fn set_clock_mode(mode: uint32) {
+  // ...
+  // doing some required computations
+  // this code must be 'safe' for the compiler
+  unsafe {
+    // ...
+    // writing the value to mmaped register, this one is unsafe but
+validated by programmer
+  }
+}
+
+pub fn set_clock_mode_safe(mode: uint32) -> bool {
+  // ...
+  // validate input
+  unsafe {
+    // I want this call to require unsafe block
+    set_clock_mode(mode);
+  }
+}
+
+-- 
+Sincerely,
+Vladimir "Farcaller" Pouzanov
+http://farcaller.net/
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150101/da53756c/attachment.html>
+
+From manishsmail at gmail.com  Thu Jan  1 03:46:28 2015
+From: manishsmail at gmail.com (Manish Goregaokar)
+Date: Thu, 1 Jan 2015 17:16:28 +0530
+Subject: [rust-dev] Declaring the API unsafe while keeping the internal
+ safety checks
+In-Reply-To: <CAOrN+s6Hez5ejzKOdjDmB2kSLOcn0ZahQnWuUkBvf-vLZc5TXQ@mail.gmail.com>
+References: <CAOrN+s6Hez5ejzKOdjDmB2kSLOcn0ZahQnWuUkBvf-vLZc5TXQ@mail.gmail.com>
+Message-ID: <CACpkpx=eNPkwzeahSL3kmLLbvNMBdi7LyhnQVnOLy=PYHtXQnA@mail.gmail.com>
+
+It should be reasonably easy to write a lint as a compiler plugin such that
+the following function:
+
+#[unsafe_specific]
+unsafe fn foo () {
+ #[allowed_unsafe] { // or just #[allow(unsafe_something_something)]
+  // do unsafe things here
+ }
+ // no unsafe blocks or functions allowed here.
+}
+
+would not compile with any unsafe code in the latter half of the function.
+
+Alternatively:
+
+unsafe fn foo() {
+ fn bar() {
+  unsafe {
+    // unsafe stuff here
+  }
+  // no unsafe stuff here
+ }
+ bar();
+}
+
+-Manish Goregaokar
+
+On Thu, Jan 1, 2015 at 4:47 PM, Vladimir Pouzanov <farcaller at gmail.com>
+wrote:
+
+> I had this idea for some time and I'd like to discuss it to see if it is
+> something reasonable to be proposed for rust to implement or there are
+> other ways around the problem.
+>
+> Let's say I have a low level function that manipulates the hardware clock
+> using some platform-specific argument. Internally this function will do an
+> unsafe volatile mem write to store value in the register, but this is the
+> only part of the code that is unsafe compiler-wise, whatever else is in
+> there in the function is safe and I want the compiler to warn me if any
+> other unsafe operation happens.
+>
+> Now, given that this function is actually unsafe in terms of its realtime
+> consequences (it does not do any validation of the input for speed) I want
+> to mark it as unsafe fn and make a safer wrapper for end users, while
+> keeping this for the little subset of users that will need the actual speed
+> benefits.
+>
+> Unfortunately, marking it unsafe will now allow any other unsafe operation
+> in the body of the function, when what I wanted is just to force users of
+> it to be aware of unsafety via compiler validation.
+>
+> A safe {} block could have helped me in this case. But is it a good idea
+> overall?
+>
+> Some pseudo-code to illustrate
+>
+> pub unsafe fn set_clock_mode(mode: uint32) {
+>   // ...
+>   // doing some required computations
+>   // this code must be 'safe' for the compiler
+>   unsafe {
+>     // ...
+>     // writing the value to mmaped register, this one is unsafe but
+> validated by programmer
+>   }
+> }
+>
+> pub fn set_clock_mode_safe(mode: uint32) -> bool {
+>   // ...
+>   // validate input
+>   unsafe {
+>     // I want this call to require unsafe block
+>     set_clock_mode(mode);
+>   }
+> }
+>
+> --
+> Sincerely,
+> Vladimir "Farcaller" Pouzanov
+> http://farcaller.net/
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150101/70bb371c/attachment.html>
+
+From farcaller at gmail.com  Thu Jan  1 03:48:24 2015
+From: farcaller at gmail.com (Vladimir Pouzanov)
+Date: Thu, 1 Jan 2015 11:48:24 +0000
+Subject: [rust-dev] Declaring the API unsafe while keeping the internal
+ safety checks
+In-Reply-To: <CACpkpx=eNPkwzeahSL3kmLLbvNMBdi7LyhnQVnOLy=PYHtXQnA@mail.gmail.com>
+References: <CAOrN+s6Hez5ejzKOdjDmB2kSLOcn0ZahQnWuUkBvf-vLZc5TXQ@mail.gmail.com>
+	<CACpkpx=eNPkwzeahSL3kmLLbvNMBdi7LyhnQVnOLy=PYHtXQnA@mail.gmail.com>
+Message-ID: <CAOrN+s6q=_A8LsRjCwrS_LHUOj3YqW9E8jGD7vne3Eviq9Fzbw@mail.gmail.com>
+
+Sounds reasonably simple, thanks for the idea!
+
+On Thu, Jan 1, 2015 at 11:46 AM, Manish Goregaokar <manishsmail at gmail.com>
+wrote:
+
+> It should be reasonably easy to write a lint as a compiler plugin such
+> that the following function:
+>
+> #[unsafe_specific]
+> unsafe fn foo () {
+>  #[allowed_unsafe] { // or just #[allow(unsafe_something_something)]
+>   // do unsafe things here
+>  }
+>  // no unsafe blocks or functions allowed here.
+> }
+>
+> would not compile with any unsafe code in the latter half of the function.
+>
+> Alternatively:
+>
+> unsafe fn foo() {
+>  fn bar() {
+>   unsafe {
+>     // unsafe stuff here
+>   }
+>   // no unsafe stuff here
+>  }
+>  bar();
+> }
+>
+> -Manish Goregaokar
+>
+> On Thu, Jan 1, 2015 at 4:47 PM, Vladimir Pouzanov <farcaller at gmail.com>
+> wrote:
+>
+>> I had this idea for some time and I'd like to discuss it to see if it is
+>> something reasonable to be proposed for rust to implement or there are
+>> other ways around the problem.
+>>
+>> Let's say I have a low level function that manipulates the hardware clock
+>> using some platform-specific argument. Internally this function will do an
+>> unsafe volatile mem write to store value in the register, but this is the
+>> only part of the code that is unsafe compiler-wise, whatever else is in
+>> there in the function is safe and I want the compiler to warn me if any
+>> other unsafe operation happens.
+>>
+>> Now, given that this function is actually unsafe in terms of its realtime
+>> consequences (it does not do any validation of the input for speed) I want
+>> to mark it as unsafe fn and make a safer wrapper for end users, while
+>> keeping this for the little subset of users that will need the actual speed
+>> benefits.
+>>
+>> Unfortunately, marking it unsafe will now allow any other unsafe
+>> operation in the body of the function, when what I wanted is just to force
+>> users of it to be aware of unsafety via compiler validation.
+>>
+>> A safe {} block could have helped me in this case. But is it a good idea
+>> overall?
+>>
+>> Some pseudo-code to illustrate
+>>
+>> pub unsafe fn set_clock_mode(mode: uint32) {
+>>   // ...
+>>   // doing some required computations
+>>   // this code must be 'safe' for the compiler
+>>   unsafe {
+>>     // ...
+>>     // writing the value to mmaped register, this one is unsafe but
+>> validated by programmer
+>>   }
+>> }
+>>
+>> pub fn set_clock_mode_safe(mode: uint32) -> bool {
+>>   // ...
+>>   // validate input
+>>   unsafe {
+>>     // I want this call to require unsafe block
+>>     set_clock_mode(mode);
+>>   }
+>> }
+>>
+>> --
+>> Sincerely,
+>> Vladimir "Farcaller" Pouzanov
+>> http://farcaller.net/
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+
+
+-- 
+Sincerely,
+Vladimir "Farcaller" Pouzanov
+http://farcaller.net/
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150101/0bf7c5c0/attachment.html>
+
+From masklinn at masklinn.net  Thu Jan  1 04:08:06 2015
+From: masklinn at masklinn.net (Masklinn)
+Date: Thu, 1 Jan 2015 13:08:06 +0100
+Subject: [rust-dev] Why .iter() for looping over arrays
+In-Reply-To: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+References: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+Message-ID: <F2A71B5E-7AFE-4B95-A566-CD96F78C9C99@masklinn.net>
+
+A big issue is Rust collections can (and often want to) provide multiple
+iterators depending whether the yielded values should be references,
+mutable references, ? Most collections provide both iter() and
+iter_mut() for instance, and these are not *views* (in e.g. the Python
+sense), they don't iterate on a subset of the collection, instead they
+provide a different level of access to the current iteration value.
+
+There have been suggestions about an Iterable trait, there is an open
+RFC (https://github.com/rust-lang/rfcs/pull/17) and IIRC the collections
+reform (https://github.com/rust-lang/rfcs/pull/235) contains a subset of
+it, but so far the explicit iterator has not been a huge wart or issue.
+It can also be changed in a completely backwards-compatible manner so it
+can be tackled post-1.0.
+
+On 2015-01-01, at 11:49 , Pim Schellart <p.schellart at gmail.com> wrote:
+
+> Dear Rust developers,
+> 
+> I have just started using rust so this is obviously a stupid question but I was wondering why .iter() is needed when looping over the elements of an array? In the following example:
+> 
+>    let a = [1i, 2i, 3i];
+> 
+>    for e in a.iter() {
+>        println!("{}", e);
+>    }
+> 
+> why can?t one simply write:
+> 
+>    let a = [1i, 2i, 3i];
+> 
+>    for e in a {
+>        println!("{}", e);
+>    }
+> 
+> and have the compiler figure out that ?a? has ?.iter()? and use it? The form without .iter() just feels more natural to me in this case.
+> Please feel free to tell me to RTFM or ask this question elsewhere.
+> 
+> Regards,
+> 
+> Pim
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From dbau.pp at gmail.com  Thu Jan  1 04:48:39 2015
+From: dbau.pp at gmail.com (Huon Wilson)
+Date: Thu, 01 Jan 2015 23:48:39 +1100
+Subject: [rust-dev] Declaring the API unsafe while keeping the internal
+ safety checks
+In-Reply-To: <CACpkpx=eNPkwzeahSL3kmLLbvNMBdi7LyhnQVnOLy=PYHtXQnA@mail.gmail.com>
+References: <CAOrN+s6Hez5ejzKOdjDmB2kSLOcn0ZahQnWuUkBvf-vLZc5TXQ@mail.gmail.com>
+	<CACpkpx=eNPkwzeahSL3kmLLbvNMBdi7LyhnQVnOLy=PYHtXQnA@mail.gmail.com>
+Message-ID: <54A54227.5020907@gmail.com>
+
+Attributes cannot (yet) be attached to blocks so this can't work atm, e.g.
+
+     fn main() {
+         #[whoops] { /* ... */ }
+     }
+
+gives
+
+     <anon>:2:13: 2:14 error: expected item after attributes
+     <anon>:2     #[whoops] { /* ... */ }
+                          ^
+
+It possibly makes sense to have a distinction between "functions that 
+are unsafe to call" and "functions that can call unsafe functions 
+internally", i.e. have `unsafe fn foo() { ... }` *not* be the same as 
+`unsafe fn foo() { unsafe { ... } }`, although I imagine that this may 
+make certain cases rather uglier.
+
+Huon
+
+On 01/01/15 22:46, Manish Goregaokar wrote:
+> It should be reasonably easy to write a lint as a compiler plugin such 
+> that the following function:
+>
+> #[unsafe_specific]
+> unsafe fn foo () {
+>  #[allowed_unsafe] { // or just #[allow(unsafe_something_something)]
+>   // do unsafe things here
+>  }
+>  // no unsafe blocks or functions allowed here.
+> }
+>
+> would not compile with any unsafe code in the latter half of the function.
+>
+> Alternatively:
+>
+> unsafe fn foo() {
+>  fn bar() {
+>   unsafe {
+>     // unsafe stuff here
+>   }
+>   // no unsafe stuff here
+>  }
+>  bar();
+> }
+>
+> -Manish Goregaokar
+>
+> On Thu, Jan 1, 2015 at 4:47 PM, Vladimir Pouzanov <farcaller at gmail.com 
+> <mailto:farcaller at gmail.com>> wrote:
+>
+>     I had this idea for some time and I'd like to discuss it to see if
+>     it is something reasonable to be proposed for rust to implement or
+>     there are other ways around the problem.
+>
+>     Let's say I have a low level function that manipulates the
+>     hardware clock using some platform-specific argument. Internally
+>     this function will do an unsafe volatile mem write to store value
+>     in the register, but this is the only part of the code that is
+>     unsafe compiler-wise, whatever else is in there in the function is
+>     safe and I want the compiler to warn me if any other unsafe
+>     operation happens.
+>
+>     Now, given that this function is actually unsafe in terms of its
+>     realtime consequences (it does not do any validation of the input
+>     for speed) I want to mark it as unsafe fn and make a safer wrapper
+>     for end users, while keeping this for the little subset of users
+>     that will need the actual speed benefits.
+>
+>     Unfortunately, marking it unsafe will now allow any other unsafe
+>     operation in the body of the function, when what I wanted is just
+>     to force users of it to be aware of unsafety via compiler validation.
+>
+>     A safe {} block could have helped me in this case. But is it a
+>     good idea overall?
+>
+>     Some pseudo-code to illustrate
+>
+>     pub unsafe fn set_clock_mode(mode: uint32) {
+>       // ...
+>       // doing some required computations
+>       // this code must be 'safe' for the compiler
+>       unsafe {
+>         // ...
+>         // writing the value to mmaped register, this one is unsafe
+>     but validated by programmer
+>       }
+>     }
+>
+>     pub fn set_clock_mode_safe(mode: uint32) -> bool {
+>       // ...
+>       // validate input
+>       unsafe {
+>         // I want this call to require unsafe block
+>         set_clock_mode(mode);
+>       }
+>     }
+>
+>     -- 
+>     Sincerely,
+>     Vladimir "Farcaller" Pouzanov
+>     http://farcaller.net/
+>
+>     _______________________________________________
+>     Rust-dev mailing list
+>     Rust-dev at mozilla.org <mailto:Rust-dev at mozilla.org>
+>     https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150101/fa10d1b2/attachment.html>
+
+From ryan at ryanhiebert.com  Thu Jan  1 06:54:05 2015
+From: ryan at ryanhiebert.com (Ryan Hiebert)
+Date: Thu, 1 Jan 2015 08:54:05 -0600
+Subject: [rust-dev] Why .iter() for looping over arrays
+In-Reply-To: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+References: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+Message-ID: <C3296CD8-CBE1-4834-BD63-91B1C8269F3D@ryanhiebert.com>
+
+I asked why there wasn't an Iterable trait in rust, for just this reason, and was informed that the trait would require higher kinded types. I suspect that once those arrive (sometime after 1.0) that for loops may change to use Iterable instead of Iterator.
+
+Sent from my iPhone
+
+> On Jan 1, 2015, at 4:49 AM, Pim Schellart <p.schellart at gmail.com> wrote:
+> 
+> Dear Rust developers,
+> 
+> I have just started using rust so this is obviously a stupid question but I was wondering why .iter() is needed when looping over the elements of an array? In the following example:
+> 
+>    let a = [1i, 2i, 3i];
+> 
+>    for e in a.iter() {
+>        println!("{}", e);
+>    }
+> 
+> why can?t one simply write:
+> 
+>    let a = [1i, 2i, 3i];
+> 
+>    for e in a {
+>        println!("{}", e);
+>    }
+> 
+> and have the compiler figure out that ?a? has ?.iter()? and use it? The form without .iter() just feels more natural to me in this case.
+> Please feel free to tell me to RTFM or ask this question elsewhere.
+> 
+> Regards,
+> 
+> Pim
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+From tom.browder at gmail.com  Thu Jan  1 07:54:43 2015
+From: tom.browder at gmail.com (Tom Browder)
+Date: Thu, 1 Jan 2015 09:54:43 -0600
+Subject: [rust-dev] Tools for auto-extracting FFI for C libraries?
+Message-ID: <CAFMGiz87hB8CoUg9XtAa83JogYcSbTBRBYi_xCKerUFWVkAVqQ@mail.gmail.com>
+
+Is anyone aware of work on a tool to automatically generate an FFI for C
+libraries?
+
+Best regards,
+
+-Tom
+
+P.S.  Happy New Year to all!
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150101/be666464/attachment.html>
+
+From valerii.hiora at gmail.com  Thu Jan  1 07:57:45 2015
+From: valerii.hiora at gmail.com (Valerii Hiora)
+Date: Thu, 01 Jan 2015 17:57:45 +0200
+Subject: [rust-dev] Tools for auto-extracting FFI for C libraries?
+In-Reply-To: <CAFMGiz87hB8CoUg9XtAa83JogYcSbTBRBYi_xCKerUFWVkAVqQ@mail.gmail.com>
+References: <CAFMGiz87hB8CoUg9XtAa83JogYcSbTBRBYi_xCKerUFWVkAVqQ@mail.gmail.com>
+Message-ID: <54A56E79.8040108@gmail.com>
+
+Hi Tom,
+
+> Is anyone aware of work on a tool to automatically generate an FFI
+> for C libraries?
+
+  https://github.com/crabtw/rust-bindgen
+
+-- 
+
+  Valerii
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 801 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150101/86f58991/attachment.sig>
+
+From valerii.hiora at gmail.com  Thu Jan  1 08:01:49 2015
+From: valerii.hiora at gmail.com (Valerii Hiora)
+Date: Thu, 01 Jan 2015 18:01:49 +0200
+Subject: [rust-dev] Problems cross-compiling to ARM9
+In-Reply-To: <20141231114634.GK17441@shirio>
+References: <20141215075108.GW17441@shirio>	<20141217053017.GA24395@antiproton.jfet.org>	<20141229200121.GI17441@shirio>
+	<20141230110921.GJ17441@shirio>	<54A28B30.9080602@gmail.com>
+	<20141231114634.GK17441@shirio>
+Message-ID: <54A56F6D.8090407@gmail.com>
+
+Hi Tomi,
+
+> The prologue problem was fixed by adding "morestack: false," to the 
+> linux ARM target specification, similar to how it is in the iOS 
+> target.
+
+  Right, my bad, that should be enough.
+
+> My device does not really benefit from the segmented stack, since it 
+> has only 64MB RAM
+
+  Segmented stacks in Rust for a long time are used only for catching a
+stack overflow.
+
+-- 
+
+  Valerii
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 801 bytes
+Desc: OpenPGP digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150101/1c479439/attachment.sig>
+
+From gsingh_2011 at yahoo.com  Thu Jan  1 09:10:22 2015
+From: gsingh_2011 at yahoo.com (Gulshan Singh)
+Date: Thu, 01 Jan 2015 17:10:22 +0000
+Subject: [rust-dev] Why .iter() for looping over arrays
+References: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+	<C3296CD8-CBE1-4834-BD63-91B1C8269F3D@ryanhiebert.com>
+Message-ID: <CANEZYrfaEKPfLQLy6FLJbbmmbiNS5C=5TkUbVyjXj6EXgUJhqQ@mail.gmail.com>
+
+I've also heard HKT are need for this trait. See the "Lack of iterator
+methods" section of this RFC for an explanation:
+https://github.com/rust-lang/rfcs/blob/master/text/0235-collections-conventions.md
+
+On Thu Jan 01 2015 at 9:54:20 AM Ryan Hiebert <ryan at ryanhiebert.com> wrote:
+
+> I asked why there wasn't an Iterable trait in rust, for just this reason,
+> and was informed that the trait would require higher kinded types. I
+> suspect that once those arrive (sometime after 1.0) that for loops may
+> change to use Iterable instead of Iterator.
+>
+> Sent from my iPhone
+>
+> > On Jan 1, 2015, at 4:49 AM, Pim Schellart <p.schellart at gmail.com> wrote:
+> >
+> > Dear Rust developers,
+> >
+> > I have just started using rust so this is obviously a stupid question
+> but I was wondering why .iter() is needed when looping over the elements of
+> an array? In the following example:
+> >
+> >    let a = [1i, 2i, 3i];
+> >
+> >    for e in a.iter() {
+> >        println!("{}", e);
+> >    }
+> >
+> > why can?t one simply write:
+> >
+> >    let a = [1i, 2i, 3i];
+> >
+> >    for e in a {
+> >        println!("{}", e);
+> >    }
+> >
+> > and have the compiler figure out that ?a? has ?.iter()? and use it? The
+> form without .iter() just feels more natural to me in this case.
+> > Please feel free to tell me to RTFM or ask this question elsewhere.
+> >
+> > Regards,
+> >
+> > Pim
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org
+> > https://mail.mozilla.org/listinfo/rust-dev
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150101/0e9523a7/attachment.html>
+
+From tom.browder at gmail.com  Thu Jan  1 09:37:54 2015
+From: tom.browder at gmail.com (Tom Browder)
+Date: Thu, 1 Jan 2015 11:37:54 -0600
+Subject: [rust-dev] Tools for auto-extracting FFI for C libraries?
+In-Reply-To: <54A56E79.8040108@gmail.com>
+References: <CAFMGiz87hB8CoUg9XtAa83JogYcSbTBRBYi_xCKerUFWVkAVqQ@mail.gmail.com>
+	<54A56E79.8040108@gmail.com>
+Message-ID: <CAFMGiz9Y4YwcPogWQETwCR-gMH98_12uaVUn3Jd+aTiOJ68d_A@mail.gmail.com>
+
+On Jan 1, 2015 9:57 AM, "Valerii Hiora" <valerii.hiora at gmail.com> wrote
+> > Is anyone aware of work on a tool to automatically generate an FFI
+> > for C libraries?
+>
+>   https://github.com/crabtw/rust-bindgen
+
+Aha!  Thanks, Valerii.
+
+Best regards,
+
+-Tom
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150101/3b94a5e1/attachment.html>
+
+From ryan at ryanhiebert.com  Thu Jan  1 10:18:40 2015
+From: ryan at ryanhiebert.com (Ryan Hiebert)
+Date: Thu, 1 Jan 2015 12:18:40 -0600
+Subject: [rust-dev] Why .iter() for looping over arrays
+In-Reply-To: <CANEZYrcqGYz5Hg-JYoL6z=6uKo_eeLThBaQPKG1NJkCP4YyY7Q@mail.gmail.com>
+References: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+	<C3296CD8-CBE1-4834-BD63-91B1C8269F3D@ryanhiebert.com>
+	<CANEZYrcqGYz5Hg-JYoL6z=6uKo_eeLThBaQPKG1NJkCP4YyY7Q@mail.gmail.com>
+Message-ID: <B52FBF90-92E5-4595-A11B-1736BAF58ECC@ryanhiebert.com>
+
+Thanks for the link. That RFC is a great read.
+
+> On Jan 1, 2015, at 11:09 AM, Gulshan Singh <gsingh2011 at gmail.com> wrote:
+> 
+> I've also heard HKT are need for this trait. See the "Lack of iterator methods" section of this RFC for an explanation: https://github.com/rust-lang/rfcs/blob/master/text/0235-collections-conventions.md <https://github.com/rust-lang/rfcs/blob/master/text/0235-collections-conventions.md>
+> 
+> On Thu Jan 01 2015 at 9:54:20 AM Ryan Hiebert <ryan at ryanhiebert.com <mailto:ryan at ryanhiebert.com>> wrote:
+> I asked why there wasn't an Iterable trait in rust, for just this reason, and was informed that the trait would require higher kinded types. I suspect that once those arrive (sometime after 1.0) that for loops may change to use Iterable instead of Iterator.
+> 
+> Sent from my iPhone
+> 
+> > On Jan 1, 2015, at 4:49 AM, Pim Schellart <p.schellart at gmail.com <mailto:p.schellart at gmail.com>> wrote:
+> >
+> > Dear Rust developers,
+> >
+> > I have just started using rust so this is obviously a stupid question but I was wondering why .iter() is needed when looping over the elements of an array? In the following example:
+> >
+> >    let a = [1i, 2i, 3i];
+> >
+> >    for e in a.iter() {
+> >        println!("{}", e);
+> >    }
+> >
+> > why can?t one simply write:
+> >
+> >    let a = [1i, 2i, 3i];
+> >
+> >    for e in a {
+> >        println!("{}", e);
+> >    }
+> >
+> > and have the compiler figure out that ?a? has ?.iter()? and use it? The form without .iter() just feels more natural to me in this case.
+> > Please feel free to tell me to RTFM or ask this question elsewhere.
+> >
+> > Regards,
+> >
+> > Pim
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org <mailto:Rust-dev at mozilla.org>
+> > https://mail.mozilla.org/listinfo/rust-dev <https://mail.mozilla.org/listinfo/rust-dev>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org <mailto:Rust-dev at mozilla.org>
+> https://mail.mozilla.org/listinfo/rust-dev <https://mail.mozilla.org/listinfo/rust-dev>
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150101/6756f07c/attachment.html>
+
+From masklinn at masklinn.net  Thu Jan  1 10:36:20 2015
+From: masklinn at masklinn.net (Masklinn)
+Date: Thu, 1 Jan 2015 19:36:20 +0100
+Subject: [rust-dev] Why .iter() for looping over arrays
+In-Reply-To: <C3296CD8-CBE1-4834-BD63-91B1C8269F3D@ryanhiebert.com>
+References: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+	<C3296CD8-CBE1-4834-BD63-91B1C8269F3D@ryanhiebert.com>
+Message-ID: <19FC5BAD-8263-4EFD-9F35-D3DD88E8527E@masklinn.net>
+
+It'll use both somehow since it can't break existing code. Either by
+having iterators be iterables (that's how python does it) or by
+iterating iterables desugaring to iterating the corresponding iterator.
+
+On 2015-01-01, at 15:54 , Ryan Hiebert <ryan at ryanhiebert.com> wrote:
+
+> I asked why there wasn't an Iterable trait in rust, for just this reason, and was informed that the trait would require higher kinded types. I suspect that once those arrive (sometime after 1.0) that for loops may change to use Iterable instead of Iterator.
+> 
+> Sent from my iPhone
+> 
+>> On Jan 1, 2015, at 4:49 AM, Pim Schellart <p.schellart at gmail.com> wrote:
+>> 
+>> Dear Rust developers,
+>> 
+>> I have just started using rust so this is obviously a stupid question but I was wondering why .iter() is needed when looping over the elements of an array? In the following example:
+>> 
+>>   let a = [1i, 2i, 3i];
+>> 
+>>   for e in a.iter() {
+>>       println!("{}", e);
+>>   }
+>> 
+>> why can?t one simply write:
+>> 
+>>   let a = [1i, 2i, 3i];
+>> 
+>>   for e in a {
+>>       println!("{}", e);
+>>   }
+>> 
+>> and have the compiler figure out that ?a? has ?.iter()? and use it? The form without .iter() just feels more natural to me in this case.
+>> Please feel free to tell me to RTFM or ask this question elsewhere.
+>> 
+>> Regards,
+>> 
+>> Pim
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From diwic at ubuntu.com  Thu Jan  1 12:07:25 2015
+From: diwic at ubuntu.com (David Henningsson)
+Date: Thu, 01 Jan 2015 21:07:25 +0100
+Subject: [rust-dev] Declaring the API unsafe while keeping the internal
+ safety checks
+In-Reply-To: <CAOrN+s6Hez5ejzKOdjDmB2kSLOcn0ZahQnWuUkBvf-vLZc5TXQ@mail.gmail.com>
+References: <CAOrN+s6Hez5ejzKOdjDmB2kSLOcn0ZahQnWuUkBvf-vLZc5TXQ@mail.gmail.com>
+Message-ID: <54A5A8FD.6050303@ubuntu.com>
+
+
+
+On 2015-01-01 12:17, Vladimir Pouzanov wrote:
+> I had this idea for some time and I'd like to discuss it to see if it is
+> something reasonable to be proposed for rust to implement or there are
+> other ways around the problem.
+>
+> Let's say I have a low level function that manipulates the hardware
+> clock using some platform-specific argument. Internally this function
+> will do an unsafe volatile mem write to store value in the register, but
+> this is the only part of the code that is unsafe compiler-wise, whatever
+> else is in there in the function is safe and I want the compiler to warn
+> me if any other unsafe operation happens.
+>
+> Now, given that this function is actually unsafe in terms of its
+> realtime consequences (it does not do any validation of the input for
+> speed) I want to mark it as unsafe fn and make a safer wrapper for end
+> users, while keeping this for the little subset of users that will need
+> the actual speed benefits.
+>
+> Unfortunately, marking it unsafe will now allow any other unsafe
+> operation in the body of the function, when what I wanted is just to
+> force users of it to be aware of unsafety via compiler validation.
+
+I would typically do:
+
+#[inline]
+fn do_some_required_computations() { /* execute safe code here */ }
+
+pub unsafe fn set_clock_mode(mode: uint32) {
+     do_some_required_computations();
+     // write the value to mmaped register
+}
+
+That said, I believe Rust's idea of what is "unsafe" is pretty 
+restricted to memory safety, and one would not typically mark things 
+that are unsafe by other means as "unsafe".
+
+>
+> A safe {} block could have helped me in this case. But is it a good idea
+> overall?
+>
+> Some pseudo-code to illustrate
+>
+> pub unsafe fn set_clock_mode(mode: uint32) {
+>    // ...
+>    // doing some required computations
+>    // this code must be 'safe' for the compiler
+>    unsafe {
+>      // ...
+>      // writing the value to mmaped register, this one is unsafe but
+> validated by programmer
+>    }
+> }
+>
+> pub fn set_clock_mode_safe(mode: uint32) -> bool {
+>    // ...
+>    // validate input
+>    unsafe {
+>      // I want this call to require unsafe block
+>      set_clock_mode(mode);
+>    }
+> }
+>
+> --
+> Sincerely,
+> Vladimir "Farcaller" Pouzanov
+> http://farcaller.net/
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+-- 
+David Henningsson, Canonical Ltd.
+https://launchpad.net/~diwic
+
+From kmcg3413 at gmail.com  Thu Jan  1 18:11:56 2015
+From: kmcg3413 at gmail.com (Kevin McGuire)
+Date: Thu, 1 Jan 2015 20:11:56 -0600
+Subject: [rust-dev] Declaring the API unsafe while keeping the internal
+ safety checks
+In-Reply-To: <CAOrN+s6Hez5ejzKOdjDmB2kSLOcn0ZahQnWuUkBvf-vLZc5TXQ@mail.gmail.com>
+References: <CAOrN+s6Hez5ejzKOdjDmB2kSLOcn0ZahQnWuUkBvf-vLZc5TXQ@mail.gmail.com>
+Message-ID: <CACVSexmoyXtueZAuJWk3sUtpgHFUbYt=ZxnvOUxK=QHan6nK=g@mail.gmail.com>
+
+Yes unsafe is primarily for memory safety. However! Your idea is good. It
+would be really good if you could have something like that. I am just not
+sure what the best way to do it is. It could be done by an attribute and
+lint with the ability to toggle it off with a module level, function level,
+or scope level second attribute, lol, possibilities are endless.
+
+But indeed unsafe is likely only, currently, for memory safety.
+
+Still I like the idea! I love the idea. I read your email earlier today but
+only shortly ago I realize what you mean.
+On Jan 1, 2015 5:17 AM, "Vladimir Pouzanov" <farcaller at gmail.com> wrote:
+
+> I had this idea for some time and I'd like to discuss it to see if it is
+> something reasonable to be proposed for rust to implement or there are
+> other ways around the problem.
+>
+> Let's say I have a low level function that manipulates the hardware clock
+> using some platform-specific argument. Internally this function will do an
+> unsafe volatile mem write to store value in the register, but this is the
+> only part of the code that is unsafe compiler-wise, whatever else is in
+> there in the function is safe and I want the compiler to warn me if any
+> other unsafe operation happens.
+>
+> Now, given that this function is actually unsafe in terms of its realtime
+> consequences (it does not do any validation of the input for speed) I want
+> to mark it as unsafe fn and make a safer wrapper for end users, while
+> keeping this for the little subset of users that will need the actual speed
+> benefits.
+>
+> Unfortunately, marking it unsafe will now allow any other unsafe operation
+> in the body of the function, when what I wanted is just to force users of
+> it to be aware of unsafety via compiler validation.
+>
+> A safe {} block could have helped me in this case. But is it a good idea
+> overall?
+>
+> Some pseudo-code to illustrate
+>
+> pub unsafe fn set_clock_mode(mode: uint32) {
+>   // ...
+>   // doing some required computations
+>   // this code must be 'safe' for the compiler
+>   unsafe {
+>     // ...
+>     // writing the value to mmaped register, this one is unsafe but
+> validated by programmer
+>   }
+> }
+>
+> pub fn set_clock_mode_safe(mode: uint32) -> bool {
+>   // ...
+>   // validate input
+>   unsafe {
+>     // I want this call to require unsafe block
+>     set_clock_mode(mode);
+>   }
+> }
+>
+> --
+> Sincerely,
+> Vladimir "Farcaller" Pouzanov
+> http://farcaller.net/
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150101/e3678d36/attachment.html>
+
+From nodakai at gmail.com  Thu Jan  1 19:10:33 2015
+From: nodakai at gmail.com (Kai Noda)
+Date: Fri, 2 Jan 2015 11:10:33 +0800
+Subject: [rust-dev] Rust build farm
+In-Reply-To: <CAFMGiz_iv27YfoMW_S8q4rVZZZWh+wJghJ-LFMY9jv99_q8GRQ@mail.gmail.com>
+References: <CAFMGiz_iv27YfoMW_S8q4rVZZZWh+wJghJ-LFMY9jv99_q8GRQ@mail.gmail.com>
+Message-ID: <CAHx8SrkrqTV6_mPPbwJrBzf2rO0UqcEpfnTqZxH5+EBKVd0L2g@mail.gmail.com>
+
+Hi Tom,
+
+There is http://buildbot.rust-lang.org/ but it only checks "make check"
+perhaps for saving CPU time.  I filed an issue about it but there's no
+progress so far:
+
+https://github.com/rust-lang/rust/issues/19698
+
+Regards,
+Kai
+
+??  ? <nodakai at gmail.com>
+
+2014-12-29 0:29 GMT+08:00 Tom Browder <tom.browder at gmail.com>:
+
+> I notice bugs referring to pdf and build platforms without pdf capability,
+> which I am very interested in. Is there a system for contributing a build
+> host to possibly help the situation?
+>
+> Best regards,
+>
+> -Tom
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150102/b2899687/attachment.html>
+
+From tom.browder at gmail.com  Fri Jan  2 04:52:16 2015
+From: tom.browder at gmail.com (Tom Browder)
+Date: Fri, 2 Jan 2015 06:52:16 -0600
+Subject: [rust-dev] Rust build farm
+In-Reply-To: <CAHx8SrkrqTV6_mPPbwJrBzf2rO0UqcEpfnTqZxH5+EBKVd0L2g@mail.gmail.com>
+References: <CAFMGiz_iv27YfoMW_S8q4rVZZZWh+wJghJ-LFMY9jv99_q8GRQ@mail.gmail.com>
+	<CAHx8SrkrqTV6_mPPbwJrBzf2rO0UqcEpfnTqZxH5+EBKVd0L2g@mail.gmail.com>
+Message-ID: <CAFMGiz_N3mR_asitdQ1DQAXwL=dtMJCT5ZYssGzmA0RZo04Auw@mail.gmail.com>
+
+On Jan 1, 2015 9:10 PM, "Kai Noda" <nodakai at gmail.com> wrote:
+>
+> Hi Tom,
+>
+> There is http://buildbot.rust-lang.org/ but it only checks "make check"
+perhaps for saving CPU time.  I filed an issue about it but there's no
+progress so far:
+>
+> https://github.com/rust-lang/rust/issues/19698
+
+Thanks, Kai.
+
+Cheers!
+
+-Tom
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150102/9b9786bc/attachment.html>
+
+From farcaller at gmail.com  Fri Jan  2 05:23:09 2015
+From: farcaller at gmail.com (Vladimir Pouzanov)
+Date: Fri, 2 Jan 2015 13:23:09 +0000
+Subject: [rust-dev] Declaring the API unsafe while keeping the internal
+ safety checks
+In-Reply-To: <CACVSexmoyXtueZAuJWk3sUtpgHFUbYt=ZxnvOUxK=QHan6nK=g@mail.gmail.com>
+References: <CAOrN+s6Hez5ejzKOdjDmB2kSLOcn0ZahQnWuUkBvf-vLZc5TXQ@mail.gmail.com>
+	<CACVSexmoyXtueZAuJWk3sUtpgHFUbYt=ZxnvOUxK=QHan6nK=g@mail.gmail.com>
+Message-ID: <CAOrN+s5Oj3x=ZFOH5ixvYPTsoJJJ0-WtWcVQp6P1C0itdac_Sg@mail.gmail.com>
+
+Well, strictly speaking it *is* memory safety, as it all gets down to an
+unsafe volatile store. Although I think I extend the 'unsafety' a bit by
+considering code that can cause CPU to halt as unsafe too.
+
+On Fri, Jan 2, 2015 at 2:11 AM, Kevin McGuire <kmcg3413 at gmail.com> wrote:
+
+> Yes unsafe is primarily for memory safety. However! Your idea is good. It
+> would be really good if you could have something like that. I am just not
+> sure what the best way to do it is. It could be done by an attribute and
+> lint with the ability to toggle it off with a module level, function level,
+> or scope level second attribute, lol, possibilities are endless.
+>
+> But indeed unsafe is likely only, currently, for memory safety.
+>
+> Still I like the idea! I love the idea. I read your email earlier today
+> but only shortly ago I realize what you mean.
+> On Jan 1, 2015 5:17 AM, "Vladimir Pouzanov" <farcaller at gmail.com> wrote:
+>
+>> I had this idea for some time and I'd like to discuss it to see if it is
+>> something reasonable to be proposed for rust to implement or there are
+>> other ways around the problem.
+>>
+>> Let's say I have a low level function that manipulates the hardware clock
+>> using some platform-specific argument. Internally this function will do an
+>> unsafe volatile mem write to store value in the register, but this is the
+>> only part of the code that is unsafe compiler-wise, whatever else is in
+>> there in the function is safe and I want the compiler to warn me if any
+>> other unsafe operation happens.
+>>
+>> Now, given that this function is actually unsafe in terms of its realtime
+>> consequences (it does not do any validation of the input for speed) I want
+>> to mark it as unsafe fn and make a safer wrapper for end users, while
+>> keeping this for the little subset of users that will need the actual speed
+>> benefits.
+>>
+>> Unfortunately, marking it unsafe will now allow any other unsafe
+>> operation in the body of the function, when what I wanted is just to force
+>> users of it to be aware of unsafety via compiler validation.
+>>
+>> A safe {} block could have helped me in this case. But is it a good idea
+>> overall?
+>>
+>> Some pseudo-code to illustrate
+>>
+>> pub unsafe fn set_clock_mode(mode: uint32) {
+>>   // ...
+>>   // doing some required computations
+>>   // this code must be 'safe' for the compiler
+>>   unsafe {
+>>     // ...
+>>     // writing the value to mmaped register, this one is unsafe but
+>> validated by programmer
+>>   }
+>> }
+>>
+>> pub fn set_clock_mode_safe(mode: uint32) -> bool {
+>>   // ...
+>>   // validate input
+>>   unsafe {
+>>     // I want this call to require unsafe block
+>>     set_clock_mode(mode);
+>>   }
+>> }
+>>
+>> --
+>> Sincerely,
+>> Vladimir "Farcaller" Pouzanov
+>> http://farcaller.net/
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+
+
+-- 
+Sincerely,
+Vladimir "Farcaller" Pouzanov
+http://farcaller.net/
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150102/14887214/attachment.html>
+
+From p.schellart at gmail.com  Fri Jan  2 05:47:48 2015
+From: p.schellart at gmail.com (Pim Schellart)
+Date: Fri, 2 Jan 2015 14:47:48 +0100
+Subject: [rust-dev] Why .iter() for looping over arrays
+In-Reply-To: <19FC5BAD-8263-4EFD-9F35-D3DD88E8527E@masklinn.net>
+References: <D112DE66-EC6E-47F0-85E4-AECA2D291936@gmail.com>
+	<C3296CD8-CBE1-4834-BD63-91B1C8269F3D@ryanhiebert.com>
+	<19FC5BAD-8263-4EFD-9F35-D3DD88E8527E@masklinn.net>
+Message-ID: <CA58A9CB-2829-44B2-ABF0-BC886F1F92B5@gmail.com>
+
+Thank you all for the information! I don?t know the language well enough to appreciate all the points in the RFC yet but that will come I guess. The only point mentioned in the emails I disagree with so far is the one about which default to use (as in keys or values for maps) since this choice is already made by whatever ?.iter()? is set to. Unless ?.iter()? is not guaranteed to exist for all collections in which case there is additional confusion and lookup required on the part of the user.
+
+> On 01 Jan 2015, at 19:36, Masklinn <masklinn at masklinn.net> wrote:
+> 
+> It'll use both somehow since it can't break existing code. Either by
+> having iterators be iterables (that's how python does it) or by
+> iterating iterables desugaring to iterating the corresponding iterator.
+> 
+> On 2015-01-01, at 15:54 , Ryan Hiebert <ryan at ryanhiebert.com> wrote:
+> 
+>> I asked why there wasn't an Iterable trait in rust, for just this reason, and was informed that the trait would require higher kinded types. I suspect that once those arrive (sometime after 1.0) that for loops may change to use Iterable instead of Iterator.
+>> 
+>> Sent from my iPhone
+>> 
+>>> On Jan 1, 2015, at 4:49 AM, Pim Schellart <p.schellart at gmail.com> wrote:
+>>> 
+>>> Dear Rust developers,
+>>> 
+>>> I have just started using rust so this is obviously a stupid question but I was wondering why .iter() is needed when looping over the elements of an array? In the following example:
+>>> 
+>>>  let a = [1i, 2i, 3i];
+>>> 
+>>>  for e in a.iter() {
+>>>      println!("{}", e);
+>>>  }
+>>> 
+>>> why can?t one simply write:
+>>> 
+>>>  let a = [1i, 2i, 3i];
+>>> 
+>>>  for e in a {
+>>>      println!("{}", e);
+>>>  }
+>>> 
+>>> and have the compiler figure out that ?a? has ?.iter()? and use it? The form without .iter() just feels more natural to me in this case.
+>>> Please feel free to tell me to RTFM or ask this question elsewhere.
+>>> 
+>>> Regards,
+>>> 
+>>> Pim
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From david.henningsson at canonical.com  Thu Jan  1 10:28:57 2015
+From: david.henningsson at canonical.com (David Henningsson)
+Date: Thu, 01 Jan 2015 19:28:57 +0100
+Subject: [rust-dev] Declaring the API unsafe while keeping the internal
+ safety checks
+In-Reply-To: <CAOrN+s6Hez5ejzKOdjDmB2kSLOcn0ZahQnWuUkBvf-vLZc5TXQ@mail.gmail.com>
+References: <CAOrN+s6Hez5ejzKOdjDmB2kSLOcn0ZahQnWuUkBvf-vLZc5TXQ@mail.gmail.com>
+Message-ID: <54A591E9.5020506@canonical.com>
+
+
+
+On 2015-01-01 12:17, Vladimir Pouzanov wrote:
+> I had this idea for some time and I'd like to discuss it to see if it is
+> something reasonable to be proposed for rust to implement or there are
+> other ways around the problem.
+>
+> Let's say I have a low level function that manipulates the hardware
+> clock using some platform-specific argument. Internally this function
+> will do an unsafe volatile mem write to store value in the register, but
+> this is the only part of the code that is unsafe compiler-wise, whatever
+> else is in there in the function is safe and I want the compiler to warn
+> me if any other unsafe operation happens.
+>
+> Now, given that this function is actually unsafe in terms of its
+> realtime consequences (it does not do any validation of the input for
+> speed) I want to mark it as unsafe fn and make a safer wrapper for end
+> users, while keeping this for the little subset of users that will need
+> the actual speed benefits.
+>
+> Unfortunately, marking it unsafe will now allow any other unsafe
+> operation in the body of the function, when what I wanted is just to
+> force users of it to be aware of unsafety via compiler validation.
+
+I would typically do:
+
+#[inline]
+fn do_some_required_computations() { /* execute safe code here */ }
+
+pub unsafe fn set_clock_mode(mode: uint32) {
+     do_some_required_computations();
+     // write the value to mmaped register
+}
+
+That said, I believe Rust's idea of what is "unsafe" is pretty 
+restricted to memory safety, and one would not typically mark things 
+that are unsafe by other means as "unsafe".
+
+>
+> A safe {} block could have helped me in this case. But is it a good idea
+> overall?
+>
+> Some pseudo-code to illustrate
+>
+> pub unsafe fn set_clock_mode(mode: uint32) {
+>    // ...
+>    // doing some required computations
+>    // this code must be 'safe' for the compiler
+>    unsafe {
+>      // ...
+>      // writing the value to mmaped register, this one is unsafe but
+> validated by programmer
+>    }
+> }
+>
+> pub fn set_clock_mode_safe(mode: uint32) -> bool {
+>    // ...
+>    // validate input
+>    unsafe {
+>      // I want this call to require unsafe block
+>      set_clock_mode(mode);
+>    }
+> }
+>
+> --
+> Sincerely,
+> Vladimir "Farcaller" Pouzanov
+> http://farcaller.net/
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+-- 
+David Henningsson, Canonical Ltd.
+https://launchpad.net/~diwic
+
+From p.schellart at gmail.com  Sun Jan  4 01:37:05 2015
+From: p.schellart at gmail.com (Pim Schellart)
+Date: Sun, 4 Jan 2015 10:37:05 +0100
+Subject: [rust-dev] About const
+Message-ID: <E625D388-D87C-4191-B12B-352DC7B923FE@gmail.com>
+
+Dear Rust Developers,
+
+here is another ignorant question so feel free to ignore.
+When reading the guide I came across "std::f64::consts::PI? for pi. Now I was wondering why there are separate constants defined for 32 and 64 bit floats and how this will work with generics. Do you always have to define two functions to work on f32 and f64 or is std::f64::consts::PI cast down to f32 in an equation with 32 bit variables? Is there also a general `typeless? PI (or other fundamental constants), as in Go for example?
+
+Kind Regards,
+
+Pim
+
+From manishsmail at gmail.com  Sun Jan  4 08:21:14 2015
+From: manishsmail at gmail.com (Manish Goregaokar)
+Date: Sun, 4 Jan 2015 21:51:14 +0530
+Subject: [rust-dev] About const
+In-Reply-To: <E625D388-D87C-4191-B12B-352DC7B923FE@gmail.com>
+References: <E625D388-D87C-4191-B12B-352DC7B923FE@gmail.com>
+Message-ID: <CACpkpxnqZuFcU1-TjZDpMe_p+V8+HHtjNchKjUPeLQsHndammg@mail.gmail.com>
+
+We have two types of floats, there is a Pi of both precision levels. I
+don't think it's anything more than that. You should be able to cast
+between the two, but that's it I guess. Rust tries to give explicit control
+over such things.
+
+There is a Float trait (might have been renamed) if you want to use
+generics.
+
+-Manish Goregaokar
+
+On Sun, Jan 4, 2015 at 3:07 PM, Pim Schellart <p.schellart at gmail.com> wrote:
+
+> Dear Rust Developers,
+>
+> here is another ignorant question so feel free to ignore.
+> When reading the guide I came across "std::f64::consts::PI? for pi. Now I
+> was wondering why there are separate constants defined for 32 and 64 bit
+> floats and how this will work with generics. Do you always have to define
+> two functions to work on f32 and f64 or is std::f64::consts::PI cast down
+> to f32 in an equation with 32 bit variables? Is there also a general
+> `typeless? PI (or other fundamental constants), as in Go for example?
+>
+> Kind Regards,
+>
+> Pim
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150104/5ebc9273/attachment.html>
+
+From blastrock0 at free.fr  Sun Jan  4 08:57:53 2015
+From: blastrock0 at free.fr (Philippe Daouadi)
+Date: Sun, 04 Jan 2015 17:57:53 +0100
+Subject: [rust-dev] About const
+In-Reply-To: <CACpkpxnqZuFcU1-TjZDpMe_p+V8+HHtjNchKjUPeLQsHndammg@mail.gmail.com>
+References: <E625D388-D87C-4191-B12B-352DC7B923FE@gmail.com>
+	<CACpkpxnqZuFcU1-TjZDpMe_p+V8+HHtjNchKjUPeLQsHndammg@mail.gmail.com>
+Message-ID: <54A97111.8060607@free.fr>
+
+If you want a generic pi, you should use the one in the Float trait
+
+If you have
+let x : f64 = ...;
+x * Float::pi() will resolve to f64 pi
+
+Philippe
+
+On 01/04/2015 05:21 PM, Manish Goregaokar wrote:
+> We have two types of floats, there is a Pi of both precision levels. I 
+> don't think it's anything more than that. You should be able to cast 
+> between the two, but that's it I guess. Rust tries to give explicit 
+> control over such things.
+>
+> There is a Float trait (might have been renamed) if you want to use 
+> generics.
+>
+> -Manish Goregaokar
+>
+> On Sun, Jan 4, 2015 at 3:07 PM, Pim Schellart <p.schellart at gmail.com 
+> <mailto:p.schellart at gmail.com>> wrote:
+>
+>     Dear Rust Developers,
+>
+>     here is another ignorant question so feel free to ignore.
+>     When reading the guide I came across "std::f64::consts::PI? for
+>     pi. Now I was wondering why there are separate constants defined
+>     for 32 and 64 bit floats and how this will work with generics. Do
+>     you always have to define two functions to work on f32 and f64 or
+>     is std::f64::consts::PI cast down to f32 in an equation with 32
+>     bit variables? Is there also a general `typeless? PI (or other
+>     fundamental constants), as in Go for example?
+>
+>     Kind Regards,
+>
+>     Pim
+>     _______________________________________________
+>     Rust-dev mailing list
+>     Rust-dev at mozilla.org <mailto:Rust-dev at mozilla.org>
+>     https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150104/47645b77/attachment.html>
+
+From p.schellart at gmail.com  Sun Jan  4 09:08:45 2015
+From: p.schellart at gmail.com (Pim Schellart)
+Date: Sun, 4 Jan 2015 18:08:45 +0100
+Subject: [rust-dev] About const
+In-Reply-To: <54A97111.8060607@free.fr>
+References: <E625D388-D87C-4191-B12B-352DC7B923FE@gmail.com>
+	<CACpkpxnqZuFcU1-TjZDpMe_p+V8+HHtjNchKjUPeLQsHndammg@mail.gmail.com>
+	<54A97111.8060607@free.fr>
+Message-ID: <EC47B7AE-6342-45B8-9E81-CA406A8AED7E@gmail.com>
+
+Ok, thanks!
+> On 04 Jan 2015, at 17:57, Philippe Daouadi <blastrock0 at free.fr> wrote:
+> 
+> If you want a generic pi, you should use the one in the Float trait
+> 
+> If you have
+> let x : f64 = ...;
+> x * Float::pi() will resolve to f64 pi
+> 
+> Philippe
+> 
+> On 01/04/2015 05:21 PM, Manish Goregaokar wrote:
+>> We have two types of floats, there is a Pi of both precision levels. I don't think it's anything more than that. You should be able to cast between the two, but that's it I guess. Rust tries to give explicit control over such things.
+>> 
+>> There is a Float trait (might have been renamed) if you want to use generics.
+>> 
+>> -Manish Goregaokar
+>> 
+>> On Sun, Jan 4, 2015 at 3:07 PM, Pim Schellart <p.schellart at gmail.com> wrote:
+>> Dear Rust Developers,
+>> 
+>> here is another ignorant question so feel free to ignore.
+>> When reading the guide I came across "std::f64::consts::PI? for pi. Now I was wondering why there are separate constants defined for 32 and 64 bit floats and how this will work with generics. Do you always have to define two functions to work on f32 and f64 or is std::f64::consts::PI cast down to f32 in an equation with 32 bit variables? Is there also a general `typeless? PI (or other fundamental constants), as in Go for example?
+>> 
+>> Kind Regards,
+>> 
+>> Pim
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>> 
+>> 
+>> 
+>> _______________________________________________
+>> Rust-dev mailing list
+>> 
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+> 
+
+
+From classicning at gmail.com  Mon Jan  5 05:39:36 2015
+From: classicning at gmail.com (Sun Ning)
+Date: Mon, 05 Jan 2015 21:39:36 +0800
+Subject: [rust-dev] ANN: Handlebars rust implementation
+Message-ID: <54AA9418.2060709@gmail.com>
+
+Hi all,
+
+I'm glad to announce my first serious rust project handlebars-rust. It's 
+mainly for server-side templating in web development. But you can also 
+use it anywhere if you need to generate some text from a programmable 
+template.
+
+Handlebars-rust is going to push rust one more step near web-ready. It 
+works with iron as a middleware, and should work with any other web 
+framework in theory.
+
+Before rust, I'm a clojure and java developer. Rust is my first 
+programming language that touches bare metal. So any code-review and 
+pull request are welcomed. After all, I hope this project could help you 
+to kick-off rust development more easily with current web stack. Thanks!
+
+git repo: https://github.com/sunng87/handlebars-rust
+crate name: handlebars
+documents: https://sunng.info/handlebars-rust/
+iron example: 
+https://github.com/sunng87/handlebars-rust/blob/feature/iron/examples/iron.rs
+(I will eventually make the iron middleware a standalone module with 
+auto-reload and template scan. Currently it's still a little difficult 
+to get iron compiled because of upstream breaking changes.)
+
+- Ning
+
+From kainino1 at gmail.com  Mon Jan  5 15:27:02 2015
+From: kainino1 at gmail.com (Kai Ninomiya)
+Date: Mon, 5 Jan 2015 18:27:02 -0500
+Subject: [rust-dev] ANN: Handlebars rust implementation
+Message-ID: <CAGsP9Q-rF_rc=PEvg6dqnhXfWAd=a1h1ScS+RE9O2d+efK8sLw@mail.gmail.com>
+
+> I'm glad to announce my first serious rust project handlebars-rust. It's
+> mainly for server-side templating in web development. But you can also
+> use it anywhere if you need to generate some text from a programmable
+> template.
+
+You might want to add it to Rust-CI so that it will be found by people
+looking for template engines:
+
+http://rust-ci.org/projects/#template%20engine
+
+From pnathan.software at gmail.com  Tue Jan  6 23:32:59 2015
+From: pnathan.software at gmail.com (Paul Nathan)
+Date: Tue, 6 Jan 2015 23:32:59 -0800
+Subject: [rust-dev] ARM/pi build scripts?
+Message-ID: <CALXzQZjrBMXoR5CioMgtYCotCS2LSFqcGwuLRttXUF411-zX7Q@mail.gmail.com>
+
+Hi,
+
+Some time ago I chatted with Luqman on the irc channel about the ARM
+building of Rust for the Raspberry Pi. I spent a bit of time working on
+creating some scripts to do such a build (it requires a cross compile,
+etc), but didn't get them to a good point.
+
+What's the current state here?  I've been contemplating putting together a
+Vagrant system that would allow a replicatable build of the HEAD of rust
+for the Pi, but the work involved in correctly tuning the cross compile
+kind of brings me down.
+
+Thanks,
+Paul
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150106/be7287db/attachment.html>
+
+From spastorino at gmail.com  Thu Jan  8 08:24:41 2015
+From: spastorino at gmail.com (Santiago Pastorino)
+Date: Thu, 8 Jan 2015 14:24:41 -0200
+Subject: [rust-dev] rustbyexample.com's failing example due to changes in
+	nightly
+Message-ID: <CAKecwXDhEoXFCp1KM+OXZkKAHpJy5=1EgmvPaJHx8t2B+8-AFA@mail.gmail.com>
+
+Hi everyone,
+
+  I was looking at rustbyexample and found that some examples are not
+working using the latest nighly Rust compiler. I've fixed one example
+https://github.com/rust-lang/rust-by-example/pull/371 already merged
+and now was looking at this one http://rustbyexample.com/bounds.html.
+
+I tried to fix that one, did this
+https://gist.github.com/spastorino/6873dc7f371fb0fa7651/6d1880070520bb60e4238d5dc936ba775f8d9519
+but I get some errors as you can see in errors.log and I wonder what's
+going on there.
+
+Then tried a different approach and got it working as you can see here
+https://gist.github.com/spastorino/6873dc7f371fb0fa7651/853948c74f4f57fa924fc3ea635b599c6b7d7078
+
+I wonder what's going on, I think the first code should be working but
+unsure why it is not.
+
+Thanks.
+
+From spastorino at gmail.com  Thu Jan  8 10:28:29 2015
+From: spastorino at gmail.com (Santiago Pastorino)
+Date: Thu, 8 Jan 2015 16:28:29 -0200
+Subject: [rust-dev] rustbyexample.com's failing example due to changes
+	in nightly
+In-Reply-To: <CAKecwXDhEoXFCp1KM+OXZkKAHpJy5=1EgmvPaJHx8t2B+8-AFA@mail.gmail.com>
+References: <CAKecwXDhEoXFCp1KM+OXZkKAHpJy5=1EgmvPaJHx8t2B+8-AFA@mail.gmail.com>
+Message-ID: <CAKecwXAgXgttXpW01fNJAXsVLR5xc--2uvnCPKzvEznXHw96kg@mail.gmail.com>
+
+Ok, with wycats point me out to the issue and got it working.
+
+You can see the diff here
+https://gist.github.com/spastorino/a286f296a850b8ea5d0f/revisions
+
+PR to rustbyexample sent ...
+https://github.com/rust-lang/rust-by-example/pull/374
+
+On Thu, Jan 8, 2015 at 2:24 PM, Santiago Pastorino <spastorino at gmail.com> wrote:
+> Hi everyone,
+>
+>   I was looking at rustbyexample and found that some examples are not
+> working using the latest nighly Rust compiler. I've fixed one example
+> https://github.com/rust-lang/rust-by-example/pull/371 already merged
+> and now was looking at this one http://rustbyexample.com/bounds.html.
+>
+> I tried to fix that one, did this
+> https://gist.github.com/spastorino/6873dc7f371fb0fa7651/6d1880070520bb60e4238d5dc936ba775f8d9519
+> but I get some errors as you can see in errors.log and I wonder what's
+> going on there.
+>
+> Then tried a different approach and got it working as you can see here
+> https://gist.github.com/spastorino/6873dc7f371fb0fa7651/853948c74f4f57fa924fc3ea635b599c6b7d7078
+>
+> I wonder what's going on, I think the first code should be working but
+> unsure why it is not.
+>
+> Thanks.
+
+From farcaller at gmail.com  Sat Jan 10 16:33:17 2015
+From: farcaller at gmail.com (Vladimir Pouzanov)
+Date: Sun, 11 Jan 2015 00:33:17 +0000
+Subject: [rust-dev] Cross-compilation with plugins is effectively dead?
+Message-ID: <CAOrN+s4rACoqG4QCP1Rs9U5wSM3q=8fda+BrtGG3HYswV3uK_w@mail.gmail.com>
+
+I have some concerns related to
+https://github.com/rust-lang/rust/issues/18699 and I'd like to get some
+advice from the team.
+
+Support for cross-compiling code with plugins was broken for a few months
+now for anything but linux. Finally it seems to be broken for linux as well
+halting all our efforts.
+
+How important is cross-compilation support for rust at all? zinc is barely
+the only embedded project based on rust but we do use plugins and macros
+extensively throughout the code and we can't just stop using them,
+unfortunately; so for us any breakage of plugins system is a halt. We can
+deal with internal libs changing syntax but fixing up compiler itself is
+not that easy.
+
+Any chance we'll see it fixed before 1.0 hits?
+
+-- 
+Sincerely,
+Vladimir "Farcaller" Pouzanov
+http://farcaller.net/
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150111/06f50fd6/attachment.html>
+
+From banderson at mozilla.com  Sat Jan 10 16:56:10 2015
+From: banderson at mozilla.com (Brian Anderson)
+Date: Sat, 10 Jan 2015 16:56:10 -0800
+Subject: [rust-dev] Cross-compilation with plugins is effectively dead?
+In-Reply-To: <CAOrN+s4rACoqG4QCP1Rs9U5wSM3q=8fda+BrtGG3HYswV3uK_w@mail.gmail.com>
+References: <CAOrN+s4rACoqG4QCP1Rs9U5wSM3q=8fda+BrtGG3HYswV3uK_w@mail.gmail.com>
+Message-ID: <CABtDyP2LnfOe2mXkTX69uxY35DB3ZNCPtVxXoNRjkzHEdrXZ+Q@mail.gmail.com>
+
+I'm not familiar with this bug, but cross-compilation is very important to
+Rust and I do consider this a real bug.
+
+On Sat, Jan 10, 2015 at 4:33 PM, Vladimir Pouzanov <farcaller at gmail.com>
+wrote:
+
+> I have some concerns related to
+> https://github.com/rust-lang/rust/issues/18699 and I'd like to get some
+> advice from the team.
+>
+> Support for cross-compiling code with plugins was broken for a few months
+> now for anything but linux. Finally it seems to be broken for linux as well
+> halting all our efforts.
+>
+> How important is cross-compilation support for rust at all? zinc is barely
+> the only embedded project based on rust but we do use plugins and macros
+> extensively throughout the code and we can't just stop using them,
+> unfortunately; so for us any breakage of plugins system is a halt. We can
+> deal with internal libs changing syntax but fixing up compiler itself is
+> not that easy.
+>
+> Any chance we'll see it fixed before 1.0 hits?
+>
+> --
+> Sincerely,
+> Vladimir "Farcaller" Pouzanov
+> http://farcaller.net/
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150110/ebf95082/attachment.html>
+
+From mayuresh at kathe.in  Sat Jan 10 17:59:38 2015
+From: mayuresh at kathe.in (Mayuresh Kathe)
+Date: Sun, 11 Jan 2015 07:29:38 +0530
+Subject: [rust-dev] is rust an 'oopl'?
+Message-ID: <20150111015937.GA3775@hp-18-5019il>
+
+hello,
+
+i am an absolute newbie to rust.
+
+is rust an object-oriented programming language?
+
+i ask because i detest 'oo', and am looking for something better than
+"c".
+
+thanks,
+
+~mayuresh
+
+
+From matthieu.monrocq at gmail.com  Sun Jan 11 03:51:14 2015
+From: matthieu.monrocq at gmail.com (Matthieu Monrocq)
+Date: Sun, 11 Jan 2015 12:51:14 +0100
+Subject: [rust-dev] is rust an 'oopl'?
+In-Reply-To: <20150111015937.GA3775@hp-18-5019il>
+References: <20150111015937.GA3775@hp-18-5019il>
+Message-ID: <CAKE6Rfgg_oHn3jrLFOz_xPUjDiWH7Jswf7kfey=51KZ_8Wsq0A@mail.gmail.com>
+
+Hello Mayuresh,
+
+The problem with your question is dual:
+
+ - OO itself is a fairly overloaded term, and it is unclear what definition
+you use for it: Alan Kay's original? The presence of inheritance? ...
+ - Just because a language supports OO concepts does not mean that it ONLY
+supports OO concepts, many languages are multi-paradigms and can be used
+for procedural programming, object-oriented programming (in a loose sense
+given the loose definition in practice), generic programming, functional
+programming, ...
+
+Rust happens to be a multi-paradigms language. It supports some, but not
+all, object-oriented concepts, but also thrives with free functions and
+generic functions and supports functional programming expressiveness (but
+not purity concepts).
+
+I would also note that I have C striving to achieve some OO concepts
+(opaque pointers for encapsulation, virtual-dispatch through manually
+written virtual-tables, ...), some even in C you cannot necessarily avoid
+the OO paradigm, depending on the libraries you use.
+
+Is Rust a good language for you? Maybe!
+
+The only way for you to know is to give it a spin.
+
+Have a nice day.
+
+-- Matthieu
+
+On Sun, Jan 11, 2015 at 2:59 AM, Mayuresh Kathe <mayuresh at kathe.in> wrote:
+
+> hello,
+>
+> i am an absolute newbie to rust.
+>
+> is rust an object-oriented programming language?
+>
+> i ask because i detest 'oo', and am looking for something better than
+> "c".
+>
+> thanks,
+>
+> ~mayuresh
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150111/16eb24dd/attachment.html>
+
+From j.wielicki at sotecware.net  Sun Jan 11 04:00:12 2015
+From: j.wielicki at sotecware.net (Jonas Wielicki)
+Date: Sun, 11 Jan 2015 13:00:12 +0100
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <CABq6+ad7K2Xp4Ki+86pL8iYAmUrNxXvaPEWa-3--0iYEn=xjFQ@mail.gmail.com>
+References: <20141227165300.GH17441@shirio>
+	<1419699725864.773764b5@Nodemailer>	<CALXzQZjzBkN+AB4LGKY+xn+djwdBKO4ngq=rQU4==+HasuFtxw@mail.gmail.com>	<CACHGWmuyf-LCU8f4YJGnkArH33TNJ8137xW-opEoUMFXVdXapw@mail.gmail.com>
+	<CABq6+ad7K2Xp4Ki+86pL8iYAmUrNxXvaPEWa-3--0iYEn=xjFQ@mail.gmail.com>
+Message-ID: <54B265CC.3060507@sotecware.net>
+
+Seconding the arguments of others arguing *for* a mailing list.
+
+On 29.12.2014 22:02, Kevin Cantu wrote:
+> It had gotten pretty clear that having a catch-all mailing list wasn't
+> going to scale.
+
+Python also uses mailing lists as the primary communication medium. The
+main three lists are: python-dev (for developers, discussing the advance
+of the language), python-ideas (for anyone, suggesting and discussing
+ideas which the devs might take into account) and python-list (for
+anyone, discussing about any python-specific issue). Of these, only
+python-list is *very* high traffic with very diverse topics.
+python-ideas is also high traffic but only with a few topics going on at
+a given time. This makes it easy to mentally filter and follow what
+happens. Same goes for python-dev, but it generally has less traffic
+than python-ideas.
+
+For several topics there exist sublists (e.g. the C++ special interest
+group), which are generally very low to medium traffic.
+
+I cannot see why rust would not be able to follow this approach, too,
+but instead suggesting people to use $website [1]. *That* is not going
+to scale, for the individuals. It is trivial to track several projects
+using a well-configured mailbox or mail client, but polling N websites
+every M minutes (for varying values of M) is quite cumbersome.
+
+I say that having tested the discourse mail interface for a few days
+now. I find it much harder to read than a well-behaved mailing list. It
+is basically 100% top-posting without threading. Very uncomfortable to
+read and follow.
+
+But who am I to complain. I am merely interested in a new upcoming
+language and have not much to contribute.
+
+regards,
+jwi
+
+   [1]: Not to mention that that website requires unauthentictaed
+        JavaScript from third party servers for log in.
+
+
+From mayuresh at kathe.in  Sun Jan 11 05:17:46 2015
+From: mayuresh at kathe.in (Mayuresh Kathe)
+Date: Sun, 11 Jan 2015 18:47:46 +0530
+Subject: [rust-dev] =?utf-8?q?is_rust_an_=27oopl=27=3F?=
+In-Reply-To: <CAKE6Rfgg_oHn3jrLFOz_xPUjDiWH7Jswf7kfey=51KZ_8Wsq0A@mail.gmail.com>
+References: <20150111015937.GA3775@hp-18-5019il>
+	<CAKE6Rfgg_oHn3jrLFOz_xPUjDiWH7Jswf7kfey=51KZ_8Wsq0A@mail.gmail.com>
+Message-ID: <e7a94b21c00e4ad188326095dcc1a09f@kathe.in>
+
+hello matthieu,
+
+thanks for responding.
+
+you mentioned that "rust" supports some object-oriented concepts.
+may i know which?
+
+also, deviating a bit off-topic, would a decent grasp of functional 
+programming be a pre-requisite to learning "rust"?
+
+thanks,
+
+~mayuresh
+
+
+
+On 2015-01-11 17:21, Matthieu Monrocq wrote:
+> Hello Mayuresh,
+> 
+> The problem with your question is dual:
+> 
+> ?- OO itself is a fairly overloaded term, and it is unclear what
+> definition you use for it: Alan Kay's original? The presence of
+> inheritance? ...
+> ?- Just because a language supports OO concepts does not mean that it
+> ONLY supports OO concepts, many languages are multi-paradigms and can
+> be used for procedural programming, object-oriented programming (in a
+> loose sense given the loose definition in practice), generic
+> programming, functional programming, ...
+> 
+> Rust happens to be a multi-paradigms language. It supports some, but
+> not all, object-oriented concepts, but also thrives with free
+> functions and generic functions and supports functional programming
+> expressiveness (but not purity concepts).
+> 
+> I would also note that I have C striving to achieve some OO concepts
+> (opaque pointers for encapsulation, virtual-dispatch through manually
+> written virtual-tables, ...), some even in C you cannot necessarily
+> avoid the OO paradigm, depending on the libraries you use.
+> 
+> Is Rust a good language for you? Maybe!
+> 
+> The only way for you to know is to give it a spin.
+> 
+> Have a nice day.
+> 
+> -- Matthieu
+> 
+> On Sun, Jan 11, 2015 at 2:59 AM, Mayuresh Kathe <mayuresh at kathe.in>
+> wrote:
+> 
+>> hello,
+>> 
+>> i am an absolute newbie to rust.
+>> 
+>> is rust an object-oriented programming language?
+>> 
+>> i ask because i detest 'oo', and am looking for something better
+>> than
+>> "c".
+>> 
+>> thanks,
+>> 
+>> ~mayuresh
+
+
+From mayuresh at kathe.in  Sun Jan 11 05:54:51 2015
+From: mayuresh at kathe.in (Mayuresh Kathe)
+Date: Sun, 11 Jan 2015 19:24:51 +0530
+Subject: [rust-dev] =?utf-8?q?is_rust_an_=27oopl=27=3F?=
+In-Reply-To: <CACVSexm8kd8EnVktrukpu3PivqsWvxSEEcEFC9p2xqzFf8Ea3g@mail.gmail.com>
+References: <20150111015937.GA3775@hp-18-5019il>
+	<CAKE6Rfgg_oHn3jrLFOz_xPUjDiWH7Jswf7kfey=51KZ_8Wsq0A@mail.gmail.com>
+	<e7a94b21c00e4ad188326095dcc1a09f@kathe.in>
+	<CACVSexk_osW3YDH_qiBASFohVcWpgE59s34e7+7Uy7D-RDGF+A@mail.gmail.com>
+	<CACVSexm8kd8EnVktrukpu3PivqsWvxSEEcEFC9p2xqzFf8Ea3g@mail.gmail.com>
+Message-ID: <85bb58e4c3c10fc793e68761ec167eca@kathe.in>
+
+whew, that was an exhaustive explanation, thanks for taking the efforts 
+to write in the detailed response.
+
+i realised one thing, the best way to learn "rust" would be to not have 
+any preconceived notions about it, as well as to take things a bit easy 
+and learn the language as it is, one morsel at a time.
+
+~mayuresh
+
+
+On 2015-01-11 19:17, Kevin McGuire wrote:
+> Oh, hell. I forgot about Option<T>.
+> 
+> You see also in Rust nothing can be uninitialized! Unless you use
+> unsafe code. This little type is your friend. It gives you the
+> equivalent of uninitialized data. So take some time and research it or
+> play around with it.
+> 
+> On Sun, Jan 11, 2015 at 7:43 AM, Kevin McGuire <kmcg3413 at gmail.com>
+> wrote:
+> 
+>> I can not answer very well about the OO capabilities of Rust since
+>> it is hard to define, but Rust does support:
+>> 
+>> methods of a type/structure that take a special _self _argument
+>> 
+>> traits which are like interfaces that any type/structure can
+>> implement
+>> 
+>> operator overloads like + for one
+>> 
+>> There is no inheritance at the moment although you can get a kind of
+>> hack version of it using the Deref trait on an object. The Deref is
+>> mostly used by smart pointers. The smart pointer type wraps your
+>> inner type and then allows access to the inner type through the
+>> de-reference support of Deref.
+>> 
+>> The only other object like feel is of the namespace system.
+>> 
+>> In Rust everything has the capability to have a method although the
+>> primitive types are kind of special.
+>> 
+>> Also I have seen and used an operator overload for a structure once
+>> so I know it has that ability now which I think may have been fairly
+>> recent.
+>> 
+>> So Rust is capable of some object oriented programming. You do not
+>> have to do object oriented programming.
+>> 
+>> Also, the per-requisites for Rust - Yes functional programming would
+>> be just fine. I am going to go ahead and tell you where you may
+>> struggle with learning Rust.
+>> 
+>> The major problem you will have is coming to understand ownership
+>> and lifetimes. These two things are what makes Rust memory safe and
+>> are fantastic however at first they will seem like a curse. You
+>> might even give up on Rust because they will make writing code
+>> difficult at first.
+>> 
+>> The second problem you are going to have is feeling a little lost as
+>> to how to allocate memory during run-time and also you will feel
+>> very confused as how to overcome lifetime limitations by your
+>> limited knowledge of the pointer types.
+>> 
+>> _These two problems you are going to face no matter what language
+>> you have come from._
+>> 
+>> To help you first I would like to to take note of Box<T> and Rc<T>.
+>> Do not worry about understanding them. Just keep them in the back of
+>> your head. The first is Box<T> and the next is Rc<T>. There is
+>> another one called Arc<T> for data to be shared by threads. Okay..
+>> 
+>> Also, a quick word on ownership. Everything is owned. What being
+>> owned is that everything has a home. Some types are Copy which means
+>> when you assign them somewhere else they are copied byte for byte.
+>> Your native primitives like integers are copyable. The problem you
+>> will encounter is when you work with non-copyable types which are
+>> abundant. At first you might want to curse the fact that a type is
+>> not copyable but it is a very powerful feature not a hindrance.
+>> 
+>> If a type is not copyable and you assign it or pass it into a
+>> function by value (sort of speak) you will cause a _move _to happen.
+>> A move is part of the ownership system. Think of moving an argument
+>> into a function as the function sort of consumes the argument. It
+>> leaves it's original home and moves into the function. The function
+>> now owns the argument. Also keep in mind that the function can move
+>> the type back out through the return value and you could place it
+>> back in it's original home.
+>> 
+>> Okay, so now you will run into the situation where you want to have
+>> an instance of a type stored in more than one place? Well, you have
+>> two options. If the type supports Clone you can call the clone
+>> method and produce a duplicate. The exact way clone works is very
+>> specific to the type. It might create a completely separate type or
+>> the two might still be linked. Do not worry at the moment as this
+>> will become evident as you learn Rust.
+>> 
+>> Just keep in mind that for non-copyable types or types in which you
+>> do not want a copy you can create a smart-pointer to manage them:
+>> 
+>> let pointer = Rc::new(myothervar);
+>> 
+>> let secondhome = pointer.clone();
+>> 
+>> myfunction(secondhome);
+>> 
+>> Also to note you will find the smart-pointer clunky and you will be
+>> confused as how to write libraries or make a good API for your
+>> application. I would like to leave you with one more concept. You
+>> will find passin Rc<MyType> around cumbersome. To remedy this you
+>> can learn the pattern of making MyType wrap the Rc so the Rc is
+>> internal to it. So your API will pass around MyType instead.
+>> 
+>> Okay, sorry for such a long mail. I just hope this little tips and
+>> things can help you instead of making you quit leaving a bitter
+>> taste for Rust!
+>> 
+>> On Sun, Jan 11, 2015 at 7:17 AM, Mayuresh Kathe <mayuresh at kathe.in>
+>> wrote:
+>> hello matthieu,
+>> 
+>> thanks for responding.
+>> 
+>> you mentioned that "rust" supports some object-oriented concepts.
+>> may i know which?
+>> 
+>> also, deviating a bit off-topic, would a decent grasp of functional
+>> programming be a pre-requisite to learning "rust"?
+>> 
+>> thanks,
+>> 
+>> ~mayuresh
+>> 
+>> On 2015-01-11 17:21, Matthieu Monrocq wrote:
+>> Hello Mayuresh,
+>> 
+>> The problem with your question is dual:
+>> 
+>> ?- OO itself is a fairly overloaded term, and it is unclear what
+>> definition you use for it: Alan Kay's original? The presence of
+>> inheritance? ...
+>> ?- Just because a language supports OO concepts does not mean that
+>> it
+>> ONLY supports OO concepts, many languages are multi-paradigms and
+>> can
+>> be used for procedural programming, object-oriented programming (in
+>> a
+>> loose sense given the loose definition in practice), generic
+>> programming, functional programming, ...
+>> 
+>> Rust happens to be a multi-paradigms language. It supports some,
+>> but
+>> not all, object-oriented concepts, but also thrives with free
+>> functions and generic functions and supports functional programming
+>> expressiveness (but not purity concepts).
+>> 
+>> I would also note that I have C striving to achieve some OO
+>> concepts
+>> (opaque pointers for encapsulation, virtual-dispatch through
+>> manually
+>> written virtual-tables, ...), some even in C you cannot necessarily
+>> avoid the OO paradigm, depending on the libraries you use.
+>> 
+>> Is Rust a good language for you? Maybe!
+>> 
+>> The only way for you to know is to give it a spin.
+>> 
+>> Have a nice day.
+>> 
+>> -- Matthieu
+>> 
+>> On Sun, Jan 11, 2015 at 2:59 AM, Mayuresh Kathe <mayuresh at kathe.in>
+>> wrote:
+>> 
+>> hello,
+>> 
+>> i am an absolute newbie to rust.
+>> 
+>> is rust an object-oriented programming language?
+>> 
+>> i ask because i detest 'oo', and am looking for something better
+>> than
+>> "c".
+>> 
+>> thanks,
+>> 
+>> ~mayuresh
+> 
+>  _______________________________________________
+>  Rust-dev mailing list
+>  Rust-dev at mozilla.org
+>  https://mail.mozilla.org/listinfo/rust-dev [1]
+> 
+> 
+> 
+> Links:
+> ------
+> [1] https://mail.mozilla.org/listinfo/rust-dev
+
+From tom.browder at gmail.com  Sun Jan 11 18:27:54 2015
+From: tom.browder at gmail.com (Tom Browder)
+Date: Sun, 11 Jan 2015 20:27:54 -0600
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <54B265CC.3060507@sotecware.net>
+References: <20141227165300.GH17441@shirio> <1419699725864.773764b5@Nodemailer>
+	<CALXzQZjzBkN+AB4LGKY+xn+djwdBKO4ngq=rQU4==+HasuFtxw@mail.gmail.com>
+	<CACHGWmuyf-LCU8f4YJGnkArH33TNJ8137xW-opEoUMFXVdXapw@mail.gmail.com>
+	<CABq6+ad7K2Xp4Ki+86pL8iYAmUrNxXvaPEWa-3--0iYEn=xjFQ@mail.gmail.com>
+	<54B265CC.3060507@sotecware.net>
+Message-ID: <CAFMGiz-TxrCF8b5nt17NGjiEszxJNRZ4Ab0+FggYe2H71_YCxg@mail.gmail.com>
+
+On Sun, Jan 11, 2015 at 6:00 AM, Jonas Wielicki
+<j.wielicki at sotecware.net> wrote:
+> Seconding the arguments of others arguing *for* a mailing list.
+
++1
+
+-Tom
+
+From pnathan.software at gmail.com  Sun Jan 11 18:47:11 2015
+From: pnathan.software at gmail.com (Paul Nathan)
+Date: Sun, 11 Jan 2015 18:47:11 -0800
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <CAFMGiz-TxrCF8b5nt17NGjiEszxJNRZ4Ab0+FggYe2H71_YCxg@mail.gmail.com>
+References: <20141227165300.GH17441@shirio> <1419699725864.773764b5@Nodemailer>
+	<CALXzQZjzBkN+AB4LGKY+xn+djwdBKO4ngq=rQU4==+HasuFtxw@mail.gmail.com>
+	<CACHGWmuyf-LCU8f4YJGnkArH33TNJ8137xW-opEoUMFXVdXapw@mail.gmail.com>
+	<CABq6+ad7K2Xp4Ki+86pL8iYAmUrNxXvaPEWa-3--0iYEn=xjFQ@mail.gmail.com>
+	<54B265CC.3060507@sotecware.net>
+	<CAFMGiz-TxrCF8b5nt17NGjiEszxJNRZ4Ab0+FggYe2H71_YCxg@mail.gmail.com>
+Message-ID: <CALXzQZhx2OWiDWg_nsrD0=MAaV6MvUMSS3RT35E4bQZ1g4cxCw@mail.gmail.com>
+
++1 for mailing lists. Can't stand discourse myself.
+On Jan 11, 2015 6:28 PM, "Tom Browder" <tom.browder at gmail.com> wrote:
+
+> On Sun, Jan 11, 2015 at 6:00 AM, Jonas Wielicki
+> <j.wielicki at sotecware.net> wrote:
+> > Seconding the arguments of others arguing *for* a mailing list.
+>
+> +1
+>
+> -Tom
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150111/12179627/attachment.html>
+
+From kmcg3413 at gmail.com  Mon Jan 12 04:09:17 2015
+From: kmcg3413 at gmail.com (Kevin McGuire)
+Date: Mon, 12 Jan 2015 06:09:17 -0600
+Subject: [rust-dev] Rust discourse visibility [Was: Tail call
+	compatibility]
+In-Reply-To: <CALXzQZhx2OWiDWg_nsrD0=MAaV6MvUMSS3RT35E4bQZ1g4cxCw@mail.gmail.com>
+References: <20141227165300.GH17441@shirio> <1419699725864.773764b5@Nodemailer>
+	<CALXzQZjzBkN+AB4LGKY+xn+djwdBKO4ngq=rQU4==+HasuFtxw@mail.gmail.com>
+	<CACHGWmuyf-LCU8f4YJGnkArH33TNJ8137xW-opEoUMFXVdXapw@mail.gmail.com>
+	<CABq6+ad7K2Xp4Ki+86pL8iYAmUrNxXvaPEWa-3--0iYEn=xjFQ@mail.gmail.com>
+	<54B265CC.3060507@sotecware.net>
+	<CAFMGiz-TxrCF8b5nt17NGjiEszxJNRZ4Ab0+FggYe2H71_YCxg@mail.gmail.com>
+	<CALXzQZhx2OWiDWg_nsrD0=MAaV6MvUMSS3RT35E4bQZ1g4cxCw@mail.gmail.com>
+Message-ID: <CACVSexm4dOzsVs+Og7xqDJ=t7siAnKVEnMNahuu4DewtOTCE9A@mail.gmail.com>
+
++1
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150112/7a30d0cf/attachment.html>
+
+From hammer at cs.umd.edu  Mon Jan 12 09:12:54 2015
+From: hammer at cs.umd.edu (Matthew Hammer)
+Date: Mon, 12 Jan 2015 12:12:54 -0500
+Subject: [rust-dev] Find first set
+Message-ID: <A97AE590-8B3C-4AE4-B1AB-F6666FEE559F@cs.umd.edu>
+
+Hi Rust Developers,
+
+I?m in need of this bit-level operation:
+
+  http://en.wikipedia.org/wiki/Find_first_set <http://en.wikipedia.org/wiki/Find_first_set>
+
+I?m happy to implement it as a loop, but it seems like many architectures support it directly, as does libc.
+
+Does anyone know if this is implemented in the Rust standard library or among the current primitives?
+
+Searching for ?ffs? in the source tree got me nowhere.
+
+Thanks,
+-Matt
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150112/be3a4163/attachment.html>
+
+From kmcg3413 at gmail.com  Mon Jan 12 09:17:59 2015
+From: kmcg3413 at gmail.com (Kevin McGuire)
+Date: Mon, 12 Jan 2015 11:17:59 -0600
+Subject: [rust-dev] Find first set
+In-Reply-To: <A97AE590-8B3C-4AE4-B1AB-F6666FEE559F@cs.umd.edu>
+References: <A97AE590-8B3C-4AE4-B1AB-F6666FEE559F@cs.umd.edu>
+Message-ID: <CACVSexkCOuYXuSjiPe_8qY=sisfLXDaVsHmvT2FjvfWRhTVUnA@mail.gmail.com>
+
+On Mon, Jan 12, 2015 at 11:12 AM, Matthew Hammer <hammer at cs.umd.edu> wrote:
+> Hi Rust Developers,
+> I?m in need of this bit-level operation:
+>
+>   http://en.wikipedia.org/wiki/Find_first_set
+>
+> I?m happy to implement it as a loop, but it seems like many architectures
+> support it directly, as does libc.
+>
+> Does anyone know if this is implemented in the Rust standard library or
+> among the current primitives?
+>
+> Searching for ?ffs? in the source tree got me nowhere.
+>
+> Thanks,
+> -Matt
+
+I know that there have been people who have brought this to attention.
+I know there is likely someone who has written a solution, but I can
+not remember where it was located.
+
+I do remember that it involved the usage of inline assembly and
+#[cfg()] directives. It essentially provided a general implementation
+that worked everywhere, then it provided implementations specific to a
+certain architecture. By using the config attribute one could toggle
+between the generic or architecture specific method being implemented
+and thus callable.
+
+I do not know for certain if it is or is not implemented in the
+standard library, but I have the feeling that it is not. I tried to
+look for it but failed.
+
+From peter at taricorp.net  Mon Jan 12 09:44:08 2015
+From: peter at taricorp.net (Peter Marheine)
+Date: Mon, 12 Jan 2015 10:44:08 -0700
+Subject: [rust-dev] Find first set
+In-Reply-To: <CACVSexkCOuYXuSjiPe_8qY=sisfLXDaVsHmvT2FjvfWRhTVUnA@mail.gmail.com>
+References: <A97AE590-8B3C-4AE4-B1AB-F6666FEE559F@cs.umd.edu>
+	<CACVSexkCOuYXuSjiPe_8qY=sisfLXDaVsHmvT2FjvfWRhTVUnA@mail.gmail.com>
+Message-ID: <CACvadSW5tRgea=_WD1SiFQwrkz=VSRoD5_xmxwHUWwxYnmv+yw@mail.gmail.com>
+
+You can express ffs in terms of nlz, which is available as
+Int::leading_zeros and appears to be implemented with LLVM intrinsics
+for most types.
+
+On Mon, Jan 12, 2015 at 10:17 AM, Kevin McGuire <kmcg3413 at gmail.com> wrote:
+> On Mon, Jan 12, 2015 at 11:12 AM, Matthew Hammer <hammer at cs.umd.edu> wrote:
+>> Hi Rust Developers,
+>> I?m in need of this bit-level operation:
+>>
+>>   http://en.wikipedia.org/wiki/Find_first_set
+>>
+>> I?m happy to implement it as a loop, but it seems like many architectures
+>> support it directly, as does libc.
+>>
+>> Does anyone know if this is implemented in the Rust standard library or
+>> among the current primitives?
+>>
+>> Searching for ?ffs? in the source tree got me nowhere.
+>>
+>> Thanks,
+>> -Matt
+>
+> I know that there have been people who have brought this to attention.
+> I know there is likely someone who has written a solution, but I can
+> not remember where it was located.
+>
+> I do remember that it involved the usage of inline assembly and
+> #[cfg()] directives. It essentially provided a general implementation
+> that worked everywhere, then it provided implementations specific to a
+> certain architecture. By using the config attribute one could toggle
+> between the generic or architecture specific method being implemented
+> and thus callable.
+>
+> I do not know for certain if it is or is not implemented in the
+> standard library, but I have the feeling that it is not. I tried to
+> look for it but failed.
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+
+-- 
+Peter Marheine
+Don't Panic
+
+From matthieu.monrocq at gmail.com  Mon Jan 12 10:05:31 2015
+From: matthieu.monrocq at gmail.com (Matthieu Monrocq)
+Date: Mon, 12 Jan 2015 19:05:31 +0100
+Subject: [rust-dev] is rust an 'oopl'?
+In-Reply-To: <85bb58e4c3c10fc793e68761ec167eca@kathe.in>
+References: <20150111015937.GA3775@hp-18-5019il>
+	<CAKE6Rfgg_oHn3jrLFOz_xPUjDiWH7Jswf7kfey=51KZ_8Wsq0A@mail.gmail.com>
+	<e7a94b21c00e4ad188326095dcc1a09f@kathe.in>
+	<CACVSexk_osW3YDH_qiBASFohVcWpgE59s34e7+7Uy7D-RDGF+A@mail.gmail.com>
+	<CACVSexm8kd8EnVktrukpu3PivqsWvxSEEcEFC9p2xqzFf8Ea3g@mail.gmail.com>
+	<85bb58e4c3c10fc793e68761ec167eca@kathe.in>
+Message-ID: <CAKE6RfgC1hYuRtuZJRTgsA-NJ8v6nE4UWo2KmqSCvsmiuDJxQA@mail.gmail.com>
+
+Hello,
+
+The main feature of OOP that Rust supports is polymorphism, though it is
+achieved via type-classes rather inheritance (*). It also features
+encapsulation, but it may have existed before OOP so it's hard to view it
+as an OOP-feature...
+
+Regarding the need to learn functional programming first, I would actually
+see it the other way around: by learning Rust, you will learn a number of
+functional programming concepts/idioms that may pick your interest in
+learning more functionally oriented languages. I do not think that prior
+exposure is required, but then I had already prior exposure so may not be
+the best qualified here.
+
+Try it out! It just takes 30min to read the Introduction:
+http://doc.rust-lang.org/intro.html and you'll know if you wish to dig
+further or if it's not for you yet.
+
+
+(*) For the uninitiated, this means that the creator of a type does not
+hardcode the list of interfaces its type support, but rather you can create
+your own interface and implement it yourself for a 3rd party type. You can
+also of course implement a 3rd party interface for your own type, but that
+is already supported in Java-like OO.
+
+
+On Sun, Jan 11, 2015 at 2:54 PM, Mayuresh Kathe <mayuresh at kathe.in> wrote:
+
+> whew, that was an exhaustive explanation, thanks for taking the efforts to
+> write in the detailed response.
+>
+> i realised one thing, the best way to learn "rust" would be to not have
+> any preconceived notions about it, as well as to take things a bit easy and
+> learn the language as it is, one morsel at a time.
+>
+> ~mayuresh
+>
+>
+> On 2015-01-11 19:17, Kevin McGuire wrote:
+>
+>> Oh, hell. I forgot about Option<T>.
+>>
+>> You see also in Rust nothing can be uninitialized! Unless you use
+>> unsafe code. This little type is your friend. It gives you the
+>> equivalent of uninitialized data. So take some time and research it or
+>> play around with it.
+>>
+>> On Sun, Jan 11, 2015 at 7:43 AM, Kevin McGuire <kmcg3413 at gmail.com>
+>> wrote:
+>>
+>>  I can not answer very well about the OO capabilities of Rust since
+>>> it is hard to define, but Rust does support:
+>>>
+>>> methods of a type/structure that take a special _self _argument
+>>>
+>>> traits which are like interfaces that any type/structure can
+>>> implement
+>>>
+>>> operator overloads like + for one
+>>>
+>>> There is no inheritance at the moment although you can get a kind of
+>>> hack version of it using the Deref trait on an object. The Deref is
+>>> mostly used by smart pointers. The smart pointer type wraps your
+>>> inner type and then allows access to the inner type through the
+>>> de-reference support of Deref.
+>>>
+>>> The only other object like feel is of the namespace system.
+>>>
+>>> In Rust everything has the capability to have a method although the
+>>> primitive types are kind of special.
+>>>
+>>> Also I have seen and used an operator overload for a structure once
+>>> so I know it has that ability now which I think may have been fairly
+>>> recent.
+>>>
+>>> So Rust is capable of some object oriented programming. You do not
+>>> have to do object oriented programming.
+>>>
+>>> Also, the per-requisites for Rust - Yes functional programming would
+>>> be just fine. I am going to go ahead and tell you where you may
+>>> struggle with learning Rust.
+>>>
+>>> The major problem you will have is coming to understand ownership
+>>> and lifetimes. These two things are what makes Rust memory safe and
+>>> are fantastic however at first they will seem like a curse. You
+>>> might even give up on Rust because they will make writing code
+>>> difficult at first.
+>>>
+>>> The second problem you are going to have is feeling a little lost as
+>>> to how to allocate memory during run-time and also you will feel
+>>> very confused as how to overcome lifetime limitations by your
+>>> limited knowledge of the pointer types.
+>>>
+>>> _These two problems you are going to face no matter what language
+>>> you have come from._
+>>>
+>>> To help you first I would like to to take note of Box<T> and Rc<T>.
+>>> Do not worry about understanding them. Just keep them in the back of
+>>> your head. The first is Box<T> and the next is Rc<T>. There is
+>>> another one called Arc<T> for data to be shared by threads. Okay..
+>>>
+>>> Also, a quick word on ownership. Everything is owned. What being
+>>> owned is that everything has a home. Some types are Copy which means
+>>> when you assign them somewhere else they are copied byte for byte.
+>>> Your native primitives like integers are copyable. The problem you
+>>> will encounter is when you work with non-copyable types which are
+>>> abundant. At first you might want to curse the fact that a type is
+>>> not copyable but it is a very powerful feature not a hindrance.
+>>>
+>>> If a type is not copyable and you assign it or pass it into a
+>>> function by value (sort of speak) you will cause a _move _to happen.
+>>> A move is part of the ownership system. Think of moving an argument
+>>> into a function as the function sort of consumes the argument. It
+>>> leaves it's original home and moves into the function. The function
+>>> now owns the argument. Also keep in mind that the function can move
+>>> the type back out through the return value and you could place it
+>>> back in it's original home.
+>>>
+>>> Okay, so now you will run into the situation where you want to have
+>>> an instance of a type stored in more than one place? Well, you have
+>>> two options. If the type supports Clone you can call the clone
+>>> method and produce a duplicate. The exact way clone works is very
+>>> specific to the type. It might create a completely separate type or
+>>> the two might still be linked. Do not worry at the moment as this
+>>> will become evident as you learn Rust.
+>>>
+>>> Just keep in mind that for non-copyable types or types in which you
+>>> do not want a copy you can create a smart-pointer to manage them:
+>>>
+>>> let pointer = Rc::new(myothervar);
+>>>
+>>> let secondhome = pointer.clone();
+>>>
+>>> myfunction(secondhome);
+>>>
+>>> Also to note you will find the smart-pointer clunky and you will be
+>>> confused as how to write libraries or make a good API for your
+>>> application. I would like to leave you with one more concept. You
+>>> will find passin Rc<MyType> around cumbersome. To remedy this you
+>>> can learn the pattern of making MyType wrap the Rc so the Rc is
+>>> internal to it. So your API will pass around MyType instead.
+>>>
+>>> Okay, sorry for such a long mail. I just hope this little tips and
+>>> things can help you instead of making you quit leaving a bitter
+>>> taste for Rust!
+>>>
+>>> On Sun, Jan 11, 2015 at 7:17 AM, Mayuresh Kathe <mayuresh at kathe.in>
+>>>
+>>> wrote:
+>>> hello matthieu,
+>>>
+>>> thanks for responding.
+>>>
+>>> you mentioned that "rust" supports some object-oriented concepts.
+>>> may i know which?
+>>>
+>>> also, deviating a bit off-topic, would a decent grasp of functional
+>>> programming be a pre-requisite to learning "rust"?
+>>>
+>>> thanks,
+>>>
+>>> ~mayuresh
+>>>
+>>> On 2015-01-11 17:21, Matthieu Monrocq wrote:
+>>> Hello Mayuresh,
+>>>
+>>> The problem with your question is dual:
+>>>
+>>>  - OO itself is a fairly overloaded term, and it is unclear what
+>>> definition you use for it: Alan Kay's original? The presence of
+>>> inheritance? ...
+>>>  - Just because a language supports OO concepts does not mean that
+>>> it
+>>> ONLY supports OO concepts, many languages are multi-paradigms and
+>>> can
+>>> be used for procedural programming, object-oriented programming (in
+>>> a
+>>> loose sense given the loose definition in practice), generic
+>>> programming, functional programming, ...
+>>>
+>>> Rust happens to be a multi-paradigms language. It supports some,
+>>> but
+>>> not all, object-oriented concepts, but also thrives with free
+>>> functions and generic functions and supports functional programming
+>>> expressiveness (but not purity concepts).
+>>>
+>>> I would also note that I have C striving to achieve some OO
+>>> concepts
+>>> (opaque pointers for encapsulation, virtual-dispatch through
+>>> manually
+>>> written virtual-tables, ...), some even in C you cannot necessarily
+>>> avoid the OO paradigm, depending on the libraries you use.
+>>>
+>>> Is Rust a good language for you? Maybe!
+>>>
+>>> The only way for you to know is to give it a spin.
+>>>
+>>> Have a nice day.
+>>>
+>>> -- Matthieu
+>>>
+>>> On Sun, Jan 11, 2015 at 2:59 AM, Mayuresh Kathe <mayuresh at kathe.in>
+>>> wrote:
+>>>
+>>> hello,
+>>>
+>>> i am an absolute newbie to rust.
+>>>
+>>> is rust an object-oriented programming language?
+>>>
+>>> i ask because i detest 'oo', and am looking for something better
+>>> than
+>>> "c".
+>>>
+>>> thanks,
+>>>
+>>> ~mayuresh
+>>>
+>>
+>>  _______________________________________________
+>>  Rust-dev mailing list
+>>  Rust-dev at mozilla.org
+>>  https://mail.mozilla.org/listinfo/rust-dev [1]
+>>
+>>
+>>
+>> Links:
+>> ------
+>> [1] https://mail.mozilla.org/listinfo/rust-dev
+>>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150112/6349d33e/attachment.html>
+
+From ckkashyap at gmail.com  Fri Jan 16 20:05:08 2015
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Sat, 17 Jan 2015 09:35:08 +0530
+Subject: [rust-dev] Generate Linux executable from rustc on mac
+Message-ID: <CAGdT1gpmVyfFoJ97EUWrbbzJmSDhN6=eYCpqruOcTTMPQRXTPw@mail.gmail.com>
+
+Hi,
+I'd like to build executables that can run on Linux using rust on mac. What
+configuration do I need to build rustc (on mac) with?
+
+./configure --target=x86_64-unknown-linux-gnu
+does not seem to work.
+
+Regards,
+Kashyap
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150117/c0b3e1f0/attachment.html>
+
+From ckkashyap at gmail.com  Sun Jan 18 00:23:40 2015
+From: ckkashyap at gmail.com (C K Kashyap)
+Date: Sun, 18 Jan 2015 13:53:40 +0530
+Subject: [rust-dev] Generate Linux executable from rustc on mac
+In-Reply-To: <CAGdT1gp4NsPnEgWfKfP1B3BOq5XEfcu5FOX4EMY2xUD6kLmifA@mail.gmail.com>
+References: <CAGdT1gpmVyfFoJ97EUWrbbzJmSDhN6=eYCpqruOcTTMPQRXTPw@mail.gmail.com>
+	<CABtDyP3Kxi7XXg31OiQL3ELaF-a5WaiYY5xeU7JKXQvj=_YgNA@mail.gmail.com>
+	<CAGdT1gq3gdHFm9LXY0R=x_W8Tomdnm=H03-LqCnCxe6XW6N9GA@mail.gmail.com>
+	<CAGdT1gp4NsPnEgWfKfP1B3BOq5XEfcu5FOX4EMY2xUD6kLmifA@mail.gmail.com>
+Message-ID: <CAGdT1go_KSP4Q9+a=qvko5MUDm0F5OEV0fSM9BWHz2iJCUBbOw@mail.gmail.com>
+
++rust-dev
+
+On Sun, Jan 18, 2015 at 1:53 PM, C K Kashyap <ckkashyap at gmail.com> wrote:
+
+> Luckily a workaround seems to work for me - I've updated the bug with the
+> same -
+> ----update in the bug---
+>
+> For what it's worth I have a workaorund that works for me -
+>
+> On my mac machine, do the following
+> 1. Compile the rust file (that's supposed to emit the static library)
+> using --target=x86_64-unknown-linux-gnu -L library_path (library_path is
+> the location where I've copied libcompiler-rt.a and libmorestack.a from the
+> linux rust build)
+> 2. Unarchive the generated .a file (ar x ) and then use the .o files (only
+> the necessary .o files) in the final linking
+>
+> On Sun, Jan 18, 2015 at 8:48 AM, C K Kashyap <ckkashyap at gmail.com> wrote:
+>
+>> Thanks for pointing out Brian ... I had also opened an issue for this -
+>>
+>> #21308 - closed it for now.
+>>
+>> Regards,
+>>
+>> Kashyap
+>>
+>>
+>>
+>> On Sun, Jan 18, 2015 at 1:00 AM, Brian Anderson <banderson at mozilla.com>
+>> wrote:
+>>
+>>> While this would be awesome, the build system generally needs explicit
+>>> support for every cross-compile scenario, and I don't believe anybody has
+>>> ever done this one yet.
+>>>
+>>> Here's some previous discussion,
+>>> https://github.com/rust-lang/rust/issues/16259
+>>>
+>>> On Fri, Jan 16, 2015 at 8:05 PM, C K Kashyap <ckkashyap at gmail.com>
+>>> wrote:
+>>>
+>>>> Hi,
+>>>> I'd like to build executables that can run on Linux using rust on mac.
+>>>> What configuration do I need to build rustc (on mac) with?
+>>>>
+>>>> ./configure --target=x86_64-unknown-linux-gnu
+>>>> does not seem to work.
+>>>>
+>>>> Regards,
+>>>> Kashyap
+>>>>
+>>>> _______________________________________________
+>>>> Rust-dev mailing list
+>>>> Rust-dev at mozilla.org
+>>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>>
+>>>>
+>>>
+>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150118/979c40c5/attachment.html>
+
+From erick.tryzelaar at gmail.com  Sun Jan 18 11:10:48 2015
+From: erick.tryzelaar at gmail.com (Erick Tryzelaar)
+Date: Sun, 18 Jan 2015 11:10:48 -0800
+Subject: [rust-dev] 2/19 Bay Area Rust Meetup: All about IO
+Message-ID: <CALdfqQJBYszjqRrwH7add2s7YZRrVFvgZ+kL4oWSBw=uhp4osA@mail.gmail.com>
+
+Greetings, Rustaceans!
+
+I'm pleased to announce the next Bay Area Rust Meetup on February, 19, 2015
+at 7pm. This meetup will be focused on the blocking IO system part of the
+standard library, and asynchronous IO systems being built upon mio
+<https://github.com/carllerche/mio>. Here's the lineup:
+
+? Aaron Turon or Alex Crichton: std::io
+
+? Carl Lerche: mio <https://github.com/carllerche/mio> and syncbox
+<https://github.com/carllerche/syncbox>
+
+? Jonathan Reem: Higher level asychronous IO abstractions.
+
+As always, Mozilla will be graciously providing food, drink, and a live
+stream of the meetup.
+
+If you would like to attend, please sign up here:
+
+http://www.meetup.com/Rust-Bay-Area/events/219697152/
+
+I hope you all can make it!
+
+-Erick
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150118/764983c0/attachment.html>
+
+From chris at digitalpoetry.se  Mon Jan 19 13:23:22 2015
+From: chris at digitalpoetry.se (Christopher Bergqvist)
+Date: Mon, 19 Jan 2015 22:23:22 +0100
+Subject: [rust-dev] Surpassing C in conditional compilation
+Message-ID: <43AD8EE2-DD97-4D5B-A718-365BB9C02F00@digitalpoetry.se>
+
+Hi Rust devs!
+
+First of all, thank you for putting so much effort into creating this promising language!
+
+I would be glad to hear your thoughts on some minor bikeshedding before the 1.0 release. From what I can see, the conditional compilation in Rust shares a weakness with the C preprocessor. The problem is lacking checks against misspelled identifiers, as in this example:
+
+#[cfg(target_oss="dragon_fly")]
+fn foo() { syntaxError }
+
+Here, target_oss has an extra "s", and dragon_fly should not have the "_". However, the compiler will compile the code without notifying the programmer that anything is wrong. I propose that cfg-identifiers should be treated similarly to other identifiers, so that they can trigger unresolved errors.
+
+One way I see to implement this for custom cfg identifiers specified on the command line is going from
+
+$ rustc --cfg some_condition
+
+to
+
+$ rustc --cfg some_condition=true
+
+And then the code would look like
+
+#[cfg(some_condition=true)]
+fn conditional_function() { }
+
+Instead of just
+
+#[cfg(possibly_correct_name)]
+fn conditional_function() { }
+
+Alone, this change would require the programmer to always specify all values of all custom cfg identifiers when building code that uses them. To avoid that, it would be good to be able to define default values of identifiers in .rs files. There could even be .rs files distributed with rustc which contain specifications of all built-in cfg identifiers (and possibly also lists of their allowed values).
+
+(There's also the inconsistency in "=" vs "==" equality operators between cfg-expressions and regular Rust expressions, an inconsistency C does not share, but that is not a big concern).
+
+Thanks for reading this far,
+Chris
+
+From rick.richardson at gmail.com  Wed Jan 21 16:05:51 2015
+From: rick.richardson at gmail.com (Rick Richardson)
+Date: Thu, 22 Jan 2015 00:05:51 +0000
+Subject: [rust-dev] NYC Meetups (status report)
+Message-ID: <CA+kMGwDAjY3SN3sb9_vgVqtotHZrocd2=sSuyB4gk5O1yPQRaQ@mail.gmail.com>
+
+There are now not one, but three meetup groups for Rust in NYC (hurray
+communication!  ... ahem)
+
+In addition to the meetup/hackfest that Steve K occasionally runs in
+Brooklyn, there are now two groups on meetup.com:
+http://meetup.com/RustNY
+and
+http://meetup.com/Rust-NYC
+
+I would like to get this pared down to 1 meetup group that has both
+Brooklyn and Manhattan meetups (I can't often get to Brooklyn)
+
+That said:
+
+It appears that there is a meetup scheduled for Tuesday Jan 27th!
+http://www.meetup.com/RustNY/events/219961968/
+
+I am also trying to arrange a Rust BoF/Intro session at Applicative
+Conference (http://applicative.acm.org/)  Applicative is the first
+conference of its kind by the ACM. It is aimed towards practitioners and
+app devs instead of academics (But academics are probably welcome as well.
+I'll check ;) )
+
+But please, if you're in or around NYC, or know someone who is, join one of
+the meetups above, or both, and we'll figure out how to merge them.
+
+Thanks, and happy hacking!
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150122/b3f721e1/attachment.html>
+
+From banderson at mozilla.com  Thu Jan 22 11:59:32 2015
+From: banderson at mozilla.com (Brian Anderson)
+Date: Thu, 22 Jan 2015 11:59:32 -0800
+Subject: [rust-dev] rust-dev will be shut down soon
+Message-ID: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+
+You likely have already noticed, but traffic to rust-dev has decreased
+dramatically in recent months. This was a result of natural changes in
+project coordination at first, and then an intentional effort to phase out
+the list.
+
+In the beginning of the project there were only two places to talk about
+rust: #rust and rust-dev, and they served us well for all purposes for
+several years. As Rust grew though the coordination of the project moved to
+different venues, conversations were happening in a number of other places,
+and the purpose of rust-dev became less clear. At the same time there were
+also a number of heated and essentially unmoderatable discussions that
+caused many to lose faith in the effectiveness of the mailing list.
+
+For the last few weeks the existence of rust-dev has no longer been
+publicly advertised, and yesterday I made the request to Mozilla IT to shut
+down the list for good. The archives will remain available since they
+provide information of potential historical interest. I know some people
+prefer mailing lists and to them I offer my regrets.
+As of now these are the recommended places to discuss Rust:
+
+* https://discuss.rust-lang.org - Project coordination ('internals'
+discussion) and design discussion
+* https://github.com/rust-lang/rfcs - PR's for fully-baked near-term
+proposals, and the issue tracker for longer-term designs
+* https://stackoverflow.com/questions/tagged/rust - Specific questions
+about how to use the language
+* http://reddit.com/r/rust - Links, news, announcements, discussions
+* The various IRC channels
+
+In the coming weeks we will also set up a second Discourse instance for
+general Rust discussion (compared to the current one at
+discuss.rust-lang.org which is for 'internals'). The intent is to provide a
+place for all types of discussion about Rust that will scale to the needs
+of the project as it grows, and to replace some of the remaining role of
+rust-dev as a general discussion forum. It is not intended to replace
+either StackOverflow nor Reddit, but to complement them by accommodating
+types and volumes of content that may be less appropriate for those venues.
+
+Some of the recent conversations on this topic are:
+
+* http://discuss.rust-lang.org/t/is-it-time-to-kill-the-mailing-list/611/45
+*
+https://github.com/rust-lang/meeting-minutes/blob/master/weekly-meetings/2015-01-20.md
+*
+https://www.reddit.com/r/rust/comments/2t405p/weekly_meeting_20150120_goodbye_view_items_deref/
+
+Regards,
+Brian
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150122/9339c377/attachment.html>
+
+From richo at psych0tik.net  Thu Jan 22 13:58:11 2015
+From: richo at psych0tik.net (Richo Healey)
+Date: Thu, 22 Jan 2015 13:58:11 -0800
+Subject: [rust-dev] [OT] discourse bridge [was: rust-dev will be shut
+ down soon]
+In-Reply-To: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+References: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+Message-ID: <20150122215811.GA34332@xenia.local>
+
+On 22/01/15 11:59 -0800, Brian Anderson wrote:
+>You likely have already noticed, but traffic to rust-dev has decreased
+>dramatically in recent months. This was a result of natural changes in
+>project coordination at first, and then an intentional effort to phase out
+>the list.
+>
+
+For anyone else like me who's forum averse, I'm currently poking around with
+what options are available to browse Discourse as email.
+
+This comes up a lot (I found a lot of threads on meta.discourse.com about it)
+but the conclusion seems to be that reply-by-email is supported, but in
+general, email/nntp is not a particularly supported way to browse.
+
+That said, I would love to hear if anyone else has done this successfully.
+I'll have a poke at trying to get a gateway working, if it's not too much
+work I will notify people (presumably on discourse, I guess :))
+
+
+
+From bryan.w.bell at gmail.com  Thu Jan 22 18:18:03 2015
+From: bryan.w.bell at gmail.com (Bryan Bell)
+Date: Thu, 22 Jan 2015 18:18:03 -0800
+Subject: [rust-dev] [OT] discourse bridge [was: rust-dev will be shut
+	down soon]
+In-Reply-To: <20150122215811.GA34332@xenia.local>
+References: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+	<20150122215811.GA34332@xenia.local>
+Message-ID: <CAMvrnh-VhLJ7P351hvqC3q_Hw55TfZV91G5RMD13=J2Gu=BL=g@mail.gmail.com>
+
+The best I found was to subscribe to watch the topics I'm interested in.
+
+I went to http://discuss.rust-lang.org/users/[username]/preferences and
+under Categories -> Watched added the ones I was interested in.
+It'll email you whenever there's a new topic or reply in any of those
+categories.
+
+
+
+On Thu, Jan 22, 2015 at 1:58 PM, Richo Healey <richo at psych0tik.net> wrote:
+
+> On 22/01/15 11:59 -0800, Brian Anderson wrote:
+>
+>> You likely have already noticed, but traffic to rust-dev has decreased
+>> dramatically in recent months. This was a result of natural changes in
+>> project coordination at first, and then an intentional effort to phase out
+>> the list.
+>>
+>>
+> For anyone else like me who's forum averse, I'm currently poking around
+> with
+> what options are available to browse Discourse as email.
+>
+> This comes up a lot (I found a lot of threads on meta.discourse.com about
+> it)
+> but the conclusion seems to be that reply-by-email is supported, but in
+> general, email/nntp is not a particularly supported way to browse.
+>
+> That said, I would love to hear if anyone else has done this successfully.
+> I'll have a poke at trying to get a gateway working, if it's not too much
+> work I will notify people (presumably on discourse, I guess :))
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+
+
+-- 
+-- Regards
+Bryan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150122/f6a05da4/attachment.html>
+
+From comexk at gmail.com  Thu Jan 22 18:48:05 2015
+From: comexk at gmail.com (Nicholas Allegra)
+Date: Thu, 22 Jan 2015 21:48:05 -0500
+Subject: [rust-dev] [OT] discourse bridge [was: rust-dev will be shut
+	down soon]
+In-Reply-To: <20150122215811.GA34332@xenia.local>
+References: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+	<20150122215811.GA34332@xenia.local>
+Message-ID: <CAPM5UJ1+7VZHxooTt4ykCsg2QUOpvsTK-8_d04NgMqK9GjYPEw@mail.gmail.com>
+
+On Thu, Jan 22, 2015 at 4:58 PM, Richo Healey <richo at psych0tik.net> wrote:
+>
+> This comes up a lot (I found a lot of threads on meta.discourse.com about
+> it)
+> but the conclusion seems to be that reply-by-email is supported, but in
+> general, email/nntp is not a particularly supported way to browse.
+>
+
+Due to the limitations of reply-by-email, I've settled on replying to
+Discourse threads on the web; but *reading* by email works fine, as long as
+you can tolerate HTML mail, so I've kept "Receive an email for every new
+post" on and read the Discourse forum the same as I do mailing lists, using
+the link at the bottom of each post if I want to reply.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150122/4b3eb673/attachment.html>
+
+From tomi.pievilainen at iki.fi  Thu Jan 22 22:33:29 2015
+From: tomi.pievilainen at iki.fi (Tomi =?iso-8859-1?Q?Pievil=E4inen?=)
+Date: Fri, 23 Jan 2015 08:33:29 +0200
+Subject: [rust-dev] rust-dev will be shut down soon
+In-Reply-To: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+References: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+Message-ID: <20150123063328.GS18219@shirio>
+
+My last comment about visibility of the discourse pretty much
+immediately side-tracked into the merits and flaws of mailing lists...
+But nobody really answered whether the absence of links from the Rust
+homepage to the discourse was intentional.
+
+Does internal use then mean that it is meant only for those "in the
+know", and only the future general discourse will be put on the home
+page? At least I'm interested in following the dev discussion, even if
+I'm not an insider, and I heard of it purely by accident.
+
+-- 
+Tomi Pievil?inen, +358 400 487 504
+A: Because it disrupts the natural way of thinking.
+Q: Why is top posting frowned upon?
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 836 bytes
+Desc: Digital signature
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150123/30291bc0/attachment.sig>
+
+From manishsmail at gmail.com  Fri Jan 23 01:33:55 2015
+From: manishsmail at gmail.com (Manish Goregaokar)
+Date: Fri, 23 Jan 2015 15:03:55 +0530
+Subject: [rust-dev] rust-dev will be shut down soon
+In-Reply-To: <20150123063328.GS18219@shirio>
+References: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+	<20150123063328.GS18219@shirio>
+Message-ID: <CACpkpxn2ZwT+D86Q5tORM+STvS5zYOcGjgk1cBv+C=eradavtA@mail.gmail.com>
+
+"internals" means compiler internals and all usually. (cf #rust-internals
+on IRC, the internals tag on Discourse, etc)
+
+AFAICT it will still be completely open for all to comment on
+
+-Manish Goregaokar
+
+On Fri, Jan 23, 2015 at 12:03 PM, Tomi Pievil?inen <tomi.pievilainen at iki.fi>
+wrote:
+
+> My last comment about visibility of the discourse pretty much
+> immediately side-tracked into the merits and flaws of mailing lists...
+> But nobody really answered whether the absence of links from the Rust
+> homepage to the discourse was intentional.
+>
+> Does internal use then mean that it is meant only for those "in the
+> know", and only the future general discourse will be put on the home
+> page? At least I'm interested in following the dev discussion, even if
+> I'm not an insider, and I heard of it purely by accident.
+>
+> --
+> Tomi Pievil?inen, +358 400 487 504
+> A: Because it disrupts the natural way of thinking.
+> Q: Why is top posting frowned upon?
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150123/e7b76710/attachment.html>
+
+From steve at steveklabnik.com  Fri Jan 23 07:59:15 2015
+From: steve at steveklabnik.com (Steve Klabnik)
+Date: Fri, 23 Jan 2015 10:59:15 -0500
+Subject: [rust-dev] rust-dev will be shut down soon
+In-Reply-To: <CACpkpxn2ZwT+D86Q5tORM+STvS5zYOcGjgk1cBv+C=eradavtA@mail.gmail.com>
+References: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+	<20150123063328.GS18219@shirio>
+	<CACpkpxn2ZwT+D86Q5tORM+STvS5zYOcGjgk1cBv+C=eradavtA@mail.gmail.com>
+Message-ID: <CABL+ZB5Z-_QOGE=5YXgTdze1f_2Gusxry4=BzRjeNCaVzLdgww@mail.gmail.com>
+
+The current discourse has not been linked because it's for compiler
+internals and language development, not general users. A second
+instance is being set up for regular user discussion. It will get
+linked from the home page. And both are available for anyone to
+register in.
+
+From corey at octayn.net  Fri Jan 23 08:09:04 2015
+From: corey at octayn.net (Corey Richardson)
+Date: Fri, 23 Jan 2015 11:09:04 -0500
+Subject: [rust-dev] rust-dev will be shut down soon
+In-Reply-To: <CABL+ZB5Z-_QOGE=5YXgTdze1f_2Gusxry4=BzRjeNCaVzLdgww@mail.gmail.com>
+References: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+	<20150123063328.GS18219@shirio>
+	<CACpkpxn2ZwT+D86Q5tORM+STvS5zYOcGjgk1cBv+C=eradavtA@mail.gmail.com>
+	<CABL+ZB5Z-_QOGE=5YXgTdze1f_2Gusxry4=BzRjeNCaVzLdgww@mail.gmail.com>
+Message-ID: <CA++BO6S-xH24Hc+AYM858cUXaqKEF_iVP5eiXLkqbyEW5cyDKw@mail.gmail.com>
+
+Note that it *is* linked, through
+https://github.com/rust-lang/rust/wiki/Note-guide-for-new-contributors,
+just not the homepage.
+
+On Fri, Jan 23, 2015 at 10:59 AM, Steve Klabnik <steve at steveklabnik.com>
+wrote:
+
+> The current discourse has not been linked because it's for compiler
+> internals and language development, not general users. A second
+> instance is being set up for regular user discussion. It will get
+> linked from the home page. And both are available for anyone to
+> register in.
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+
+
+-- 
+http://octayn.net/
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150123/3113f01e/attachment.html>
+
+From banderson at mozilla.com  Fri Jan 23 12:39:57 2015
+From: banderson at mozilla.com (Brian Anderson)
+Date: Fri, 23 Jan 2015 12:39:57 -0800
+Subject: [rust-dev] rust-dev will be shut down soon
+In-Reply-To: <20150123063328.GS18219@shirio>
+References: <CABtDyP1CfcWo=+ES1ZyPAUeWx8Bo6wH5Qr6s=FFVhY7covmsoA@mail.gmail.com>
+	<20150123063328.GS18219@shirio>
+Message-ID: <CABtDyP1LN0oOWJBED7m6_UsUtB=NEXeE1yKFGhbHw+rkWJaA2w@mail.gmail.com>
+
+Tomi,
+
+Once the new discourse instance is set up it will be publicized on the home
+page, and we may also decide then to put the internals forum there as well,
+since it's purpose will be less easily confused.
+
+On Thu, Jan 22, 2015 at 10:33 PM, Tomi Pievil?inen <tomi.pievilainen at iki.fi>
+wrote:
+
+> My last comment about visibility of the discourse pretty much
+> immediately side-tracked into the merits and flaws of mailing lists...
+> But nobody really answered whether the absence of links from the Rust
+> homepage to the discourse was intentional.
+>
+> Does internal use then mean that it is meant only for those "in the
+> know", and only the future general discourse will be put on the home
+> page? At least I'm interested in following the dev discussion, even if
+> I'm not an insider, and I heard of it purely by accident.
+>
+> --
+> Tomi Pievil?inen, +358 400 487 504
+> A: Because it disrupts the natural way of thinking.
+> Q: Why is top posting frowned upon?
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150123/a0f1a07e/attachment.html>
+
+From anatol.pomozov at gmail.com  Fri Jan 30 09:11:26 2015
+From: anatol.pomozov at gmail.com (Anatol Pomozov)
+Date: Fri, 30 Jan 2015 09:11:26 -0800
+Subject: [rust-dev] Rust tests are failing in Arch chrooted environment
+Message-ID: <CAOMFOmUBi3WoFipdkkGqs1vjhJ9tU1++iSvFJUubcUqWFZmAKA@mail.gmail.com>
+
+Hi,
+
+I am trying to build rust package on my Linux Arch build computer. I use
+chrooted build environment that provides clean version of root filesystem
+with minimum build packages required.
+
+Some tests are failing. If I build the same package out of chroot
+environment then the tests are passed. Here are build/tests logs for failed
+run:
+
+https://gist.github.com/anatol/a302e1dfd7f52f198b34
+https://gist.github.com/anatol/4618246b70ccd9e4f222
+
+There are several "failed to compile" error and I can't figure out the root
+cause of these errors. Could anyone please give pointers why this failure
+happening?
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150130/7b750345/attachment.html>
+
+From donquestion at rocketmail.com  Fri Jan 30 21:22:25 2015
+From: donquestion at rocketmail.com (Donaldo Fastoso)
+Date: Fri, 31 Jan 2015 05:22:25 +0000
+Subject: [rust-dev] tim
+Message-ID: <96FFDF6E6DF59AF487586C29164E5242@mosaicnashville.org>
+
+
+
+ http://spicekitchentakeaway.com/vkopdefp/vpvdnoqyawxhcrgtg.piiiqgqlaesrxplwdrbfwdtphgyyobozjm 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ ---------------------- 
+
+ Donaldo Fastoso  
+
+ 1/31/2015 5:22:25 PM
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20150131/ac503e30/attachment.html>
+

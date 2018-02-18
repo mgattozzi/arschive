@@ -1,0 +1,92 @@
+From metuxitservice at googlemail.com  Wed Dec 20 16:18:08 2017
+From: metuxitservice at googlemail.com (google)
+Date: Wed, 20 Dec 2017 17:18:08 +0100
+Subject: [rust-dev] understanding conditional compiling
+Message-ID: <d17446fb-4b3d-9d3a-858f-14bd87da31c6@googlemail.com>
+
+Hi folks,
+
+
+I'm currently trying to how conditional compiling in rust
+actually works. I was under the impression that
+
+     #[cfg(feature = "foo")]
+
+behaves pretty much like an #ifdef, but for the subsequent
+syntactical block, so instead of
+
+     #ifdef ENABLE_FOO
+     fn ... {
+     }
+     #endif
+
+you istead write
+
+     #[cfg(feature = "foo")]
+     fn ... {
+     }
+
+BUT: there're lots of cases, where this doesn't seem to work, eg.
+with if statements. An 'if cfg!(feature = "foo")' doesn't work for
+me, as lots of types in the disabled code pathes won't exist at all.
+Similar w/ 'use' statements, parameter lists, match statements, ...
+
+background: I'm currently trying to trim down Servo, as it doesn't
+compile on 32bit system (don't have an 64bit environment right now)
+and I'd like to get rid of lots of things (eg. bluetooth, gamepad, etc)
+anyways.
+
+
+--mtx
+
+From lists at dhardy.name  Wed Dec 20 16:35:06 2017
+From: lists at dhardy.name (Diggory Hardy)
+Date: Wed, 20 Dec 2017 16:35:06 +0000
+Subject: [rust-dev] understanding conditional compiling
+In-Reply-To: <d17446fb-4b3d-9d3a-858f-14bd87da31c6@googlemail.com>
+References: <d17446fb-4b3d-9d3a-858f-14bd87da31c6@googlemail.com>
+Message-ID: <2794892.LVryhZrIcs@localhost.localdomain>
+
+I'd suggest you ask on https://users.rust-lang.org/ since this mailing list is 
+"closed".
+
+On Wednesday, 20 December 2017 16:18:08 GMT google wrote:
+> Hi folks,
+> 
+> 
+> I'm currently trying to how conditional compiling in rust
+> actually works. I was under the impression that
+> 
+>      #[cfg(feature = "foo")]
+> 
+> behaves pretty much like an #ifdef, but for the subsequent
+> syntactical block, so instead of
+> 
+>      #ifdef ENABLE_FOO
+>      fn ... {
+>      }
+>      #endif
+> 
+> you istead write
+> 
+>      #[cfg(feature = "foo")]
+>      fn ... {
+>      }
+> 
+> BUT: there're lots of cases, where this doesn't seem to work, eg.
+> with if statements. An 'if cfg!(feature = "foo")' doesn't work for
+> me, as lots of types in the disabled code pathes won't exist at all.
+> Similar w/ 'use' statements, parameter lists, match statements, ...
+> 
+> background: I'm currently trying to trim down Servo, as it doesn't
+> compile on 32bit system (don't have an 64bit environment right now)
+> and I'd like to get rid of lots of things (eg. bluetooth, gamepad, etc)
+> anyways.
+> 
+> 
+> --mtx
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+

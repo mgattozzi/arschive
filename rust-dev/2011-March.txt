@@ -1,0 +1,2991 @@
+From graydon at mozilla.com  Tue Mar  1 16:46:08 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 01 Mar 2011 16:46:08 -0800
+Subject: [rust-dev] Email notifications
+In-Reply-To: <4D6AB93C.7040600@mozilla.com>
+References: <4D6A9501.1050609@mozilla.com>	<D545DB0E-AA1F-4697-8D49-0FC54A73F2AC@mozilla.com>	<4D6AAEB8.80003@mozilla.com>
+	<4D6AB93C.7040600@mozilla.com>
+Message-ID: <4D6D9350.7000006@mozilla.com>
+
+On 11-02-27 12:51 PM, Rafael ?vila de Esp?ndola wrote:
+>> Ok. I'll set up a rust-commits sometime this week.
+>
+> Thanks!
+>
+
+This now exists.
+
+https://mail.mozilla.org/listinfo/rust-commits
+
+github will post commit messages here, so if you want to track rust 
+commits you can subscribe to it. please don't post anything to that 
+list, it's just for broadcasting the github commit notices
+
+(I'll try to make it auto-discard any non-commit posts anyways, still 
+fussing with the interface).
+
+-Graydon
+
+From marijnh at gmail.com  Thu Mar 10 23:53:27 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 11 Mar 2011 08:53:27 +0100
+Subject: [rust-dev] Fork in a Rust process
+Message-ID: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+
+I've started on a run-program library primitive, which invokes a
+'shell' program. On Unix, this involves a call to fork(). I assume
+fork-then-exec is safe, and will remain safe, since the forked process
+will get only the thread the called fork, and exec will pretty much
+reset the whole process (I'm closing fds manually), but I thought I'd
+check.
+
+Can anyone think of any problems, either now or in the future, with
+this? I'm thinking of stacks switching and other funky multi-threading
+techniques doing something the OS wasn't expecting.
+
+(And what if I call fork but don't call exec? That might also be
+useful at some point.)
+
+Cheers,
+Marijn
+
+From marijnh at gmail.com  Fri Mar 11 03:16:29 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 11 Mar 2011 12:16:29 +0100
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+Message-ID: <AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+
+Related to this, are library functions allowed to block, or will that
+hold up all tasks? A short writeup on our process/thread/task model
+would probably be useful -- I've gleaned some things from IRC
+conversations, and I could read the code, which I guess I'll
+eventually get to, but I assume others will also be interested in an
+overview.
+
+From marijnh at gmail.com  Fri Mar 11 05:34:26 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 11 Mar 2011 14:34:26 +0100
+Subject: [rust-dev] Feature proposal: use directives in (single-file-system)
+	.rs files
+Message-ID: <AANLkTikg+NDApvb48q1qMh4GUFrrHcHnPC6bNdFHsxDN@mail.gmail.com>
+
+The problem (and do tell me if I missed an existing solution): The
+compiler currently allows one to compile a single .rs file, but as
+such a file can not open the standard library, it is only useful for
+extremely trivial pieces of code. Now, not only is it very practical
+to be able to write one-file crates (think Python/Perl scripts), it is
+also quite annoying to have to create a crate file for every single
+quick one-off test program I'm writing.
+
+When the compiler is invoked directly on a .rs file, we could have a
+convention where, through some yet-to-be-determined syntax, the crate
+spec can be embedded in the rust file. If this is well-received, I'll
+gladly work out the details and implement it (it seems like something
+that wouldn't really influence any components beyond the compiler
+driver and the parser).
+
+Best,
+Marijn
+
+From andersrb at gmail.com  Fri Mar 11 06:52:06 2011
+From: andersrb at gmail.com (Brian Anderson)
+Date: Fri, 11 Mar 2011 09:52:06 -0500
+Subject: [rust-dev] Feature proposal: use directives in
+ (single-file-system) .rs files
+In-Reply-To: <AANLkTikg+NDApvb48q1qMh4GUFrrHcHnPC6bNdFHsxDN@mail.gmail.com>
+References: <AANLkTikg+NDApvb48q1qMh4GUFrrHcHnPC6bNdFHsxDN@mail.gmail.com>
+Message-ID: <AANLkTinM1OoaVZXtvy8h0Ly3WfpoS-F_kx=dE8Ww22HX@mail.gmail.com>
+
+Single .rs files can access the standard library with 'use std'. See for
+example the run-pass/lib* tests.
+
+Regards,
+Brian
+
+On Fri, Mar 11, 2011 at 8:34 AM, Marijn Haverbeke <marijnh at gmail.com> wrote:
+
+> The problem (and do tell me if I missed an existing solution): The
+> compiler currently allows one to compile a single .rs file, but as
+> such a file can not open the standard library, it is only useful for
+> extremely trivial pieces of code. Now, not only is it very practical
+> to be able to write one-file crates (think Python/Perl scripts), it is
+> also quite annoying to have to create a crate file for every single
+> quick one-off test program I'm writing.
+>
+> When the compiler is invoked directly on a .rs file, we could have a
+> convention where, through some yet-to-be-determined syntax, the crate
+> spec can be embedded in the rust file. If this is well-received, I'll
+> gladly work out the details and implement it (it seems like something
+> that wouldn't really influence any components beyond the compiler
+> driver and the parser).
+>
+> Best,
+> Marijn
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110311/98a23b89/attachment.html>
+
+From marijnh at gmail.com  Fri Mar 11 06:59:21 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 11 Mar 2011 15:59:21 +0100
+Subject: [rust-dev] Feature proposal: use directives in
+ (single-file-system) .rs files
+In-Reply-To: <AANLkTinM1OoaVZXtvy8h0Ly3WfpoS-F_kx=dE8Ww22HX@mail.gmail.com>
+References: <AANLkTikg+NDApvb48q1qMh4GUFrrHcHnPC6bNdFHsxDN@mail.gmail.com>
+	<AANLkTinM1OoaVZXtvy8h0Ly3WfpoS-F_kx=dE8Ww22HX@mail.gmail.com>
+Message-ID: <AANLkTi=PRRN6ZbbQn6TXL603gh57vUrwnYkaBt-NuaH=@mail.gmail.com>
+
+> Single .rs files can access the standard library with 'use std'. See for
+> example the run-pass/lib* tests.
+
+Awesome. Everybody, ignore this thread!
+
+From respindola at mozilla.com  Fri Mar 11 08:23:30 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Fri, 11 Mar 2011 11:23:30 -0500
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+Message-ID: <4D7A4C82.6060003@mozilla.com>
+
+On 11-03-11 02:53 AM, Marijn Haverbeke wrote:
+> I've started on a run-program library primitive, which invokes a
+> 'shell' program. On Unix, this involves a call to fork(). I assume
+> fork-then-exec is safe, and will remain safe, since the forked process
+> will get only the thread the called fork, and exec will pretty much
+> reset the whole process (I'm closing fds manually), but I thought I'd
+> check.
+>
+> Can anyone think of any problems, either now or in the future, with
+> this? I'm thinking of stacks switching and other funky multi-threading
+> techniques doing something the OS wasn't expecting.
+>
+> (And what if I call fork but don't call exec? That might also be
+> useful at some point.)
+
+If you have multiple tasks in a thread, they will all get replaced in a 
+exec. Given that we expose process/thread/task to the users, I think it 
+is reasonable to just return an error if the thread in question has more 
+than one task when executing an exec.
+
+A direct use of fork+exec is probably safe:
+
+*) Fork will fork all the tasks, but on both sides of the fork the 
+"same" task will get the result.
+*) Exec will replace all the tasks on one side.
+
+The net result is that one side of the fork has the tasks it had before 
+and the other side has just a new one.
+
+> Cheers,
+> Marijn
+
+
+Cheers,
+Rafael
+
+From graydon at mozilla.com  Fri Mar 11 08:36:09 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 11 Mar 2011 08:36:09 -0800
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <4D7A4C82.6060003@mozilla.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<4D7A4C82.6060003@mozilla.com>
+Message-ID: <4D7A4F79.8090606@mozilla.com>
+
+On 11/03/2011 8:23 AM, Rafael Avila de Espindola wrote:
+
+>> Can anyone think of any problems, either now or in the future, with
+>> this? I'm thinking of stacks switching and other funky multi-threading
+>> techniques doing something the OS wasn't expecting.
+>>
+>> (And what if I call fork but don't call exec? That might also be
+>> useful at some point.)
+>
+> If you have multiple tasks in a thread, they will all get replaced in a
+> exec. Given that we expose process/thread/task to the users, I think it
+> is reasonable to just return an error if the thread in question has more
+> than one task when executing an exec.
+
+I wouldn't bother. Just pass through to libc. If a user is manually 
+calling exec from rust code, they are way off the 'unsafe' deep end. 
+They had better know what they're doing.
+
+I feel the same way about fork. It's too system-specific, too unsafe, 
+has too many surprises as far as the tasking model. I'm not going to 
+prevent a user from calling it, might even give some guidance on what it 
+will do to the host rust process calling it, but it's outside the rust 
+tasking semantics to have the world suddenly duplicated on you.
+
+> A direct use of fork+exec is probably safe:
+>
+> *) Fork will fork all the tasks, but on both sides of the fork the
+> "same" task will get the result.
+> *) Exec will replace all the tasks on one side.
+>
+> The net result is that one side of the fork has the tasks it had before
+> and the other side has just a new one.
+
+A "start an external subprocess we can talk to on pipes" call has 
+higher-level semantics. We should give library-support to that and not 
+say anything much about whether it's done by fork+exec, vfork, 
+posix_spawn, CreateProcess or whatever. It has utterly different 
+implementations depending on platform, and really should not effect the 
+tasks in the current domain.
+
+(Indeed, for rust-spawning-rust we are going to provide an even 
+higher-level primitive that spawns a task from the current process in a 
+subprocess domain! But for rust-spawning-general-subprocess, pipes are 
+the best we can offer.)
+
+-Graydon
+
+From graydon at mozilla.com  Fri Mar 11 08:47:17 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 11 Mar 2011 08:47:17 -0800
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+Message-ID: <4D7A5215.8040806@mozilla.com>
+
+On 11/03/2011 3:16 AM, Marijn Haverbeke wrote:
+> Related to this, are library functions allowed to block, or will that
+> hold up all tasks?
+
+Yes, but it should be done very judiciously, isolated to particular 
+functions that are understood to do so. Not just blocking willy-nilly.
+
+A blocking native call blocks the thread it's executing on, which 
+(assuming it's a multi-task domain) means other tasks block waiting on 
+it. Tasks do not automatically migrate between domains (supporting this 
+would seriously affect the memory model), so you have to know ahead of 
+time where the thread-domain boundaries are going to be, when you're 
+doing I/O.
+
+In other words, our tasking system does not do *much* magic. It 
+schedules multiple tasks on a thread, and provides a lockless inter-task 
+communication system between tasks within a thread and between threads. 
+That's about it. You still have to know what a thread, a process, and an 
+operating system I/O interface are.
+
+The idea here is not to steal too much control from users. Low-level OS 
+I/O operations should probably be wrapped up in a std library task that 
+queues and multiplexes those requests, that rust code speaks to via 
+channels. This way I/O multiplexor tasks can be run in dedicated thread 
+domains, respecting the different I/O models of different platforms and 
+scenarios.
+
+We *may* attempt to further simplify this model by supporting channels 
+that automatically send AIO calls to file descriptors, and ports that 
+automatically receive events from OS event queues. But I think that is 
+possibly too hard to do in the general case, the semantics don't map 
+portably, and it'll be easier to assume it's always rust logic on both 
+sides of a channel-or-port.
+
+> A short writeup on our process/thread/task model
+> would probably be useful -- I've gleaned some things from IRC
+> conversations, and I could read the code, which I guess I'll
+> eventually get to, but I assume others will also be interested in an
+> overview.
+
+Sure. I'll write something up. It'll be a bit sketchy when it comes to 
+the IO interface because we have not decided on which of several 
+plausible models will "feel best", to structure the standard library 
+around and support idiomatically in rust code. There are a dozen ways of 
+dispatching I/O and integrating it with scheduling, a lot of tradeoffs 
+and portability tensions.
+
+-Graydon
+
+From brendan at mozilla.org  Fri Mar 11 12:25:03 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Fri, 11 Mar 2011 12:25:03 -0800
+Subject: [rust-dev] Fwd: [GitHub] Add basic file-system functionality
+	[graydon/rust 2330c96]
+References: <graydon/rust/commit/2330c96e4550d371d71822d4aa0baadba95a1253/298321@github.com>
+Message-ID: <B5041504-270F-45BE-A86F-6410294B20AE@mozilla.org>
+
+Marijn asked why we are not using STL in the runtime C++.
+
+It's a good question. In Mozilla C++, we have avoided STL because we cannot take the code size and runtime costs of exceptions on all platforms.
+
+https://bugzilla.mozilla.org/show_bug.cgi?id=200505
+
+is worth a read if you are so inclined.
+
+Once we gave up on STL for want of failure propagation via return value, we went in different directions on other, particular design points (raw buffer access, single-allocation hashtable [double hashing with entries as interior allocations]).
+
+The high cost of exceptions with MSVC looks like it will endure, alas. Even with zero-cost exceptions in GCC, the RTTI hit was costly last time we checked (a while ago).
+
+I hope this helps. I'm curious to hear from people who see a better way to go cross-platform with Rust's C++. It is 2011, after all!
+
+/be
+
+Begin forwarded message:
+
+> From: marijnh <reply+c-298321-7b71fdeec2c61135dded73560e2e38d81b9e0a65 at reply.github.com>
+> Date: March 10, 2011 9:31:39 PM PST
+> To: brendan at mozilla.org
+> Subject: Re: [GitHub] Add basic file-system functionality [graydon/rust 2330c96]
+> 
+> Yeah, that's a TODO. Is there a reason you're not using the STL anywhere in the runtime code?
+> 
+> https://github.com/graydon/rust/commit/2330c96e4550d371d71822d4aa0baadba95a1253#commitcomment-298321
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110311/5a42eb81/attachment.html>
+
+From graydon at mozilla.com  Fri Mar 11 12:48:01 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 11 Mar 2011 12:48:01 -0800
+Subject: [rust-dev] Fwd: [GitHub] Add basic file-system functionality
+ [graydon/rust 2330c96]
+In-Reply-To: <B5041504-270F-45BE-A86F-6410294B20AE@mozilla.org>
+References: <graydon/rust/commit/2330c96e4550d371d71822d4aa0baadba95a1253/298321@github.com>
+	<B5041504-270F-45BE-A86F-6410294B20AE@mozilla.org>
+Message-ID: <4D7A8A81.3000502@mozilla.com>
+
+On 11-03-11 12:25 PM, Brendan Eich wrote:
+> Marijn asked why we are not using STL in the runtime C++.
+>
+> It's a good question. In Mozilla C++, we have avoided STL because we cannot take the code size and runtime costs of exceptions on all platforms.
+>
+> https://bugzilla.mozilla.org/show_bug.cgi?id=200505
+>
+> is worth a read if you are so inclined.
+>
+> Once we gave up on STL for want of failure propagation via return value, we went in different directions on other, particular design points (raw buffer access, single-allocation hashtable [double hashing with entries as interior allocations]).
+>
+> The high cost of exceptions with MSVC looks like it will endure, alas. Even with zero-cost exceptions in GCC, the RTTI hit was costly last time we checked (a while ago).
+>
+> I hope this helps. I'm curious to hear from people who see a better way to go cross-platform with Rust's C++. It is 2011, after all!
+
+I answered briefly in the pull request, but I'll elaborate here: we're 
+not using STL due to 1 part history and 1 part restraint.
+
+The history is that librustrt was C for the first several years, and 
+we've only been C++-ifying it since about this time last year. Andreas 
+insisted on it.
+
+The restraint part is that we have no story for handling or propagating 
+C++ exceptions into rust failures yet. We could do it with try/catch 
+blocks on all upcalls and native calls, possibly, but it'd take some 
+care and a degree of certainty that it's the right approach that I don't 
+yet have. So there are no exceptions used in librustrt for now.
+
+-Graydon
+
+From marijnh at gmail.com  Fri Mar 11 14:09:54 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 11 Mar 2011 23:09:54 +0100
+Subject: [rust-dev] Fwd: [GitHub] Add basic file-system functionality
+ [graydon/rust 2330c96]
+In-Reply-To: <4D7A8A81.3000502@mozilla.com>
+References: <graydon/rust/commit/2330c96e4550d371d71822d4aa0baadba95a1253/298321@github.com>
+	<B5041504-270F-45BE-A86F-6410294B20AE@mozilla.org>
+	<4D7A8A81.3000502@mozilla.com>
+Message-ID: <AANLkTin+-P1yoWQO23q=dJBf_oH38gAeCA5TUMJG1r8Y@mail.gmail.com>
+
+> The restraint part is that we have no story for handling or propagating C++
+> exceptions into rust failures yet. We could do it with try/catch blocks on
+> all upcalls and native calls, possibly, but it'd take some care and a degree
+> of certainty that it's the right approach that I don't yet have. So there
+> are no exceptions used in librustrt for now.
+
+I actually think this is a sane decision. It'll require a peculiar
+style of C++ programming, but is probably still less burdensome than
+properly dealing with exceptions (which, on cross-language boundaries,
+tends to be extremely painful).
+
+From brendan at mozilla.org  Fri Mar 11 18:20:16 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Fri, 11 Mar 2011 18:20:16 -0800
+Subject: [rust-dev] Fwd: [GitHub] Add basic file-system functionality
+	[graydon/rust 2330c96]
+In-Reply-To: <AANLkTin+-P1yoWQO23q=dJBf_oH38gAeCA5TUMJG1r8Y@mail.gmail.com>
+References: <graydon/rust/commit/2330c96e4550d371d71822d4aa0baadba95a1253/298321@github.com>
+	<B5041504-270F-45BE-A86F-6410294B20AE@mozilla.org>
+	<4D7A8A81.3000502@mozilla.com>
+	<AANLkTin+-P1yoWQO23q=dJBf_oH38gAeCA5TUMJG1r8Y@mail.gmail.com>
+Message-ID: <1C944941-715D-4EFD-8912-72260E73848D@mozilla.org>
+
+On Mar 11, 2011, at 2:09 PM, Marijn Haverbeke wrote:
+
+>> The restraint part is that we have no story for handling or propagating C++
+>> exceptions into rust failures yet. We could do it with try/catch blocks on
+>> all upcalls and native calls, possibly, but it'd take some care and a degree
+>> of certainty that it's the right approach that I don't yet have. So there
+>> are no exceptions used in librustrt for now.
+> 
+> I actually think this is a sane decision. It'll require a peculiar
+> style of C++ programming, but is probably still less burdensome than
+> properly dealing with exceptions (which, on cross-language boundaries,
+> tends to be extremely painful).
+
+Agreed. For Mozillans this will be the same C++ subset we use (templates, RAII, all the best parts save exceptions).
+
+Graydon, thanks for clarifying. You know me, I would have been pretty happy sticking with plain C :-P.
+
+/be
+
+
+From pwalton at mozilla.com  Fri Mar 11 22:05:25 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 11 Mar 2011 22:05:25 -0800
+Subject: [rust-dev] LLVM 3.0svn and tinderboxes
+Message-ID: <4D7B0D25.4030000@mozilla.com>
+
+Hi everyone,
+
+I think the tree is burning due to LLVM not being up to date with my 
+checkout, which reports itself as 3.0svn. Specifically, the tinderboxes 
+are missing the ObjectFile.h header.
+
+If someone needs the tree to be green over the weekend, just let me know 
+and I'll back the change out right away.
+
+Patrick
+
+From peterhull90 at gmail.com  Fri Mar 11 23:23:09 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Sat, 12 Mar 2011 07:23:09 +0000
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <4D7A5215.8040806@mozilla.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+	<4D7A5215.8040806@mozilla.com>
+Message-ID: <AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+
+On Fri, Mar 11, 2011 at 4:47 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+> On 11/03/2011 3:16 AM, Marijn Haverbeke wrote:
+>>
+>> Related to this, are library functions allowed to block, or will that
+>> hold up all tasks?
+>
+> Yes, but it should be done very judiciously, isolated to particular
+> functions that are understood to do so. Not just blocking willy-nilly.
+Would it be possible to have a blocking 'effect' (if that is the right
+term) to mark functions that may block (works like impure does) Then
+the compiler could warn.
+
+Pete
+
+From dherman at mozilla.com  Fri Mar 11 23:35:04 2011
+From: dherman at mozilla.com (David Herman)
+Date: Fri, 11 Mar 2011 23:35:04 -0800
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+	<4D7A5215.8040806@mozilla.com>
+	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+Message-ID: <B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+
+Possible, yes. Worth the additional combinatorics in the possible effects a function can have? Not as clear, to me anyway.
+
+Without effect polymorphism -- which is nice in principle but can be hard to keep lightweight enough to be usable -- each effect you add to the language increases the possibility of code duplication for polymorphic functions. (For example, you end up with a version of `map' for each possible combination of effects its function argument could have.) We may well have to consider effect polymorphism eventually, but IMO each effect we consider adding to the type system really has to prove its worth.
+
+I guess more to the point, if blocking ends up being a pretty rare thing in idiomatic Rust, programmer discipline may be perfectly sufficient to manage blocking, without the need for checking in the type system.
+
+Oh, and another alternative, at least for monomorphic types, would be to express blocking as a predicate and enforce it via refinement types. For polymorphic types, it would have to be more like a type class. I know Marijn has been talking about type classes, but Patrick and I have our reservations, and I imagine Graydon may too.
+
+Dave
+
+On Mar 11, 2011, at 11:23 PM, Peter Hull wrote:
+
+> On Fri, Mar 11, 2011 at 4:47 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+>> On 11/03/2011 3:16 AM, Marijn Haverbeke wrote:
+>>> 
+>>> Related to this, are library functions allowed to block, or will that
+>>> hold up all tasks?
+>> 
+>> Yes, but it should be done very judiciously, isolated to particular
+>> functions that are understood to do so. Not just blocking willy-nilly.
+> Would it be possible to have a blocking 'effect' (if that is the right
+> term) to mark functions that may block (works like impure does) Then
+> the compiler could warn.
+> 
+> Pete
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From martine at danga.com  Sat Mar 12 08:46:10 2011
+From: martine at danga.com (Evan Martin)
+Date: Sat, 12 Mar 2011 08:46:10 -0800
+Subject: [rust-dev] Fwd: [GitHub] Add basic file-system functionality
+ [graydon/rust 2330c96]
+In-Reply-To: <4D7A8A81.3000502@mozilla.com>
+References: <graydon/rust/commit/2330c96e4550d371d71822d4aa0baadba95a1253/298321@github.com>
+	<B5041504-270F-45BE-A86F-6410294B20AE@mozilla.org>
+	<4D7A8A81.3000502@mozilla.com>
+Message-ID: <AANLkTi=oYGbLJrcmZvBOTyqCrZrzKGDtvHf3MM9NcmVB@mail.gmail.com>
+
+On Fri, Mar 11, 2011 at 12:48 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+> The restraint part is that we have no story for handling or propagating C++
+> exceptions into rust failures yet. We could do it with try/catch blocks on
+> all upcalls and native calls, possibly, but it'd take some care and a degree
+> of certainty that it's the right approach that I don't yet have. So there
+> are no exceptions used in librustrt for now.
+
+Sorry for the naive question, but can't you use the STL without exceptions?
+
+It seems from the bug Brendan linked to (I skimmed, I admit) they
+wanted to be able to catch memory allocation failures; it's not clear
+to me whether that's a desirable goal in Rust.  (It's not clear to me
+if you're out of memory whether you can write any useful
+non-allocating Rust code to handle the error condition.)
+
+From graydon at mozilla.com  Sat Mar 12 19:57:15 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 12 Mar 2011 19:57:15 -0800
+Subject: [rust-dev] LLVM 3.0svn and tinderboxes
+In-Reply-To: <4D7B0D25.4030000@mozilla.com>
+References: <4D7B0D25.4030000@mozilla.com>
+Message-ID: <4D7C409B.7010400@mozilla.com>
+
+On 11/03/2011 10:05 PM, Patrick Walton wrote:
+> Hi everyone,
+>
+> I think the tree is burning due to LLVM not being up to date with my
+> checkout, which reports itself as 3.0svn. Specifically, the tinderboxes
+> are missing the ObjectFile.h header.
+>
+> If someone needs the tree to be green over the weekend, just let me know
+> and I'll back the change out right away.
+
+Not pressing for me at least; I'll update the tinderboxes to a fresher 
+LLVM on monday. Anyone else needs 'em green immediately, of course, 
+speak up.
+
+-Graydon
+
+From graydon at mozilla.com  Sat Mar 12 20:34:33 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 12 Mar 2011 20:34:33 -0800
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>	<4D7A5215.8040806@mozilla.com>	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+Message-ID: <4D7C4959.5030906@mozilla.com>
+
+On 11/03/2011 11:35 PM, David Herman wrote:
+> Possible, yes. Worth the additional combinatorics in the possible effects a function can have? Not as clear, to me anyway.
+>
+> Without effect polymorphism -- which is nice in principle but can be hard to keep lightweight enough to be usable -- each effect you add to the language increases the possibility of code duplication for polymorphic functions.
+
+Yeah, we're going to have to have some serious conversations about 
+effect polymoprhism in the near future. Like when the effect-checking 
+pass for rustc gets written. I'm worried that a proper treatment will 
+cause too much cognitive load, wind up sinking (or seriously wounding) 
+the effect system. That'd be a real shame, if so.
+
+> I guess more to the point, if blocking ends up being a pretty rare thing in idiomatic Rust, programmer discipline may be perfectly sufficient to manage blocking, without the need for checking in the type system.
+
+My guess is it's *almost* synonymous with the unsafe effect, which is 
+carried by every native (C) function. Since we are never going to be 
+interrupting / de-scheduling a C call in flight, they're all "blocking" 
+until they return to rust. The only question is how *long* the C call 
+blocks.
+
+My further guess is that the set of C calls you'd want to 'auth' the 
+native effect on -- scrubbing them of the effect -- is about the same 
+set you'd want to mark as non-blocking. This is all pretty hand-waving 
+though. We'll have to see how it shakes out in practice.
+
+Also depends a lot on the idiomatic I/O interfaces we wind up leaning 
+most heavily on. We haven't discovered or chosen those yet.
+
+> Oh, and another alternative, at least for monomorphic types, would be to express blocking as a predicate and enforce it via refinement types. For polymorphic types, it would have to be more like a type class. I know Marijn has been talking about type classes, but Patrick and I have our reservations, and I imagine Graydon may too.
+
+My main reservations are that (a) I don't understand typeclasses very 
+well, and (b) they'll add to the cognitive load of the language. Pretty 
+broadly.
+
+It's clear to me we're a bit too weak, expressiveness-wise, in the 
+dialect we're writing rustc in. Too many bits of verbosity and/or 
+awkwardness. But I want to explore the options for improving that in 
+order of cognitive "cheapness":
+
+   - Enhancing the obj and fn constructs (self, narrow/extend, lambda)
+
+   - Exploring a 'simple' static self-type dispatch system as we've
+     been discussing. Moral equivalent of C++ non-virtual methods.
+
+   - Maybe some kind of richer overloading or typeclass scheme.
+
+It's not clear to me that we'll need to get to stage 3 on this list 
+before the language is "comfortably" expressive. I'm really hopeful 
+we'll be ok with #2 or less. I don't want to shoot for the stars here, 
+in terms of expressiveness. Doing better than C or Java, sure. But no 
+need to try to show up Haskell, Lisp, Forth or APL. There are other 
+matters in direct trade-off that matter more to me.
+
+-Graydon
+
+From graydon at mozilla.com  Sat Mar 12 20:42:07 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 12 Mar 2011 20:42:07 -0800
+Subject: [rust-dev] Fwd: [GitHub] Add basic file-system functionality
+ [graydon/rust 2330c96]
+In-Reply-To: <AANLkTi=oYGbLJrcmZvBOTyqCrZrzKGDtvHf3MM9NcmVB@mail.gmail.com>
+References: <graydon/rust/commit/2330c96e4550d371d71822d4aa0baadba95a1253/298321@github.com>	<B5041504-270F-45BE-A86F-6410294B20AE@mozilla.org>	<4D7A8A81.3000502@mozilla.com>
+	<AANLkTi=oYGbLJrcmZvBOTyqCrZrzKGDtvHf3MM9NcmVB@mail.gmail.com>
+Message-ID: <4D7C4B1F.7000602@mozilla.com>
+
+On 12/03/2011 8:46 AM, Evan Martin wrote:
+
+> It seems from the bug Brendan linked to (I skimmed, I admit) they
+> wanted to be able to catch memory allocation failures; it's not clear
+> to me whether that's a desirable goal in Rust.  (It's not clear to me
+> if you're out of memory whether you can write any useful
+> non-allocating Rust code to handle the error condition.)
+
+Not at all naive. I'd like to be able to unwind from an out-of-memory 
+situation though. Rust domains are intended to support setting memory 
+budgets, on a per-domain basis, which means we may have artificial 
+memory ceilings far less than system ram. Can't enforce in general C 
+code that calls malloc(), but can (or should) be able to enforce on the 
+runtime structures allocated to support 'pure' rust code.
+
+(and subprocess domains with rlimits should suffice for boxing in C code 
+memory use, as the process itself boxes in any segfaults or other unsafe 
+naughtiness :)
+
+-Graydon
+
+From marijnh at gmail.com  Sun Mar 13 00:46:15 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sun, 13 Mar 2011 09:46:15 +0100
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <4D7C4959.5030906@mozilla.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+	<4D7A5215.8040806@mozilla.com>
+	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+	<4D7C4959.5030906@mozilla.com>
+Message-ID: <AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>
+
+> My main reservations are that (a) I don't understand typeclasses very well,
+> and (b) they'll add to the cognitive load of the language. Pretty broadly.
+
+I'd argue that supporting typeclasses *instead of* the current obj
+system could reduce cognitive load by providing a single, consistent,
+more general way to express a bunch of things that are currently
+problematic and special-cased. I'll come up with a serious proposal
+when the bootstrapping is behind us.
+
+From brendan at mozilla.org  Sun Mar 13 09:35:43 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Sun, 13 Mar 2011 11:35:43 -0500
+Subject: [rust-dev] Fwd: [GitHub] Add basic file-system functionality
+	[graydon/rust 2330c96]
+In-Reply-To: <4D7C4B1F.7000602@mozilla.com>
+References: <graydon/rust/commit/2330c96e4550d371d71822d4aa0baadba95a1253/298321@github.com>	<B5041504-270F-45BE-A86F-6410294B20AE@mozilla.org>	<4D7A8A81.3000502@mozilla.com>
+	<AANLkTi=oYGbLJrcmZvBOTyqCrZrzKGDtvHf3MM9NcmVB@mail.gmail.com>
+	<4D7C4B1F.7000602@mozilla.com>
+Message-ID: <5BA533CD-E1C3-42EB-9630-C03A726C0E71@mozilla.org>
+
+On Mar 12, 2011, at 10:42 PM, Graydon Hoare wrote:
+
+> On 12/03/2011 8:46 AM, Evan Martin wrote:
+> 
+>> It seems from the bug Brendan linked to (I skimmed, I admit) they
+>> wanted to be able to catch memory allocation failures; it's not clear
+>> to me whether that's a desirable goal in Rust.  (It's not clear to me
+>> if you're out of memory whether you can write any useful
+>> non-allocating Rust code to handle the error condition.)
+> 
+> Not at all naive. I'd like to be able to unwind from an out-of-memory situation though.
+
+Mozilla C++ has the same constraint, which makes precise the problem with STL's containers, e.g., lacking failed-due-to-OOM return codes.
+
+While we decorate as fallible allocation sites whose size is variable and failure-prone due to web mistakes and attacks (e.g. image height and width), and null-check, we're not yet ready to let the main process (!) fail hard if a smaller allocation walks off a cliff. And at least on Windows, it seems, it's easy to run out of VM in some cases, even in spite of overcommit being the default OS policy.
+
+/be
+
+
+From respindola at mozilla.com  Sun Mar 13 11:43:52 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Sun, 13 Mar 2011 14:43:52 -0400
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>	<4D7A5215.8040806@mozilla.com>	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>	<4D7C4959.5030906@mozilla.com>
+	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>
+Message-ID: <4D7D1068.2080906@mozilla.com>
+
+> I'd argue that supporting typeclasses *instead of* the current obj
+> system could reduce cognitive load by providing a single, consistent,
+> more general way to express a bunch of things that are currently
+> problematic and special-cased. I'll come up with a serious proposal
+> when the bootstrapping is behind us.
+
+Correct me if I am wrong, but in a generic typeclass system one can 
+define a new type is an instance of (for example) Number by defining its 
+'<', '+', etc.
+
+Since we intend to support separate compilation, this looks like a 
+really expensive feature.
+
+In the current system a vtable is only produced for each obj X interface 
+pair that is used. Somewhat more expensive and expressive than c++.
+
+If replacing it with type classes, it should be clear to the user where 
+type descriptors are introduced.
+
+How expensive is it to construct the type descriptors? How are they 
+mapped when a function that takes an Integer passes it to a more generic 
+function that takes a Number?
+
+Cheers,
+Rafael
+
+From marijnh at gmail.com  Sun Mar 13 12:00:04 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sun, 13 Mar 2011 20:00:04 +0100
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <4D7D1068.2080906@mozilla.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+	<4D7A5215.8040806@mozilla.com>
+	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+	<4D7C4959.5030906@mozilla.com>
+	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>
+	<4D7D1068.2080906@mozilla.com>
+Message-ID: <AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+
+> Correct me if I am wrong, but in a generic typeclass system one can define a
+> new type is an instance of (for example) Number by defining its '<', '+',
+> etc.
+
+Right. The Number typeclass would have a bunch of operations, and you
+can declare a type to be an instance of this class by defining, in the
+instance declaration, these operations for that type.
+
+> Since we intend to support separate compilation, this looks like a really
+> expensive feature.
+
+I'm not sure what you are getting at. Each instance declaration would
+lead to a vtable, so a type can have multiple vtables for the
+different typeclasses it belongs to, but this is linear, and not
+something to be worried about at all. The vtable will live in the
+crate that declares the instance. In Haskell, and this is probably
+worth following, only the module that defines the type, or the module
+that defines the typeclass, can declare an instance for a
+type/typeclass combo. So if your crate can 'uses' (as in, links) a
+given typeclass and type, it also see any instance declarations for
+them.
+
+Then, as in your example, when a function passes an int to a function
+one of whose type parameters is restricted to type Number, that is the
+point where the vtable for int/Number is looked up, and passed along.
+As an optimization, you can make this vtable point to the int type, so
+that you don't have to pass both the vtable and the type descriptor to
+the polymorphic function.
+
+Let me know if that doesn't make sense.
+
+From sebastian.sylvan at gmail.com  Sun Mar 13 12:19:43 2011
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Sun, 13 Mar 2011 19:19:43 +0000
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+	<4D7A5215.8040806@mozilla.com>
+	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+	<4D7C4959.5030906@mozilla.com>
+	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>
+	<4D7D1068.2080906@mozilla.com>
+	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+Message-ID: <AANLkTinv6q49cRecCXnzTEb-tCRw4stiaeT6tW+=u=sh@mail.gmail.com>
+
+2011/3/13 Marijn Haverbeke <marijnh at gmail.com>
+
+> In Haskell, and this is probably
+> worth following, only the module that defines the type, or the module
+> that defines the typeclass, can declare an instance for a
+> type/typeclass combo.
+
+
+I don't think this is true. Anyone who can see both the type and the type
+class visible can declare an instance. This is very convenient and something
+that should be retained in a potential Rust version, IMO.
+
+It's very nice to be able to supply instances for existing types for your
+new type class, for example, but not something you'd normally want to put in
+the main module because it's really an optional extra.
+
+Sebastian
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110313/615961df/attachment.html>
+
+From respindola at mozilla.com  Sun Mar 13 12:23:36 2011
+From: respindola at mozilla.com (=?UTF-8?B?UmFmYWVsIMOBdmlsYSBkZSBFc3DDrW5kb2xh?=)
+Date: Sun, 13 Mar 2011 15:23:36 -0400
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>	<4D7A5215.8040806@mozilla.com>	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>	<4D7C4959.5030906@mozilla.com>	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>	<4D7D1068.2080906@mozilla.com>
+	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+Message-ID: <4D7D19B8.2000801@mozilla.com>
+
+> I'm not sure what you are getting at. Each instance declaration would
+> lead to a vtable, so a type can have multiple vtables for the
+> different typeclasses it belongs to, but this is linear, and not
+> something to be worried about at all. The vtable will live in the
+> crate that declares the instance. In Haskell, and this is probably
+> worth following, only the module that defines the type, or the module
+> that defines the typeclass, can declare an instance for a
+> type/typeclass combo. So if your crate can 'uses' (as in, links) a
+> given typeclass and type, it also see any instance declarations for
+> them.
+>
+> Then, as in your example, when a function passes an int to a function
+> one of whose type parameters is restricted to type Number, that is the
+> point where the vtable for int/Number is looked up, and passed along.
+> As an optimization, you can make this vtable point to the int type, so
+> that you don't have to pass both the vtable and the type descriptor to
+> the polymorphic function.
+>
+> Let me know if that doesn't make sense.
+
+It does. By "looked up" you mean at compile time, right? If so it looks 
+like about as expensive as the object system that rust has right now. I 
+think the main difference then is in the uses.
+
+The rust objects are more expensive than c++ ones, but they are not 
+likely to be used as often. For normal cases where we know all the 
+derived types, tags are the most natural solution and are very efficient 
+(specially in memory use!). Hopefully having more expensive but not as 
+commonly used objects pays off.
+
+Type classes, in Haskell at least, are very common. If we can use them 
+as parsimoniously as we use objects, that should be OK. It then becomes 
+a question of preference. I can see programmers with functional 
+languages background preferring type classes and programmers with 
+dynamic languages background preferring the current object system.
+
+Cheers,
+Rafael
+
+From marijnh at gmail.com  Sun Mar 13 13:10:42 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sun, 13 Mar 2011 21:10:42 +0100
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTinv6q49cRecCXnzTEb-tCRw4stiaeT6tW+=u=sh@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+	<4D7A5215.8040806@mozilla.com>
+	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+	<4D7C4959.5030906@mozilla.com>
+	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>
+	<4D7D1068.2080906@mozilla.com>
+	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+	<AANLkTinv6q49cRecCXnzTEb-tCRw4stiaeT6tW+=u=sh@mail.gmail.com>
+Message-ID: <AANLkTik_n80rEotLZEW6Zd_qB_hjBq6ZwrTL8+VUKJdP@mail.gmail.com>
+
+> I don't think this is true. Anyone who can see both the type and the type
+> class visible can declare an instance. This is very convenient and something
+> that should be retained in a potential Rust version, IMO.
+
+I indeed can't find anything about this in a quick scanning of the
+standard. Maybe it's another language that does it this way, or maybe
+I'm just completely making things up here. Declaring instances
+anywhere is a gain in expressiveness, but does lead to the unsavory
+possibility of clashes, when linking stuff together that declares two
+different instances for a type/class pair. (I also assumed this would
+lead to not being able to determine which instance to use statically,
+but actually that's not much of a problem--it'd just be a compile-time
+error to use a value of type X where class Y was expected unless the
+compiler can see that X was declared instance of Y somewhere in the
+linked libraries.)
+
+From dherman at mozilla.com  Sun Mar 13 13:12:14 2011
+From: dherman at mozilla.com (David Herman)
+Date: Sun, 13 Mar 2011 13:12:14 -0700
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <4D7D19B8.2000801@mozilla.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>	<4D7A5215.8040806@mozilla.com>	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>	<4D7C4959.5030906@mozilla.com>	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>	<4D7D1068.2080906@mozilla.com>
+	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+	<4D7D19B8.2000801@mozilla.com>
+Message-ID: <1E146D30-26AD-4FC7-9621-406644928823@mozilla.com>
+
+>> In Haskell, and this is probably
+>> worth following, only the module that defines the type, or the module
+>> that defines the typeclass, can declare an instance for a
+>> type/typeclass combo. So if your crate can 'uses' (as in, links) a
+>> given typeclass and type, it also see any instance declarations for
+>> them.
+
+I'm pretty sure that's not right. See e.g. section 5.4 of the Haskell 98 report:
+
+    http://www.haskell.org/onlinereport/modules.html#sect5.4
+
+I believe you can declare instances anywhere, and whenever you import from a module with an instance declaration, you automatically import those instances.
+
+I still have reservations about type classes, but I'm open in principle to the idea. I'd personally want to see a pretty well thought-through proposal. When SPJ says something is hard (http://research.microsoft.com/en-us/um/people/simonpj/papers/haskell-retrospective/HaskellRetrospective.pdf, slide 46), I believe him!
+
+
+>> Then, as in your example, when a function passes an int to a function
+>> one of whose type parameters is restricted to type Number, that is the
+>> point where the vtable for int/Number is looked up, and passed along.
+>> As an optimization, you can make this vtable point to the int type, so
+>> that you don't have to pass both the vtable and the type descriptor to
+>> the polymorphic function.
+
+One of the design goals of Rust is to make the performance model as clear as possible. Patrick has pointed out to me that right now, we have a pretty good story for explaining the cost of polymorphic functions: every type parameter corresponds to another argument that's passed into the function at runtime -- roughly, the vtable for the Rust's built-in system "type classes" (for memory management and runtime type reflection). Now, extending this to arbitrary vtables is reasonably consistent; bounded type parameters are still type parameters, and they still take a vtable argument. But when you start talking about optimizations that let you eliminate these arguments, I get nervous because the cost model starts getting more complex.
+
+But it would be a bigger problem if we tried to bring in full type inference. Hindley-Milner is all about inferring the most general type. Having the compiler decide to make our code unnecessarily polymorphic means making it unnecessarily slow. :) But there aren't many languages with type classes, and I've never heard of one without inference. I'm not sure what that would look like.
+
+Dave
+
+
+From dherman at mozilla.com  Sun Mar 13 13:13:18 2011
+From: dherman at mozilla.com (David Herman)
+Date: Sun, 13 Mar 2011 13:13:18 -0700
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTik_n80rEotLZEW6Zd_qB_hjBq6ZwrTL8+VUKJdP@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+	<4D7A5215.8040806@mozilla.com>
+	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+	<4D7C4959.5030906@mozilla.com>
+	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>
+	<4D7D1068.2080906@mozilla.com>
+	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+	<AANLkTinv6q49cRecCXnzTEb-tCRw4stiaeT6tW+=u=sh@mail.gmail.com>
+	<AANLkTik_n80rEotLZEW6Zd_qB_hjBq6ZwrTL8+VUKJdP@mail.gmail.com>
+Message-ID: <0FE0E924-18B7-492E-98A7-F3E5EC767033@mozilla.com>
+
+> I indeed can't find anything about this in a quick scanning of the
+> standard. Maybe it's another language that does it this way, or maybe
+> I'm just completely making things up here. Declaring instances
+> anywhere is a gain in expressiveness, but does lead to the unsavory
+> possibility of clashes, when linking stuff together that declares two
+> different instances for a type/class pair.
+
+Yeah. Google for Haskell overlapping instances and be prepared to go cross-eyed...
+
+Dave
+
+
+From marijnh at gmail.com  Sun Mar 13 13:27:45 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sun, 13 Mar 2011 21:27:45 +0100
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <1E146D30-26AD-4FC7-9621-406644928823@mozilla.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+	<4D7A5215.8040806@mozilla.com>
+	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+	<4D7C4959.5030906@mozilla.com>
+	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>
+	<4D7D1068.2080906@mozilla.com>
+	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+	<4D7D19B8.2000801@mozilla.com>
+	<1E146D30-26AD-4FC7-9621-406644928823@mozilla.com>
+Message-ID: <AANLkTimxsf8OUckJM6tWC5h+0H2A9FDCB9Kpgx8iT7ao@mail.gmail.com>
+
+> When SPJ says something is hard (http://research.microsoft.com/en-us/um/people/simonpj/papers/haskell-retrospective/HaskellRetrospective.pdf, slide 46), I believe him!
+
+I prefer to interpret that slide as saying that inventing them was
+hard. We are in the comfortable position of having their work to build
+on. Note that the far right of the graph says 'Hey, what's the big
+deal?'.
+
+> But it would be a bigger problem if we tried to bring in full type inference. Hindley-Milner is all about inferring the most general type. Having the compiler decide to make our code unnecessarily polymorphic means making it unnecessarily slow. :) But there aren't many languages with type classes, and I've never heard of one without inference. I'm not sure what that would look like.
+
+I expect we're definitely going to keep requiring full type
+specifications for top-level functions (and I think that's a very good
+thing--though I may at some point argue that for inner functions they
+should be optional). Doing Hindley-Milner type inference with required
+top-level specifications removes the problem of overzealous
+generalization. I think this would be a good road to take (though I
+get the impression others on the team are less enthousiastic about
+H-M).
+
+From dherman at mozilla.com  Sun Mar 13 13:59:47 2011
+From: dherman at mozilla.com (David Herman)
+Date: Sun, 13 Mar 2011 13:59:47 -0700
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTimxsf8OUckJM6tWC5h+0H2A9FDCB9Kpgx8iT7ao@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+	<4D7A5215.8040806@mozilla.com>
+	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+	<4D7C4959.5030906@mozilla.com>
+	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>
+	<4D7D1068.2080906@mozilla.com>
+	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+	<4D7D19B8.2000801@mozilla.com>
+	<1E146D30-26AD-4FC7-9621-406644928823@mozilla.com>
+	<AANLkTimxsf8OUckJM6tWC5h+0H2A9FDCB9Kpgx8iT7ao@mail.gmail.com>
+Message-ID: <D4708A57-1319-4007-A2B3-CE5792F682B9@mozilla.com>
+
+> I prefer to interpret that slide as saying that inventing them was
+> hard. We are in the comfortable position of having their work to build
+> on. Note that the far right of the graph says 'Hey, what's the big
+> deal?'.
+
+Well, I stand by my concern. Type classes are still being studied, tweaked, and experimented with for Haskell, and they're a pretty subtle thing. They're a constraint language, and it's tough to make constraint languages provide clear solutions, clear performance models, and clear error messages.
+
+> I expect we're definitely going to keep requiring full type
+> specifications for top-level functions (and I think that's a very good
+> thing--though I may at some point argue that for inner functions they
+> should be optional). Doing Hindley-Milner type inference with required
+> top-level specifications removes the problem of overzealous
+> generalization. I think this would be a good road to take (though I
+> get the impression others on the team are less enthousiastic about
+> H-M).
+
+Is that much different from what we currently have? Ignoring inner functions for the moment (which don't even really exist yet, right?), aren't local variables (i.e., `auto') all that's left?
+
+FWIW, these are my reservations about H-M for Rust:
+
+- Decidability/tractability is delicate, and imposes constraints on the design space for the type system.
+
+- Inference in the presence of refinement types is a harder problem than inference for ML/Haskell. That said, this may have a known solution in the literature; I haven't looked.
+
+- Inference error messages are bad because when two disparate pieces of code disagree, the type checker can't generally tell who's right and who's wrong.
+
+- We don't mind requiring people to annotate top-level code anyway.
+
+- Inferring most general types lead to implicitly polymorphic code, incurring silent costs.
+
+- Global inference inhibits parallel compilation (not the most important point, I'll grant)
+
+Having said all that, what you've described sounds like it may address a number of these concerns. Particularly, local/bidirectional type inference can improve error messages and simplify the algorithm, and maybe that's closer to what you're describing. (In particular, I think it's generally possible to infer types for local functions using outside-in inference only.)
+
+Dave
+
+
+From graydon at mozilla.com  Sun Mar 13 22:09:55 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 13 Mar 2011 22:09:55 -0700
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>	<4D7A5215.8040806@mozilla.com>	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>	<4D7C4959.5030906@mozilla.com>	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>	<4D7D1068.2080906@mozilla.com>
+	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+Message-ID: <4D7DA323.1000907@mozilla.com>
+
+On 13/03/2011 12:00 PM, Marijn Haverbeke wrote:
+
+> Then, as in your example, when a function passes an int to a function
+> one of whose type parameters is restricted to type Number, that is the
+> point where the vtable for int/Number is looked up, and passed along.
+> As an optimization, you can make this vtable point to the int type, so
+> that you don't have to pass both the vtable and the type descriptor to
+> the polymorphic function.
+>
+> Let me know if that doesn't make sense.
+
+I'm having a hard time seeing an operational distinction between this 
+description and "wrapping an int in an obj conforming to the obj-type 
+called Number", aside from perhaps a nomenclature one ("wrapping 
+objects" vs. "instantiating typeclasses"). Sorta reminds me of Xavier's 
+pithy old slide about OO/FP discourse differences: 
+http://venge.net/graydon/elitist.png :)
+
+But at any rate .. I ask once more that we shelve this whole topic until 
+after we have more substantial pieces of the language re-implemented in 
+rustc. We don't support more than, say, 60% of the manual's claims right 
+now. It's a bit embarrassing.
+
+-Graydon
+
+From graydon at mozilla.com  Sun Mar 13 22:26:42 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 13 Mar 2011 22:26:42 -0700
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <4D7DA323.1000907@mozilla.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>	<4D7A5215.8040806@mozilla.com>	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>	<4D7C4959.5030906@mozilla.com>	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>	<4D7D1068.2080906@mozilla.com>	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+	<4D7DA323.1000907@mozilla.com>
+Message-ID: <4D7DA712.1020805@mozilla.com>
+
+On 13/03/2011 10:09 PM, Graydon Hoare wrote:
+
+> Sorta reminds me of Xavier's
+> pithy old slide about OO/FP discourse differences:
+> http://venge.net/graydon/elitist.png :)
+
+(In case there's any risk of taking this as an insult; this slide lept 
+out at me as characteristic of my own choices of nomenclature many times 
+in the past. I keep it around as a reminder to myself of the importance 
+of picking friendly, familiar names for things.)
+
+-Graydon
+
+From marijnh at gmail.com  Mon Mar 14 03:08:12 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 14 Mar 2011 11:08:12 +0100
+Subject: [rust-dev] Exposing any bytes as vec[u8]?
+Message-ID: <AANLkTik3OCTiEPZ11QkQnMD6157PQXDFVuu4ZJi_E-rD@mail.gmail.com>
+
+My problem: In writing a memory-mapped file API, I'd like to expose
+the mapped memory as a vec[u8] in Rust. I could make another kind of
+object wrapper, but in the interest of having interoperable code, I
+think having all byte vectors be vec[u8] would be preferable. The
+rust_vec type in the runtime however, expects its data vector to be
+inside of the struct itself. Copying a memory-mapped file into a
+struct isn't quite what we want.
+
+My proposed solution: Add a pointer to the rust_vec struct that points
+at the data. For normal vectors, it'll just point at the data section
+inside the struct, but we'll add a way to allocate a vector that takes
+some external byte array and wraps it as a vec.
+
+Upsides:
+- The added indirection is so minor that I don't expect there'll be a
+noticeable peformance change.
+- We'll need this in other places too, if we want efficient system's
+stuff programmed in Rust
+
+Downsides:
+- Vec structs, and thus strings, become bigger.
+- The creator of such a vec will be responsible for cleaning up the
+byte array at the appropriate time. If the vec 'escapes', doing this
+reliable becomes very hard. We could (at the cost of more complexity
+and probably size) make it so that a custom deallocator is called when
+the vec is finalized.
+
+
+A possible alternative: Provide a vec-like API around byte vbufs. We'd
+have two different byte array representations, which will result in
+some code duplication and questions of which to use when, and it
+doesn't really help safety much. But it will make it clear when you're
+working with rust-curated memory and when you're handling raw
+undomesticated could-be-anything data.
+
+From marijnh at gmail.com  Mon Mar 14 03:21:41 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 14 Mar 2011 11:21:41 +0100
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <4D7DA323.1000907@mozilla.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+	<4D7A5215.8040806@mozilla.com>
+	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+	<4D7C4959.5030906@mozilla.com>
+	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>
+	<4D7D1068.2080906@mozilla.com>
+	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+	<4D7DA323.1000907@mozilla.com>
+Message-ID: <AANLkTinnK3bmG9kMi32-z-cQQvw=T-q_n_T4hROQd8Cs@mail.gmail.com>
+
+> I'm having a hard time seeing an operational distinction between this
+> description and "wrapping an int in an obj conforming to the obj-type called
+> Number",
+
+The 'wrapping' is done implicitly and transparently, and the compiler
+knows about it, and can thus optimize trivial things like, 'x == 0',
+if int is an instance of class 'Comparable', into direct calls to the
+int compare function, rather than creating two objects wrapping ints
+and looking up the compare operation in their vtables at runtime. This
+will allow things to be generalized without having to pay for the
+generality when we don't need it.
+
+As for terminology, using a new name (typeclasses) for something
+that's new (they are simply a different thing from Java/C++/etc
+classes) is necessary to prevent confusion. In the nineties, I'm sure
+some people derided objects as elitist. Right now, it's not hard to
+find people who consider functional programming ivory-tower nonsense.
+Progress, by being different from the old thing, is always going to
+take some getting used to.
+
+That being said, I have no intention of dragging functors, monoids, or
+other category-theory mumbo-jumbo into Rust. When possible, I agree we
+should stick to widely-known terminology. 'Interfaces' would have been
+just as good a word as 'typeclasses'. But they have been invented and
+popularized as 'typeclasses', so that's probably the best word to use
+for them now.
+
+From brendan at mozilla.org  Mon Mar 14 07:30:37 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Mon, 14 Mar 2011 09:30:37 -0500
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTinnK3bmG9kMi32-z-cQQvw=T-q_n_T4hROQd8Cs@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+	<4D7A5215.8040806@mozilla.com>
+	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+	<4D7C4959.5030906@mozilla.com>
+	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>
+	<4D7D1068.2080906@mozilla.com>
+	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+	<4D7DA323.1000907@mozilla.com>
+	<AANLkTinnK3bmG9kMi32-z-cQQvw=T-q_n_T4hROQd8Cs@mail.gmail.com>
+Message-ID: <6D75BB3A-BFB3-465F-A71B-26384DEB495F@mozilla.org>
+
+On Mar 14, 2011, at 5:21 AM, Marijn Haverbeke wrote:
+
+> That being said, I have no intention of dragging functors, monoids, or
+> other category-theory mumbo-jumbo into Rust. When possible, I agree we
+> should stick to widely-known terminology. 'Interfaces' would have been
+> just as good a word as 'typeclasses'. But they have been invented and
+> popularized as 'typeclasses', so that's probably the best word to use
+> for them now.
+
+C+0x tried "concepts", ended up deferring them.
+
+Seemed like typeclasses in all but name -- anyone know more?
+
+/be
+
+
+From marijnh at gmail.com  Mon Mar 14 07:44:22 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 14 Mar 2011 15:44:22 +0100
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <6D75BB3A-BFB3-465F-A71B-26384DEB495F@mozilla.org>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+	<4D7A5215.8040806@mozilla.com>
+	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+	<4D7C4959.5030906@mozilla.com>
+	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>
+	<4D7D1068.2080906@mozilla.com>
+	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+	<4D7DA323.1000907@mozilla.com>
+	<AANLkTinnK3bmG9kMi32-z-cQQvw=T-q_n_T4hROQd8Cs@mail.gmail.com>
+	<6D75BB3A-BFB3-465F-A71B-26384DEB495F@mozilla.org>
+Message-ID: <AANLkTinoAA9VbQNy49gr6ihF+QEx5rKUdbAcjVt3=aMg@mail.gmail.com>
+
+> C+0x tried "concepts", ended up deferring them.
+
+As I understand it, these didn't provide any kind of dynamic dispatch.
+They were a way to specify that a type had a number of static
+functions/methods/operators apply to it, so that you could more
+meaningfully talk about the kind of types a template supported. They
+are similar in that a type can be made to satisfy a concept by having
+operators defined on it outside of its definition, but should be seen
+as a static thing that only makes sense if you have C++-style
+templates.
+
+From graydon at mozilla.com  Mon Mar 14 08:03:38 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 14 Mar 2011 08:03:38 -0700
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTinnK3bmG9kMi32-z-cQQvw=T-q_n_T4hROQd8Cs@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>	<4D7A5215.8040806@mozilla.com>	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>	<4D7C4959.5030906@mozilla.com>	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>	<4D7D1068.2080906@mozilla.com>	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>	<4D7DA323.1000907@mozilla.com>
+	<AANLkTinnK3bmG9kMi32-z-cQQvw=T-q_n_T4hROQd8Cs@mail.gmail.com>
+Message-ID: <4D7E2E4A.8080103@mozilla.com>
+
+On 14/03/2011 3:21 AM, Marijn Haverbeke wrote:
+
+> The 'wrapping' is done implicitly and transparently, and the compiler
+> knows about it, and can thus optimize trivial things like, 'x == 0',
+> if int is an instance of class 'Comparable', into direct calls to the
+> int compare function, rather than creating two objects wrapping ints
+> and looking up the compare operation in their vtables at runtime. This
+> will allow things to be generalized without having to pay for the
+> generality when we don't need it.
+
+In general we're not supporting (or not *starting* with the notion of 
+supporting) any transparent conversions at all. Not even subtyping. 
+Particularly not a conversion that involves allocating a wrapper object 
+and a vtbl. We don't even auto-box 10 to @int!
+
+And it will, of course, allocate in cases where the compiler can't or 
+won't inline. Like, as others have pointed out, across crate boundaries. 
+Within a crate we might well see LLVM doing interprocedural inlining of 
+obj vtable calls as well, but that's neither here nor there. The 
+artifact ("an obj") exists for the programmer to see what's going on and 
+decide when to construct a wrapper. Cost model is visible and obvious. 
+"No reliance on smart compilers." Maybe I should have made that our slogan?
+
+> As for terminology, using a new name (typeclasses) for something
+> that's new (they are simply a different thing from Java/C++/etc
+> classes) is necessary to prevent confusion. In the nineties, I'm sure
+> some people derided objects as elitist. Right now, it's not hard to
+> find people who consider functional programming ivory-tower nonsense.
+> Progress, by being different from the old thing, is always going to
+> take some getting used to.
+
+Yeah, I'm sorry. It was a crude thing to say.
+
+I didn't mean it in terms of "FP tech is intrinsically elitist", just 
+that using its encodings for a problem will inevitably collide with, or 
+sacrifice, the more widely understood non-FP encoding of the same 
+problem (unless you want your language to carry both; doubles the 
+cognitive load). So if I have to choose I will go with the more 
+mainstream terminology and encoding.
+
+Case in point: Sebastian contacted me off-list to note that there 
+remains the more particular case typeclasses encode better than objs: 
+that of N-ary operations over your type. As he put it: the vtable 
+adheres to the type, not the value.
+
+I find this similar to the argument in favour of existentials (which, 
+while you weren't here for it, we used to support, along with first 
+class modules). For existentials we eventually decided that since an 
+inverted-control-flow encoding of them exists using universals, they 
+didn't justify their cognitive load. I have a similar feeling here: we 
+have a way of making vtables, it's a way that looks and feels like what 
+more people will recognize, so let's see how much mileage we can get out 
+of that. I *suspect* (though cannot prove) that most of the typeclass 
+use-cases encode as objects + universals with a little rearrangement. 
+And that's worth pursuing if true.
+
+Keep these graphs in mind:
+
+http://langpop.com/#normalized
+
+The first 13-or-so entries on that list (and the vast majority of 
+implied population) are languages that encode such problems in objects + 
+universals. It's not that it's a strictly better encoding, merely a 
+strong argument in favour of going with the flow when picking out own 
+encoding.
+
+-Graydon
+
+From marijnh at gmail.com  Mon Mar 14 08:11:21 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 14 Mar 2011 16:11:21 +0100
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <4D7E2E4A.8080103@mozilla.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>
+	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>
+	<4D7A5215.8040806@mozilla.com>
+	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>
+	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>
+	<4D7C4959.5030906@mozilla.com>
+	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>
+	<4D7D1068.2080906@mozilla.com>
+	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>
+	<4D7DA323.1000907@mozilla.com>
+	<AANLkTinnK3bmG9kMi32-z-cQQvw=T-q_n_T4hROQd8Cs@mail.gmail.com>
+	<4D7E2E4A.8080103@mozilla.com>
+Message-ID: <AANLkTin6jLzgR24MfPA7qK+iszoU17zdRU1GtxbrdDAr@mail.gmail.com>
+
+We'll probably keep going off-topic indefinitely here (note the title
+of this thread...). I just want to set one thing straight, and then
+I'll leave the rest of this conversation for later.
+
+> In general we're not supporting (or not *starting* with the notion of
+> supporting) any transparent conversions at all. Not even subtyping.
+> Particularly not a conversion that involves allocating a wrapper object and
+> a vtbl. We don't even auto-box 10 to @int!
+
+Note that no conversion, and thus no implicit conversion, at all
+happens in my description. It passes a vtable to the function that is
+polymorphic on a typeclass type, doesn't allocate anything. Thus, this
+is much more efficient than your wrapper obj example.
+
+From graydon at mozilla.com  Mon Mar 14 08:25:48 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 14 Mar 2011 08:25:48 -0700
+Subject: [rust-dev] Fork in a Rust process
+In-Reply-To: <AANLkTin6jLzgR24MfPA7qK+iszoU17zdRU1GtxbrdDAr@mail.gmail.com>
+References: <AANLkTim8iWNim-GphMjLdaXX7SiP7vvMMkk-T2MUp47-@mail.gmail.com>	<AANLkTikCvKjyuaoSzMHKs7k9C8VznBApJksmLNBn6aNy@mail.gmail.com>	<4D7A5215.8040806@mozilla.com>	<AANLkTinfnz0+sOpjJXgNKpVckof5ySkEe-n8AWgUWWqp@mail.gmail.com>	<B7E203FE-DB27-47BF-973A-79215174EFA8@mozilla.com>	<4D7C4959.5030906@mozilla.com>	<AANLkTinJRP=Q0wNb5+OTv8Lx52706UiNg4UxzQSqFAst@mail.gmail.com>	<4D7D1068.2080906@mozilla.com>	<AANLkTi=ZZ5tf0ZKwWTKfMtcqgPYENuvCgZXpktY34RRy@mail.gmail.com>	<4D7DA323.1000907@mozilla.com>	<AANLkTinnK3bmG9kMi32-z-cQQvw=T-q_n_T4hROQd8Cs@mail.gmail.com>	<4D7E2E4A.8080103@mozilla.com>
+	<AANLkTin6jLzgR24MfPA7qK+iszoU17zdRU1GtxbrdDAr@mail.gmail.com>
+Message-ID: <4D7E337C.9020807@mozilla.com>
+
+On 14/03/2011 8:11 AM, Marijn Haverbeke wrote:
+> We'll probably keep going off-topic indefinitely here (note the title
+> of this thread...). I just want to set one thing straight, and then
+> I'll leave the rest of this conversation for later.
+
+Agreed. For civility I'll let you have the last word after this if you 
+wish to respond again, but for the record I ought to clarify also (below):
+
+>> In general we're not supporting (or not *starting* with the notion of
+>> supporting) any transparent conversions at all. Not even subtyping.
+>> Particularly not a conversion that involves allocating a wrapper object and
+>> a vtbl. We don't even auto-box 10 to @int!
+>
+> Note that no conversion, and thus no implicit conversion, at all
+> happens in my description. It passes a vtable to the function that is
+> polymorphic on a typeclass type, doesn't allocate anything. Thus, this
+> is much more efficient than your wrapper obj example.
+
+On this point, I still think we're talking about the same cost model.
+
+It's true, my choice of the word 'allocation' was an exaggeration, I 
+meant 'pass a vtbl and possibly indirect through it'. But the same is 
+true of the example I pasted to Sebastian when I was describing an 
+obj-encoding of the 'int is an instance of Number' typeclass example 
+(that incidentally also covers the argument about N-ary ops):
+
+type arith[T] = obj { add(&T a, &T b) -> T;
+                       mul(&T a, &T b) -> T;
+                       // etc.
+                      };
+
+fn addTwice[T](&T a, &T b, arith[T] t) -> T {
+   ret t.add(t.add(a, b), b);
+}
+
+fn main() {
+
+   obj int_arith {
+     fn add(&int a, &int b) -> int { ret a + b; }
+     fn mul(&int a, &int b) -> int { ret a * b; }
+     // ...
+   }
+
+   addTwice(10, 11, int_arith());
+}
+
+In this case, int_arith is your 'instance declaration'. Our sufficiently 
+smart compiler (i.e. "LLVM") sees the int_arith() call as forming a 
+2-word obj with a null box field and a const vtbl. It passes that to 
+addTwice and, since addTwice is small, the vtbl being passed in is const 
+and points to const methods that are themselves small, may very well 
+inline the whole thing down to "10 + 11 + 11".
+
+Same cost model, no?
+
+-Graydon
+
+From fw at deneb.enyo.de  Mon Mar 14 13:26:45 2011
+From: fw at deneb.enyo.de (Florian Weimer)
+Date: Mon, 14 Mar 2011 21:26:45 +0100
+Subject: [rust-dev] Exposing any bytes as vec[u8]?
+In-Reply-To: <AANLkTik3OCTiEPZ11QkQnMD6157PQXDFVuu4ZJi_E-rD@mail.gmail.com>
+	(Marijn Haverbeke's message of "Mon, 14 Mar 2011 11:08:12 +0100")
+References: <AANLkTik3OCTiEPZ11QkQnMD6157PQXDFVuu4ZJi_E-rD@mail.gmail.com>
+Message-ID: <87ei69xxbu.fsf@mid.deneb.enyo.de>
+
+* Marijn Haverbeke:
+
+> My problem: In writing a memory-mapped file API, I'd like to expose
+> the mapped memory as a vec[u8] in Rust.
+
+Uhm. How do you plan to deal with unmapping the file?
+
+From marijnh at gmail.com  Mon Mar 14 13:41:20 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 14 Mar 2011 21:41:20 +0100
+Subject: [rust-dev] Exposing any bytes as vec[u8]?
+In-Reply-To: <87ei69xxbu.fsf@mid.deneb.enyo.de>
+References: <AANLkTik3OCTiEPZ11QkQnMD6157PQXDFVuu4ZJi_E-rD@mail.gmail.com>
+	<87ei69xxbu.fsf@mid.deneb.enyo.de>
+Message-ID: <AANLkTik=oj4f-DygQ-oTR-TjxGHPneBC2Nto7kZwnyXp@mail.gmail.com>
+
+> Uhm. How do you plan to deal with unmapping the file?
+
+Have an obj that represents the lifetime of the mapping, with a
+destructor that unmaps it.
+
+From fw at deneb.enyo.de  Mon Mar 14 14:04:59 2011
+From: fw at deneb.enyo.de (Florian Weimer)
+Date: Mon, 14 Mar 2011 22:04:59 +0100
+Subject: [rust-dev] Exposing any bytes as vec[u8]?
+In-Reply-To: <AANLkTik=oj4f-DygQ-oTR-TjxGHPneBC2Nto7kZwnyXp@mail.gmail.com>
+	(Marijn Haverbeke's message of "Mon, 14 Mar 2011 21:41:20 +0100")
+References: <AANLkTik3OCTiEPZ11QkQnMD6157PQXDFVuu4ZJi_E-rD@mail.gmail.com>
+	<87ei69xxbu.fsf@mid.deneb.enyo.de>
+	<AANLkTik=oj4f-DygQ-oTR-TjxGHPneBC2Nto7kZwnyXp@mail.gmail.com>
+Message-ID: <87k4g1wgzo.fsf@mid.deneb.enyo.de>
+
+* Marijn Haverbeke:
+
+>> Uhm. How do you plan to deal with unmapping the file?
+>
+> Have an obj that represents the lifetime of the mapping, with a
+> destructor that unmaps it.
+
+Yes, but vec[u8] would have to keep a reference to it, to prevent
+premature unmapping.  Would that fit into the existing type system?
+
+From marijnh at gmail.com  Mon Mar 14 14:08:34 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 14 Mar 2011 22:08:34 +0100
+Subject: [rust-dev] Exposing any bytes as vec[u8]?
+In-Reply-To: <87k4g1wgzo.fsf@mid.deneb.enyo.de>
+References: <AANLkTik3OCTiEPZ11QkQnMD6157PQXDFVuu4ZJi_E-rD@mail.gmail.com>
+	<87ei69xxbu.fsf@mid.deneb.enyo.de>
+	<AANLkTik=oj4f-DygQ-oTR-TjxGHPneBC2Nto7kZwnyXp@mail.gmail.com>
+	<87k4g1wgzo.fsf@mid.deneb.enyo.de>
+Message-ID: <AANLkTi=Z5oiFeKWjnzOJ8_3jbVg8nQSALORuZskK_Qez@mail.gmail.com>
+
+> Yes, but vec[u8] would have to keep a reference to it, to prevent
+> premature unmapping. ?Would that fit into the existing type system?
+
+No, it wouldn't. You'd just need to somehow ensure that the vec is no
+longer used when the obj is finalized. I think ensuring that its
+refcount is 1 and failing otherwise would handle this.
+
+From graydon at mozilla.com  Mon Mar 14 14:17:00 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 14 Mar 2011 14:17:00 -0700
+Subject: [rust-dev] Exposing any bytes as vec[u8]?
+In-Reply-To: <87k4g1wgzo.fsf@mid.deneb.enyo.de>
+References: <AANLkTik3OCTiEPZ11QkQnMD6157PQXDFVuu4ZJi_E-rD@mail.gmail.com>	<87ei69xxbu.fsf@mid.deneb.enyo.de>	<AANLkTik=oj4f-DygQ-oTR-TjxGHPneBC2Nto7kZwnyXp@mail.gmail.com>
+	<87k4g1wgzo.fsf@mid.deneb.enyo.de>
+Message-ID: <4D7E85CC.8030408@mozilla.com>
+
+On 11-03-14 02:04 PM, Florian Weimer wrote:
+> * Marijn Haverbeke:
+>
+>>> Uhm. How do you plan to deal with unmapping the file?
+>>
+>> Have an obj that represents the lifetime of the mapping, with a
+>> destructor that unmaps it.
+>
+> Yes, but vec[u8] would have to keep a reference to it, to prevent
+> premature unmapping.  Would that fit into the existing type system?
+
+Nope. The way to do this with the *existing* type system is to not-unify 
+the ideas of vec[u8] and vbuf. Wrap a vbuf in an obj that unmaps on 
+destruction, access it through obj methods.
+
+The way to do this in the *future* type system involves, probably, a 
+small number of efficiency-oriented changes we were discussing back in 
+the fall idly, but haven't gotten around to implementing (or even 
+coherently writing-up) due to the bootstrapping task taking focus. The 
+techniques involve some combination of:
+
+   - Make a vec have a pointer to its data rather than holding it inline,
+     to facilitate the next item.
+
+   - Give a vec have an inline and out-of-line region, and make both
+     uniquely owned so there's no refcounting. Put in a @ if you want
+     that.
+
+   - Split the concept of a dtor out of an obj to a separate 'resource'
+     type, a transparent nominal type that attaches a dtor to a value and
+     otherwise provides no other services. Can only be applied to non-GC
+     values. Permits things like "native pointer + dtor" that doesn't
+     require a full heap allocation + vtbl.
+
+We don't have enough of this machinery lying around yet, sadly, but have 
+some background plans for some-or-all of them.
+
+-Graydon
+
+From graydon at mozilla.com  Mon Mar 14 17:36:51 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 14 Mar 2011 17:36:51 -0700
+Subject: [rust-dev] LLVM version bump
+Message-ID: <4D7EB4A3.4000006@mozilla.com>
+
+Hi,
+
+I've bumped the required LLVM version string to 3.0svn, to reflect the 
+fact that we recently absorbed a dependency on some newer LLVM-isms 
+(ObjectFile stuff). You'll have to move to a new-ish SVN build of LLVM 
+to track us.
+
+Hopefully LLVM version drift will slow down sometime. Sorry about this; 
+tracking SVN is not my favourite game. I'm still fighting the issue on 
+the tinderboxes presently, but .. doesn't look like there's any easy way 
+out aside from forward.
+
+-Graydon
+
+From marijnh at gmail.com  Tue Mar 15 07:18:30 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 15 Mar 2011 15:18:30 +0100
+Subject: [rust-dev] Invitation to comment on a wiki page (crate file format
+	stuff)
+Message-ID: <AANLkTimfB_hwC2nvfhT3a9j=uj5+7VLmuWZbYE-BBwYg@mail.gmail.com>
+
+Steer your browser towards https://github.com/graydon/rust/wiki/Crate-format-rfc
+
+Thanks,
+Marijn
+
+From respindola at mozilla.com  Tue Mar 15 08:19:50 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Tue, 15 Mar 2011 11:19:50 -0400
+Subject: [rust-dev] Invitation to comment on a wiki page (crate file
+ format stuff)
+In-Reply-To: <AANLkTimfB_hwC2nvfhT3a9j=uj5+7VLmuWZbYE-BBwYg@mail.gmail.com>
+References: <AANLkTimfB_hwC2nvfhT3a9j=uj5+7VLmuWZbYE-BBwYg@mail.gmail.com>
+Message-ID: <4D7F8396.8070709@mozilla.com>
+
+On 11-03-15 10:18 AM, Marijn Haverbeke wrote:
+> Steer your browser towards https://github.com/graydon/rust/wiki/Crate-format-rfc
+
+Looks good! Just some comments:
+
+ > The crate descriptor section contains a table mapping paths...
+
+Only exported paths need to be here, right? You talk about local defs 
+not being stable, but we recompile a crate at a time, so any local use 
+of a local def becomes a "pointer".
+
+Also, these table contains only constant and functions, right? Types are 
+in the table you describe afterwards.
+
+In order to use the regular system linker, the exported functions and 
+constants have to be listed as mangled symbol names. Since we are 
+already paying the cost of having a mangled symbol, we can probably use 
+that to find the metadata about that symbol. Having our table be indexed 
+by a hash of the symbol name for example.
+
+> Thanks,
+> Marijn
+
+Cheers,
+Rafael
+
+From marijnh at gmail.com  Tue Mar 15 08:28:35 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 15 Mar 2011 16:28:35 +0100
+Subject: [rust-dev] Invitation to comment on a wiki page (crate file
+ format stuff)
+In-Reply-To: <4D7F8396.8070709@mozilla.com>
+References: <AANLkTimfB_hwC2nvfhT3a9j=uj5+7VLmuWZbYE-BBwYg@mail.gmail.com>
+	<4D7F8396.8070709@mozilla.com>
+Message-ID: <AANLkTi=6TOPX0EKxMeuYGrwDD026M680gUgKR4sd+GGL@mail.gmail.com>
+
+(Heh. It looks like discussing on a Wiki isn't something this team is
+used to. Graydon discussed this on irc, you over e-mail. Oh well.)
+
+> Only exported paths need to be here, right?
+
+Right.
+
+> You talk about local defs not
+> being stable, but we recompile a crate at a time, so any local use of a
+> local def becomes a "pointer".
+
+By local def ids I meant the second number in a def_id pair -- the
+things the parser assigns to defs. If they were stable, we could
+directly refer to a def_id in another crate, but minor syntactic
+changes can change them, so we must use full names.
+
+> Also, these table contains only constant and functions, right? Types are in
+> the table you describe afterwards.
+
+No, types are also indexed by name here. The type table maps from ids
+to types. This may seem needlessly indirect, but it maps precisely to
+the resolve pass being separate from the typecheck/translate passes.
+
+> In order to use the regular system linker, the exported functions and
+> constants have to be listed as mangled symbol names. Since we are already
+> paying the cost of having a mangled symbol, we can probably use that to find
+> the metadata about that symbol. Having our table be indexed by a hash of the
+> symbol name for example.
+
+As I understood it, these hashes will also contain type info. The
+resolver doesn't know anything beyond a path when it is resolving
+something, so we need to have raw paths as keys (I think).
+
+From respindola at mozilla.com  Tue Mar 15 10:10:21 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Tue, 15 Mar 2011 13:10:21 -0400
+Subject: [rust-dev] Invitation to comment on a wiki page (crate file
+ format stuff)
+In-Reply-To: <AANLkTi=6TOPX0EKxMeuYGrwDD026M680gUgKR4sd+GGL@mail.gmail.com>
+References: <AANLkTimfB_hwC2nvfhT3a9j=uj5+7VLmuWZbYE-BBwYg@mail.gmail.com>	<4D7F8396.8070709@mozilla.com>
+	<AANLkTi=6TOPX0EKxMeuYGrwDD026M680gUgKR4sd+GGL@mail.gmail.com>
+Message-ID: <4D7F9D7D.6020303@mozilla.com>
+
+On 11-03-15 11:28 AM, Marijn Haverbeke wrote:
+> (Heh. It looks like discussing on a Wiki isn't something this team is
+> used to. Graydon discussed this on irc, you over e-mail. Oh well.)
+
+Well, I like email mostly because it creates a very easy to index record 
+of the conversation.
+
+> No, types are also indexed by name here. The type table maps from ids
+> to types. This may seem needlessly indirect, but it maps precisely to
+> the resolve pass being separate from the typecheck/translate passes.
+
+...
+>
+> As I understood it, these hashes will also contain type info. The
+> resolver doesn't know anything beyond a path when it is resolving
+> something, so we need to have raw paths as keys (I think).
+
+Ah, I think I see what you are trying. My original idea was that we 
+would handle metadata only things (like types) a bit more efficiently by 
+not mangling them at all. They would use something like a hash for each 
+module.
+
+Resolve doesn't know what the types are, but it knows if something is a 
+type or not.
+
+I guess it is OK if you want to mangle all paths the same for now, but 
+there are some things that can be done more efficiently for paths that 
+the native linker doesn't needs to see:
+
+*) They can be local
+*) Being local they don't need the hash prefix
+*) We don't even need to make them real symbols, we could have a 
+internal more efficient representation.
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Tue Mar 15 10:29:04 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Tue, 15 Mar 2011 13:29:04 -0400
+Subject: [rust-dev] mutable ast?
+Message-ID: <4D7FA1E0.90601@mozilla.com>
+
+When handling
+
+fn foo() {
+   fn zed(bar z) {
+   }
+   tag bar {
+     nil;
+   }
+   fn baz() {
+     zed(nil);
+   }
+}
+
+we currently do two passes in trans.rs. The first pass collects the tags 
+so that they can be used when collecting zed.
+
+One way to avoid this is to have ty_tag point to the tag item. The 
+problem if we do that is that we get a cycle:
+
+
+item_tag -> vec[variant]
+variant -> ann
+ann -> middle.ty.t (ty_tag)
+middle.ty.t -> item_tag
+
+so we would have to make one of the links mutable :-(
+
+Do you guys think it is worth it? Which link do you prefer? Maybe you 
+have another idea to avoid the multiple passes without introducing the 
+cycle?
+
+Thanks,
+Rafael
+
+From graydon at mozilla.com  Tue Mar 15 13:13:01 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 15 Mar 2011 13:13:01 -0700
+Subject: [rust-dev] mutable ast?
+In-Reply-To: <4D7FA1E0.90601@mozilla.com>
+References: <4D7FA1E0.90601@mozilla.com>
+Message-ID: <4D7FC84D.4040702@mozilla.com>
+
+On 11-03-15 10:29 AM, Rafael Avila de Espindola wrote:
+> When handling
+>
+> fn foo() {
+> fn zed(bar z) {
+> }
+> tag bar {
+> nil;
+> }
+> fn baz() {
+> zed(nil);
+> }
+> }
+>
+> we currently do two passes in trans.rs. The first pass collects the tags
+> so that they can be used when collecting zed.
+>
+> One way to avoid this is to have ty_tag point to the tag item. The
+> problem if we do that is that we get a cycle:
+>
+>
+> item_tag -> vec[variant]
+> variant -> ann
+> ann -> middle.ty.t (ty_tag)
+> middle.ty.t -> item_tag
+>
+> so we would have to make one of the links mutable :-(
+>
+> Do you guys think it is worth it? Which link do you prefer? Maybe you
+> have another idea to avoid the multiple passes without introducing the
+> cycle?
+
+We discussed this on IRC, but I'll follow up here to summarize (it seems 
+our IRC network will not be logged any time soon; I'm working on 
+figuring out whether that can be made so).
+
+My "short answer" was that I'm not interested in making the ast or ty.t 
+types mutable+cyclic, because it introduces a lot of potential 
+difficulty elsewhere (moves it to the gc layer, possibly undermines 
+parallelism, makes other code have to rebuild direct pointers properly, 
+makes folds complicated-to-impossible, depending on link).
+
+We then had a longer discussion about whether there were any possible 
+alternatives, in particular trying to devise ways of addressing 
+potential performance costs of (a) constantly rebuilding the tree and 
+(b) having to keep it acyclic due to immutability.
+
+For (a) I suggested a visitor for each node but does *not* rebuild, but 
+looks and possibly builds worklists for interesting subsets of the AST. 
+Somewhat like fold; in fact fold originally was built with the ability 
+to function this way; but it involved taking some 20-odd type parameters 
+to unify the roles and was quite cumbersome. Probably just a separate 
+module that walks an obj type through a tree will be sufficient.[1]
+
+For (b) I had no ideas, but espindola suggested that a gc root could be 
+floated out to the maximum acyclic node in a constant structure; 
+pcwalton pointed out that the freeze/thaw scheme we've been discussing 
+for the future may well be able to integrate this with a sort of managed 
+weak pointer for the interior nodes, which immediately made me think of 
+the const refcount, and the similarity this idea has with the ideas 
+we've been pushing around for handling single-writer / multi-reader 
+multithreading as an optimized pattern for large frozen structures.
+
+Ultimately we agreed (I think!) to defer the concept to when we're 
+implementing 'freeze', with the understanding that it would be very 
+desirable to be able to freeze not just mutables but *cyclic* mutables 
+into an immutable structure. So possibly we wind up with the output from 
+freeze being *const*, with only the root being refcounted-immutable. Or 
+something along these lines.
+
+Anyway, that's a summary of how I saw the conversation unfold; correct 
+anything you see as wrong in this summary. It got a little heated and I 
+don't want to misrepresent anyone's opinion.
+
+-Graydon
+
+[1] Fold should really be an obj eventually; we just didn't have 
+obj-extension working in rustboot at the time
+
+From respindola at mozilla.com  Tue Mar 15 14:17:32 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Tue, 15 Mar 2011 17:17:32 -0400
+Subject: [rust-dev] mutable ast?
+In-Reply-To: <4D7FC84D.4040702@mozilla.com>
+References: <4D7FA1E0.90601@mozilla.com> <4D7FC84D.4040702@mozilla.com>
+Message-ID: <4D7FD76C.2030000@mozilla.com>
+
+> Anyway, that's a summary of how I saw the conversation unfold; correct
+> anything you see as wrong in this summary. It got a little heated and I
+> don't want to misrepresent anyone's opinion.
+
+I think you just missed one of the points why I wanted to introduce a 
+cycle. The structure is semantically cyclic. We just represent one of 
+the edges with "these two integers are the same". Having a real pointer 
+makes it easier to understand.
+
+This also got to the question of how to control what can mutate a data 
+structure. In clang (which is written is C++ and compiles C++), it is 
+really important that random parts of the FE don't mutate the AST since 
+changes to it can invalidate things like C++'s crazy name lookup rules. 
+To have that and at the same time allow for cycles, the AST is a friend 
+of the parts that construct it. Which is ugly, but does allow them to be 
+sure about which parts of the code can mutate the AST.
+
+Sorry for bringing even harder questions, but this also got me thinking 
+about one of the nice features of C/C++: the ability to represent not 
+only cycles, but arbitrary memory layout. Is there a plan to implement 
+something similar in rust?
+
+For example, if I implement a JS interpreter or JIT in C/C++, I can give 
+its data structures any layout that is appropriate for the JS 
+implementation. If, for example, a garbage collector is used for the JS 
+objects they don't need a reference count, but I can still get a pointer 
+to it from the C++ code.
+
+I am sure this is not safe in general, but it would be sad to have to go 
+back to C/C++ for any unsafe operation.
+
+An example that is probably closer to the issues we will have after 
+bootstrap: can rust's garbage collector be written in rust?
+
+> -Graydon
+>
+> [1] Fold should really be an obj eventually; we just didn't have
+> obj-extension working in rustboot at the time
+
+Cheers,
+Rafael
+
+From catamorphism at gmail.com  Tue Mar 15 14:24:30 2011
+From: catamorphism at gmail.com (Tim Chevalier)
+Date: Tue, 15 Mar 2011 14:24:30 -0700
+Subject: [rust-dev] mutable ast?
+In-Reply-To: <4D7FD76C.2030000@mozilla.com>
+References: <4D7FA1E0.90601@mozilla.com> <4D7FC84D.4040702@mozilla.com>
+	<4D7FD76C.2030000@mozilla.com>
+Message-ID: <AANLkTi=QZwY1-V-TWi3uzWqS2T9PM7UenrMC926ZbCr5@mail.gmail.com>
+
+On Tue, Mar 15, 2011 at 2:17 PM, Rafael Avila de Espindola
+<respindola at mozilla.com> wrote:
+> Sorry for bringing even harder questions, but this also got me thinking
+> about one of the nice features of C/C++: the ability to represent not only
+> cycles, but arbitrary memory layout. Is there a plan to implement something
+> similar in rust?
+
+There's no reason arbitrary memory layout can't be done safely -- not
+to toot my own group's horn here, but Habit[0][1][2] has features to
+look at if you're interested in that.
+
+>
+> For example, if I implement a JS interpreter or JIT in C/C++, I can give its
+> data structures any layout that is appropriate for the JS implementation.
+> If, for example, a garbage collector is used for the JS objects they don't
+> need a reference count, but I can still get a pointer to it from the C++
+> code.
+>
+> I am sure this is not safe in general, but it would be sad to have to go
+> back to C/C++ for any unsafe operation.
+>
+> An example that is probably closer to the issues we will have after
+> bootstrap: can rust's garbage collector be written in rust?
+>
+
+In general, you can't implement a garbage collector in a typed
+language, because re-using memory for a value of a different type is
+inherently unsafe. There are fancy type systems that can get around
+that, but probably nothing that's likely to be in Rust... unless the
+typestate system could be used for that?
+
+[0] http://hasp.cs.pdx.edu/habit-report-Nov2010.pdf
+[1] Iavor Diatchki and Mark Jones, "Strongly Typed Memory Areas:
+Programming Systems-Level Data Structures in a Functional Language"
+http://web.cecs.pdx.edu/~mpj/pubs/bytedata.html
+[2] Iavor Diatchki, Mark Jones, and Rebekah Leslie, "High-level Views
+on Low-level Representations"
+http://web.cecs.pdx.edu/~mpj/pubs/bitdata.html
+
+Cheers,
+Tim
+
+
+
+-- 
+Tim Chevalier * http://cs.pdx.edu/~tjc/ * Often in error, never in doubt
+"an intelligent person fights for lost causes,realizing that others
+are merely effects" -- E.E. Cummings
+
+From respindola at mozilla.com  Tue Mar 15 14:28:53 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Tue, 15 Mar 2011 17:28:53 -0400
+Subject: [rust-dev] mutable ast?
+In-Reply-To: <AANLkTi=QZwY1-V-TWi3uzWqS2T9PM7UenrMC926ZbCr5@mail.gmail.com>
+References: <4D7FA1E0.90601@mozilla.com>	<4D7FC84D.4040702@mozilla.com>	<4D7FD76C.2030000@mozilla.com>
+	<AANLkTi=QZwY1-V-TWi3uzWqS2T9PM7UenrMC926ZbCr5@mail.gmail.com>
+Message-ID: <4D7FDA15.2000909@mozilla.com>
+
+On 11-03-15 05:24 PM, Tim Chevalier wrote:
+> On Tue, Mar 15, 2011 at 2:17 PM, Rafael Avila de Espindola
+> <respindola at mozilla.com>  wrote:
+>> Sorry for bringing even harder questions, but this also got me thinking
+>> about one of the nice features of C/C++: the ability to represent not only
+>> cycles, but arbitrary memory layout. Is there a plan to implement something
+>> similar in rust?
+>
+> There's no reason arbitrary memory layout can't be done safely -- not
+> to toot my own group's horn here, but Habit[0][1][2] has features to
+> look at if you're interested in that.
+>
+
+Well, depends on how far you go with "arbitrary". Before thinking about 
+the garbage collector what I had in mind was a dynamic linker. In that 
+case you have to apply relocations to get a valid function pointer that 
+is then called.
+
+> Cheers,
+> Tim
+
+Cheers,
+Rafael
+
+From graydon at mozilla.com  Tue Mar 15 14:34:45 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 15 Mar 2011 14:34:45 -0700
+Subject: [rust-dev] mutable ast?
+In-Reply-To: <4D7FD76C.2030000@mozilla.com>
+References: <4D7FA1E0.90601@mozilla.com> <4D7FC84D.4040702@mozilla.com>
+	<4D7FD76C.2030000@mozilla.com>
+Message-ID: <4D7FDB75.5080109@mozilla.com>
+
+On 11-03-15 02:17 PM, Rafael Avila de Espindola wrote:
+>> Anyway, that's a summary of how I saw the conversation unfold; correct
+>> anything you see as wrong in this summary. It got a little heated and I
+>> don't want to misrepresent anyone's opinion.
+>
+> I think you just missed one of the points why I wanted to introduce a
+> cycle. The structure is semantically cyclic. We just represent one of
+> the edges with "these two integers are the same". Having a real pointer
+> makes it easier to understand.
+
+Yeah, I gather that. And you're totally right, a pointer would, in the 
+context you're discussing, be easier to understand. It'd just shift a 
+lot of cost elsewhere, a hit I'm not comfortable taking just now.
+
+> This also got to the question of how to control what can mutate a data
+> structure. In clang (which is written is C++ and compiles C++), it is
+> really important that random parts of the FE don't mutate the AST since
+> changes to it can invalidate things like C++'s crazy name lookup rules.
+> To have that and at the same time allow for cycles, the AST is a friend
+> of the parts that construct it. Which is ugly, but does allow them to be
+> sure about which parts of the code can mutate the AST.
+
+Yeah. Some freeze/thaw logic ought to be able to play in similar fields 
+as that. I hope.
+
+> Sorry for bringing even harder questions,
+
+Oh, no need to apologize; the harder questions were the more interesting 
+ones! ("how do we get cyclic immutables", say; I really hope the 
+const-blob-with-a-refcounted-root idea works!)
+
+  but this also got me thinking
+> about one of the nice features of C/C++: the ability to represent not
+> only cycles, but arbitrary memory layout. Is there a plan to implement
+> something similar in rust?
+
+Arbitrary is such an arbitrary word :)
+
+I'm not sure how to answer it in general. "Represent" in what sense? A 
+pointer is just a number. Since we permit a modest amount of fiddling 
+around with raw pointers from C-land as numbers, I imagine you have 
+something more explicit in mind.
+
+> I am sure this is not safe in general, but it would be sad to have to go
+> back to C/C++ for any unsafe operation.
+
+My general sense is that a small number of C/C++ operations + a majority 
+of connective code in rust manipulating opaque native pointers (possibly 
+through resources and tags that wrap them) is the best we can do. Or at 
+least the best we can do without totally blowing the cognitive budget of 
+the language (no typed assembly language and memory regions, thanks).
+
+> An example that is probably closer to the issues we will have after
+> bootstrap: can rust's garbage collector be written in rust?
+
+Yeah, but it'll involve a number of unsafe calls. I figure with a few 
+unsafe primitives, the rest is mostly feasible in rust.
+
+I wrote the one in rustboot in asm (actually in the mutant IL/x86 
+pseudo-asm) but that was mostly for expedience; didn't have to teach 
+trans to look through itself. It's actually not a very big algorithm. 
+You mark and you sweep. Mostly through lists. The whole thing runs on a 
+task's own stack so there's no need to play sneaky scheduling games.
+
+-Graydon
+
+From pwalton at mozilla.com  Tue Mar 15 14:51:03 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Tue, 15 Mar 2011 14:51:03 -0700
+Subject: [rust-dev] mutable ast?
+In-Reply-To: <4D7FD76C.2030000@mozilla.com>
+References: <4D7FA1E0.90601@mozilla.com> <4D7FC84D.4040702@mozilla.com>
+	<4D7FD76C.2030000@mozilla.com>
+Message-ID: <4D7FDF47.6020309@mozilla.com>
+
+On 3/15/11 2:17 PM, Rafael Avila de Espindola wrote:
+> I am sure this is not safe in general, but it would be sad to have to go
+> back to C/C++ for any unsafe operation.
+
+I think we can make do with a small number of unsafe primitives: "peek" 
+and "poke" to get started, and some sort of unsafe cast operation to 
+cast between blobs of memory and Rust records. Rust records are 
+fortunately laid out more or less exactly the same as C structs.
+
+Naturally, all of these would mark the caller unsafe.
+
+Patrick
+
+From respindola at mozilla.com  Tue Mar 15 15:00:48 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Tue, 15 Mar 2011 18:00:48 -0400
+Subject: [rust-dev] mutable ast?
+In-Reply-To: <4D7FDB75.5080109@mozilla.com>
+References: <4D7FA1E0.90601@mozilla.com>
+	<4D7FC84D.4040702@mozilla.com>	<4D7FD76C.2030000@mozilla.com>
+	<4D7FDB75.5080109@mozilla.com>
+Message-ID: <4D7FE190.7030609@mozilla.com>
+
+> Arbitrary is such an arbitrary word :)
+>
+> I'm not sure how to answer it in general. "Represent" in what sense? A
+> pointer is just a number. Since we permit a modest amount of fiddling
+> around with raw pointers from C-land as numbers, I imagine you have
+> something more explicit in mind.
+
+Not really. Anything you can draw in a white board can be coded in C++, 
+sometimes in a not very elegant way. An example that comes to mind (from 
+llvm) is using placement new to put a string (char*, not std::string) 
+after a regular struct. With most other languages you would need an 
+extra pointer and a separate allocation.
+
+Another example would be a mapping from string to an arbitrary value. 
+One datastructure that is used for that in LLVM uses a single buffer it 
+owns the strings. It is a lot faster than a non specialised hash table 
+with pointers to externally allocated strings.
+
+I am not sure if a lot is gained by requiring users to go to C to get 
+this. I agree it is easier to design, but I wonder if some form of 
+unsafe blocks could be provided. The total safety of the program is not 
+decreased by requiring a combination of a safe and an unsafe language :-)
+
+...
+
+> -Graydon
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Tue Mar 15 15:03:46 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Tue, 15 Mar 2011 18:03:46 -0400
+Subject: [rust-dev] mutable ast?
+In-Reply-To: <4D7FDF47.6020309@mozilla.com>
+References: <4D7FA1E0.90601@mozilla.com>
+	<4D7FC84D.4040702@mozilla.com>	<4D7FD76C.2030000@mozilla.com>
+	<4D7FDF47.6020309@mozilla.com>
+Message-ID: <4D7FE242.2090200@mozilla.com>
+
+> I think we can make do with a small number of unsafe primitives: "peek"
+> and "poke" to get started, and some sort of unsafe cast operation to
+> cast between blobs of memory and Rust records. Rust records are
+> fortunately laid out more or less exactly the same as C structs.
+>
+> Naturally, all of these would mark the caller unsafe.
+
+Perfect. Yes, having unsafe operations in rust itself should make it 
+possible to implement some of the optimised data structures used in C or 
+reflect on its own state (for a GC).
+
+> Patrick
+
+Cheers,
+Rafael
+
+From marijnh at gmail.com  Tue Mar 15 15:17:22 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 15 Mar 2011 23:17:22 +0100
+Subject: [rust-dev] Invitation to comment on a wiki page (crate file
+ format stuff)
+In-Reply-To: <4D7F9D7D.6020303@mozilla.com>
+References: <AANLkTimfB_hwC2nvfhT3a9j=uj5+7VLmuWZbYE-BBwYg@mail.gmail.com>
+	<4D7F8396.8070709@mozilla.com>
+	<AANLkTi=6TOPX0EKxMeuYGrwDD026M680gUgKR4sd+GGL@mail.gmail.com>
+	<4D7F9D7D.6020303@mozilla.com>
+Message-ID: <AANLkTi=Ysep-Q17JZ3m-zBcWrGoT2NWjEwqA9Kd_axCL@mail.gmail.com>
+
+> I guess it is OK if you want to mangle all paths the same for now,
+
+Actually, I wouldn't be mangling them at all. The path table only
+stores crate-local paths, which are already unambiguous. The linker
+symbols will be mangled, but those will only be generated for actually
+linkable things like exported functions and consts.
+
+From pwalton at mozilla.com  Sat Mar 19 16:02:19 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 19 Mar 2011 16:02:19 -0700
+Subject: [rust-dev] Statically linking rustrt
+Message-ID: <4D8535FB.9090001@mozilla.com>
+
+I'm looking at the generated assembly code for std.rc (which is now 
+compiling, although it fails to link due to a strange mangling LLVM is 
+performing on duplicate native symbols). Even with all of LLVM's 
+optimizations, our hash insertion code has 4x the instruction count of 
+that of glib.
+
+One major reason for this is that we have enormous overhead when calling 
+upcalls like get_type_desc() and size_of(). These calls are completely 
+opaque to LLVM. Even if we fixed the crate-relative encoding issues, 
+these calls would still be opaque to LLVM.
+
+Most upcalls are trivial (get_type_desc() is an exception; I don't know 
+why it needs to exist, actually). For those, it would be great to inline 
+them. To do that, we need LTO, which basically means that we compile 
+rustrt with clang and link the resulting .bc together with the .bc that 
+rustc yields before doing LLVM's optimization passes. I think this would 
+be a huge win; we would remove all the upcall glue and make these 
+low-level calls, of which there are quite a lot, no longer opaque to LLVM.
+
+Thoughts?
+
+Patrick
+
+From graydon at mozilla.com  Sat Mar 19 16:45:17 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sat, 19 Mar 2011 16:45:17 -0700
+Subject: [rust-dev] Statically linking rustrt
+In-Reply-To: <4D8535FB.9090001@mozilla.com>
+References: <4D8535FB.9090001@mozilla.com>
+Message-ID: <4D85400D.4010608@mozilla.com>
+
+On 19/03/2011 4:02 PM, Patrick Walton wrote:
+> I'm looking at the generated assembly code for std.rc (which is now
+> compiling, although it fails to link due to a strange mangling LLVM is
+> performing on duplicate native symbols).
+
+Wooo! That's incredible. You're a star. I'm totally impressed with the 
+dozens and dozens of fixes you've plowed through to get to this point. 
+It's inspiring to watch! I'm trying to keep up; sorry I've been slower.
+
+> Even with all of LLVM's
+> optimizations, our hash insertion code has 4x the instruction count of
+> that of glib.
+
+"Our hash-insert code is 4x the size of glib's hash-insert code"
+   or
+"Our hash-insert code is 4x the size of all of glib combined"
+?
+
+I'd believe either right now, and if we're only talking about the 
+former, I'd be really surprised / pleased! Low-hanging fruit is called 
+that for a reason, and we've hardly spent a minute fixing even the 
+simplest of systemic cost centers in the optimized code. Off the top of 
+my head, we'll at least get big wins out of:
+
+   - Fixing the tydesc crate-relative encoding issue.
+   - Opportunistic const-ifying of coincidentally const expressions.
+   - Static removal of a bunch of redundant refcount operations.
+   - Stripping out redundant size calculations, unused derived
+     tydescs, non-escapting allocations, and similar indirections.
+   - Teaching LLVM how to make C calls itself, as a calling convention,
+     not via the current cumbersome call-through-asm-glue path.
+   - Digging into the unique pointer issue.
+
+And I'm sure a little profiling and code-inspection will make a number 
+of other issues jump right out. As you've found..
+
+> One major reason for this is that we have enormous overhead when calling
+> upcalls like get_type_desc() and size_of(). These calls are completely
+> opaque to LLVM. Even if we fixed the crate-relative encoding issues,
+> these calls would still be opaque to LLVM.
+
+size_of? Hm. That's not an upcall. I thought we were generating the size 
+calculation code inline (on demand, from GEP_tup_like).
+
+> Most upcalls are trivial (get_type_desc() is an exception; I don't know
+> why it needs to exist, actually).
+
+It needs to exist to acquire derived type descriptors, dynamically. They 
+are not static. Though we can probably do a little analysis and figure 
+out which cases are degenerate -- are static -- and dodge the upcall. 
+And/or consolidate multiple redundant upcalls occurring in the same 
+frame / execution context. We're doing everything as simple as possible now.
+
+> For those, it would be great to inline
+> them. To do that, we need LTO, which basically means that we compile
+> rustrt with clang and link the resulting .bc together with the .bc that
+> rustc yields before doing LLVM's optimization passes. I think this would
+> be a huge win; we would remove all the upcall glue and make these
+> low-level calls, of which there are quite a lot, no longer opaque to LLVM.
+>
+> Thoughts?
+
+Yes. This is something we'll almost certainly wind up doing. Some 
+runtime support logic is called rarely enough to live in a shared 
+object; some is custom-enough to require compiler-generation on a 
+case-by-case basis, and some is "somewhat generic" (so can be written 
+once, in rust or C++) but reused-and-inlined all over a compilation 
+unit. That stuff will probably wind up migrating to glue.bc and get 
+LTO'ed into every compilation unit. Andreas has been anticipating this 
+kind of easy inlining between C++ support code and rust code since this 
+time last year; it's one of the reasons he was so keen on using LLVM :)
+
+To get there we'll need to (at least) have completed the removal of the 
+asm glue bits and taught LLVM how to make native calls (stack-to-stack) 
+as a calling convention. Probably some other bits of LLVM hacking, and 
+lots of build-system hacking, and shoving things around in the runtime. 
+But I absolutely intend to get there.
+
+-Graydon
+
+From pwalton at mozilla.com  Sat Mar 19 16:57:42 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 19 Mar 2011 16:57:42 -0700
+Subject: [rust-dev] Fwd: Re:  Statically linking rustrt
+Message-ID: <4D8542F6.1080202@mozilla.com>
+
+Forgot to send this to the list. Sending here, with an addendum I missed:
+
+On 3/19/11 4:45 PM, Graydon Hoare wrote:
+> "Our hash-insert code is 4x the size of glib's hash-insert code"
+> or
+> "Our hash-insert code is 4x the size of all of glib combined"
+> ?
+>
+> I'd believe either right now, and if we're only talking about the
+> former, I'd be really surprised / pleased!
+
+4x the size of glib's hash-insert code.
+
+ > size_of? Hm. That's not an upcall. I thought we were generating the
+ > size calculation code inline (on demand, from GEP_tup_like).
+
+We are, but it's called by map.rs.
+
+> It needs to exist to acquire derived type descriptors, dynamically. They
+> are not static. Though we can probably do a little analysis and figure
+> out which cases are degenerate -- are static -- and dodge the upcall.
+> And/or consolidate multiple redundant upcalls occurring in the same
+> frame / execution context. We're doing everything as simple as possible
+> now.
+
+Something I thought of is that we could locally allocate derived tydescs 
+and pass them by alias in most cases. I *think* the only cases in which 
+derived tydescs escape is via bind or objects (correct me if I'm wrong). 
+In those cases trans still generates the slower upcall. But in the other 
+cases, trans could just generate the tydescs inline in the current stack 
+frame. LLVM might even be able to elide the generation of redundant 
+parts automatically when there's only a little bit of the tydesc needed 
+and/or collapse duplicate tydescs, both via SROA.
+
+On a completely unrelated note, interestingly enough, rustc doesn't 
+compile std.rc that much slower than rustboot does.
+
+Patrick
+
+From pwalton at mozilla.com  Sun Mar 20 11:35:32 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sun, 20 Mar 2011 11:35:32 -0700
+Subject: [rust-dev] Metadata encoding format
+Message-ID: <4D8648F4.8010006@mozilla.com>
+
+The current blocker for rustc self-hosting is writing out and reading 
+the crate metadata. Marijn wrote up a proposal outlining the data that 
+needs to be encoded on the wiki, which looks good to me. The code that 
+inserts the data blob into and reads the data blob from the files is 
+working, modulo the "Franken-LLVM" issue. What's missing is the actual 
+encoding format.
+
+AFAICT the design criteria are that the format needs to be seekable and 
+extensible. Ideally it should be compact and simple as well.
+
+I've floated the idea of using EBML [1], which is a dead simple format 
+used by Matroska (including WebM). It's more or less just "tag ID + size 
++ contents", where the contents can recursively include other tags. I 
+had good results with this format for my Android profiler. When I was 
+writing that I did a quick survey of the options and went with EBML over 
+BSON, because BSON, while more mainstream, is not at all compact (it's 
+usually as large as the corresponding JSON, its only advantage being 
+that it's seekable and has more data types than JSON).
+
+Any opinions? I started sketching out a tiny EBML library for Rust, but 
+I thought I'd ask the mailing list before going further.
+
+Patrick
+
+[1]: http://matroska.org/technical/specs/rfc/index.html
+
+From peterhull90 at gmail.com  Sun Mar 20 15:32:54 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Sun, 20 Mar 2011 22:32:54 +0000
+Subject: [rust-dev] Metadata encoding format
+In-Reply-To: <4D8648F4.8010006@mozilla.com>
+References: <4D8648F4.8010006@mozilla.com>
+Message-ID: <AANLkTi=DjG7WoM67pEuQMj=GoA9eQj45vXv9S1jx4yDK@mail.gmail.com>
+
+On Sun, Mar 20, 2011 at 6:35 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+> AFAICT the design criteria are that the format needs to be seekable and
+> extensible. Ideally it should be compact and simple as well.
+I thought of google protocol buffers but I don't think they're
+seekable, are they?
+
+Pete
+
+From pwalton at mozilla.com  Sun Mar 20 15:47:21 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sun, 20 Mar 2011 15:47:21 -0700
+Subject: [rust-dev] "git" needed during configure step
+Message-ID: <4D8683F9.1000202@mozilla.com>
+
+Apologies for spamming the mailing list, but I figure this is worth 
+bringing up... with the new configure changes, git is needed during the 
+configure step. This seems inconvenient for Windows users, who often 
+install msysgit in a separate bash environment from their build 
+environment. This setup is helpful for Windows users because Git 
+supplies its own copies of lots of Unix utilities that may be 
+incompatible with those present in the user's preferred build 
+environment. But it does mean that users' build environments may not 
+have access to Git.
+
+Could I suggest making the git probe optional?
+
+Patrick
+
+From tellrob at gmail.com  Sun Mar 20 16:17:01 2011
+From: tellrob at gmail.com (Rob Arnold)
+Date: Sun, 20 Mar 2011 16:17:01 -0700
+Subject: [rust-dev] "git" needed during configure step
+In-Reply-To: <4D8683F9.1000202@mozilla.com>
+References: <4D8683F9.1000202@mozilla.com>
+Message-ID: <AANLkTi=6eP=kWCD5opMbE1uNLtRbzz73c_o3Gd-t=iyY@mail.gmail.com>
+
+I don't think this is such a big issue as they've always needed to have git
+on their path. I wrote down my instructions for getting a working native
+Windows build environment (well, using MozillaBuild) on the wiki [1] which
+includes a script for invoking git properly in the msys environment without
+contaminating the MB environment with Git's.
+
+-Rob
+
+[1] https://github.com/graydon/rust/wiki/Native-Windows-development
+
+On Sun, Mar 20, 2011 at 3:47 PM, Patrick Walton <pwalton at mozilla.com> wrote:
+
+> Apologies for spamming the mailing list, but I figure this is worth
+> bringing up... with the new configure changes, git is needed during the
+> configure step. This seems inconvenient for Windows users, who often install
+> msysgit in a separate bash environment from their build environment. This
+> setup is helpful for Windows users because Git supplies its own copies of
+> lots of Unix utilities that may be incompatible with those present in the
+> user's preferred build environment. But it does mean that users' build
+> environments may not have access to Git.
+>
+> Could I suggest making the git probe optional?
+>
+> Patrick
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110320/bcb56a76/attachment.html>
+
+From graydon at mozilla.com  Sun Mar 20 18:35:15 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 20 Mar 2011 18:35:15 -0700
+Subject: [rust-dev] "git" needed during configure step
+In-Reply-To: <4D8683F9.1000202@mozilla.com>
+References: <4D8683F9.1000202@mozilla.com>
+Message-ID: <4D86AB53.80300@mozilla.com>
+
+On 20/03/2011 3:47 PM, Patrick Walton wrote:
+> Apologies for spamming the mailing list, but I figure this is worth
+> bringing up... with the new configure changes, git is needed during the
+> configure step. This seems inconvenient for Windows users, who often
+> install msysgit in a separate bash environment from their build
+> environment. This setup is helpful for Windows users because Git
+> supplies its own copies of lots of Unix utilities that may be
+> incompatible with those present in the user's preferred build
+> environment. But it does mean that users' build environments may not
+> have access to Git.
+>
+> Could I suggest making the git probe optional?
+
+It wasn't optional before either. We just failed mid-build while trying 
+to make boot/util/version.ml. New script just makes the probe explicit.
+
+There's going to be a fair amount of integration with versioning, 
+specifically to handle saving and fetching appropriate stage0 snapshots 
+as well as migrating source code from one version to another. I don't 
+know precisely which aspects will be required, but I'd like to be able 
+to rely on the build system reflecting on the VCS.
+
+-Graydon
+
+
+From respindola at mozilla.com  Mon Mar 21 08:07:41 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Mon, 21 Mar 2011 11:07:41 -0400
+Subject: [rust-dev] "git" needed during configure step
+In-Reply-To: <4D8683F9.1000202@mozilla.com>
+References: <4D8683F9.1000202@mozilla.com>
+Message-ID: <4D8769BD.7070403@mozilla.com>
+
+On 11-03-20 06:47 PM, Patrick Walton wrote:
+> Apologies for spamming the mailing list, but I figure this is worth
+> bringing up... with the new configure changes, git is needed during the
+> configure step. This seems inconvenient for Windows users, who often
+> install msysgit in a separate bash environment from their build
+> environment. This setup is helpful for Windows users because Git
+> supplies its own copies of lots of Unix utilities that may be
+> incompatible with those present in the user's preferred build
+> environment. But it does mean that users' build environments may not
+> have access to Git.
+
+What eventually work for me was to add the git directory last in the 
+search path. That way most tools come from msys.
+
+> Could I suggest making the git probe optional?
+
+But yes, that would be nice too for when we do a release tarball :-)
+
+> Patrick
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Mon Mar 21 08:26:37 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Mon, 21 Mar 2011 11:26:37 -0400
+Subject: [rust-dev] Statically linking rustrt
+In-Reply-To: <4D8535FB.9090001@mozilla.com>
+References: <4D8535FB.9090001@mozilla.com>
+Message-ID: <4D876E2D.1030305@mozilla.com>
+
+On 11-03-19 07:02 PM, Patrick Walton wrote:
+> I'm looking at the generated assembly code for std.rc (which is now
+> compiling, although it fails to link due to a strange mangling LLVM is
+> performing on duplicate native symbols). Even with all of LLVM's
+> optimizations, our hash insertion code has 4x the instruction count of
+> that of glib.
+>
+> One major reason for this is that we have enormous overhead when calling
+> upcalls like get_type_desc() and size_of(). These calls are completely
+> opaque to LLVM. Even if we fixed the crate-relative encoding issues,
+> these calls would still be opaque to LLVM.
+>
+> Most upcalls are trivial (get_type_desc() is an exception; I don't know
+> why it needs to exist, actually). For those, it would be great to inline
+> them. To do that, we need LTO, which basically means that we compile
+> rustrt with clang and link the resulting .bc together with the .bc that
+> rustc yields before doing LLVM's optimization passes. I think this would
+> be a huge win; we would remove all the upcall glue and make these
+> low-level calls, of which there are quite a lot, no longer opaque to LLVM.
+>
+> Thoughts?
+
+Eventually we want to implement our runtime library in rust, no? This 
+will move the places where we have to switch stacks, hopefully making 
+them less common.
+
+With our runtime library in rust, there are two interesting problems 
+with the stack switching
+
+*) How do to efficient kernel calls. It would be bad if we had to switch 
+stacks to go to libc and then the first thing the kernel does is switch 
+stacks again.
+
+*) How to do LTO from one language to another. It would be interesting 
+for example to LTO LLVM into rustc. It would be really hard to inline a 
+generic C function into rust since that C function will not have GC 
+roots that would allow us to move the stack.
+
+> Patrick
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Mon Mar 21 08:48:41 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Mon, 21 Mar 2011 11:48:41 -0400
+Subject: [rust-dev] Metadata encoding format
+In-Reply-To: <AANLkTi=DjG7WoM67pEuQMj=GoA9eQj45vXv9S1jx4yDK@mail.gmail.com>
+References: <4D8648F4.8010006@mozilla.com>
+	<AANLkTi=DjG7WoM67pEuQMj=GoA9eQj45vXv9S1jx4yDK@mail.gmail.com>
+Message-ID: <4D877359.1090307@mozilla.com>
+
+On 11-03-20 06:32 PM, Peter Hull wrote:
+> On Sun, Mar 20, 2011 at 6:35 PM, Patrick Walton<pwalton at mozilla.com>  wrote:
+>> AFAICT the design criteria are that the format needs to be seekable and
+>> extensible. Ideally it should be compact and simple as well.
+> I thought of google protocol buffers but I don't think they're
+> seekable, are they?
+
+They might be a bit more generic than what we need. They have support 
+for adding fields that old readers ignore for example. We will probably 
+require a matching compiler for some time.
+
+Patrick, it is probably OK to go with the format you are most 
+comfortable with. We are free to use any format for the bits that don't 
+need to be visible by the system linker.
+
+> Pete
+
+Cheers,
+Rafael
+
+From respindola at mozilla.com  Tue Mar 22 10:04:36 2011
+From: respindola at mozilla.com (Rafael Avila de Espindola)
+Date: Tue, 22 Mar 2011 10:04:36 -0700
+Subject: [rust-dev] PTO notification from Rafael Avila de Espindola
+Message-ID: <201103221704.p2MH4aWg020995@mrapp-intranet01.mozilla.org>
+
+Rafael Avila de Espindola has submitted 64 hours of PTO from Mar 24, 2011 to Apr 4, 2011 with the details:
+Family visit. Really sorry for missing the all hands, but I had this booked before.
+
+
+- The Happy PTO Managing Intranet App
+
+From brendan at mozilla.org  Tue Mar 22 15:59:00 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Tue, 22 Mar 2011 15:59:00 -0700
+Subject: [rust-dev] Fwd: [GitHub] (remaining bits of floating-point stuff)
+	[graydon/rust GH-282]
+References: <graydon/rust/pull/282@github.com>
+Message-ID: <F3CD6538-47BF-4284-AAC6-5EE1566D1DF7@mozilla.org>
+
+Style police raid!
+
+In the patch readable at the pull request linked below, you can see existing code cuddling braces on both sides of else:
+
+  } else {
+
+and (in numerous + lines)
+
+  }
+  else {
+
+I'm in favor of any style guide covering this case. The JS C++ style guide does. Anyone care?
+
+/be
+
+Begin forwarded message:
+
+> From: catamorphism <reply+i-695596-578b5b195dd5456be508281dd38f75642e2116dc at reply.github.com>
+> Date: March 22, 2011 3:43:50 PM PDT
+> To: brendan at mozilla.org
+> Subject: [GitHub] (remaining bits of floating-point stuff) [graydon/rust GH-282]
+> 
+> 
+> 
+> -- 
+> Reply to this email directly or view it on GitHub:
+> https://github.com/graydon/rust/pull/282
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110322/90fe52bc/attachment.html>
+
+From graydon at mozilla.com  Tue Mar 22 16:05:49 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 22 Mar 2011 16:05:49 -0700
+Subject: [rust-dev] Fwd: [GitHub] (remaining bits of floating-point
+ stuff) [graydon/rust GH-282]
+In-Reply-To: <F3CD6538-47BF-4284-AAC6-5EE1566D1DF7@mozilla.org>
+References: <graydon/rust/pull/282@github.com>
+	<F3CD6538-47BF-4284-AAC6-5EE1566D1DF7@mozilla.org>
+Message-ID: <4D892B4D.1090708@mozilla.com>
+
+On 11-03-22 03:59 PM, Brendan Eich wrote:
+> Style police raid!
+>
+> In the patch readable at the pull request linked below, you can see existing code cuddling braces on both sides of else:
+>
+>    } else {
+>
+> and (in numerous + lines)
+>
+>    }
+>    else {
+>
+> I'm in favor of any style guide covering this case. The JS C++ style guide does. Anyone care?
+
+We will soon (sometime after bootstrapping) be moving the entire project 
+to regular self-pretty-printing to eliminate any such whitespace 
+inconsistencies.
+
+For the time being I tend to use } else {.
+
+-Graydon
+
+From rafael.espindola at gmail.com  Wed Mar 23 12:05:42 2011
+From: rafael.espindola at gmail.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Wed, 23 Mar 2011 15:05:42 -0400
+Subject: [rust-dev] Fwd: [LLVMdev] RFC: GSoC Project
+Message-ID: <4D8A4486.5040903@gmail.com>
+
+
+
+-------- Original Message --------
+Subject: [LLVMdev] RFC: GSoC Project
+Date: Wed, 23 Mar 2011 15:37:02 +0530
+From: Sanjoy Das <sanjoy at playingwithpointers.com>
+To: llvmdev at cs.uiuc.edu
+
+Hi All!
+
+I will be applying to the LLVM project for this GSoC, and I wanted some
+preliminary sanity check on my project idea.
+
+I intend to implement split (segmented) stacks for LLVM (like we have in
+Go, and as being implemented for GCC [1]). A lot of what follows is
+lifted from [1]; I will progressively add more details as I get more
+familiar with the LLVM codebase.
+
+I intend to start with the simplest possible approach - representing the
+stack as a doubly linked list of _block_s, the size of each _block_
+being a power of two. This can later be modified to improve performance
+and accommodate other factors. Blocks will be chained together into a
+doubly linked list structure (using the first two words in the block as
+the next and previous pointers).
+
+In the prologue, a function will check whether the current block has
+enough stack space. This is easily done for function which don't have
+variable sized allocas, and for ones which do, we can assume some
+worst-case upper bound. The prologue can then call an intrinsic (let's
+call it llvm.adjust_stack) which allocates a new block (possibly by
+delegating this to a user-provided callback), copies the arguments,
+saves the previous stack pointer (in the new block), and adjusts the
+next and previous pointers. It will also have to adjust the stack
+pointer, and the frame pointer, if it is being maintained. Cleanup can
+be done by hijacking the return value, as also mentioned in [1]. It
+might make sense to leave the allocated blocks around, to prevent
+re-allocating the next time the program needs more stack space.
+
+DWARF info can be generated as follows: since we know the offset of base
+of the stack frame from the stack pointer (or we are maintaining a frame
+pointer), we can always say whether the concerned call frame is the
+first call frame or not. In the second case, all the previous register
+values can be computed as usual, and in the first case, we will add an
+extra indirection, involving looking up the stack pointer saved in this
+block's header.
+
+One thing I'd really like some input on is whether implementing split
+stacks would be useful enough to warrant the effort (especially keeping
+in mind that this is pretty useless on 64 bit architectures).
+
+[1] http://gcc.gnu.org/wiki/SplitStacks
+-- 
+Sanjoy Das
+http://playingwithpointers.com
+_______________________________________________
+LLVM Developers mailing list
+LLVMdev at cs.uiuc.edu         http://llvm.cs.uiuc.edu
+http://lists.cs.uiuc.edu/mailman/listinfo/llvmdev
+
+From graydon at mozilla.com  Thu Mar 24 14:50:54 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 24 Mar 2011 14:50:54 -0700
+Subject: [rust-dev] Updated build system
+Message-ID: <4D8BBCBE.90301@mozilla.com>
+
+Hi,
+
+We've switched over to a "new" build system -- which is largely a 
+copy-and-modify job on the old one -- that requires a slight change to 
+the way you build and use rustboot, rustc and such.
+
+Previously you would do "make" in the src/ subdirectory and it would 
+build. We're removing that Makefile shortly. The new scheme is a 
+"configure; make" combo that behaves more-like what people expect.
+
+We've done this for a few reasons:
+
+  - The new scheme supports -- and I strongly recommend -- out-of-tree 
+builds. These are useful for keeping build state and source state 
+untangled, as well as having multiple different configurations "wired 
+up" in a persistent state on disk, to build different variants (say: 
+profiling, debugging, etc.)
+
+  - The new scheme supports moving some configuration issues into 
+"configure"-time, which means the resultant "make" command starts 
+actually doing useful work faster (when re-invoking multiple times, 
+say). On win32, where fork is abysmally slow, this is quite noticeable.
+
+  - The new scheme is more familiar to newcomers and should permit 
+better interaction with package managers, when the time comes.
+
+  - Along the way, I took the opportunity (of having time to write a
+makefile anew) to add support for multi-stage building. Or depending on 
+how you look at it, this was the one thing I *had* to do, and splitting 
+configuration out just came along for the ride.
+
+That is: what was the "rustc" target has becomeo the "stage0/rustc" 
+target, and directories are made in $builddir for stage1 and stage2 as 
+well. This is necessary for bootstrapping, where we're going to have 
+rustc building itself regularly, in multiple passes, and checking for 
+convergence. Presently every 'make' run will now do:
+
+    - ocamlc builds boot/rustboot
+    - boot/rustboot builds boot/libstd.so
+    - boot/rustboot builds stage0/rustc
+    - stage0/rustc builds stage0/libstd.so
+
+This will increase build times, obviously, since the second libstd build 
+is now part of the normal build. Build times will also increase when we 
+have stage1 and stage2 building (post-bootstrap), but times should come 
+back down a bit once we get optimizations enabled, and start 
+profiling-and-shaving, and have thrown out boot/rustboot and attendant 
+slow stage0/rustc. Eventually stage0/rustc will be fetched from an 
+archival server holding snapshots of stage1/rustc.
+
+So: practical adaptations required on your part:
+
+  - Edit Makefile.in and configure, not src/Makefile (the latter will
+    be removed soon)
+
+  - Set your LD_LIBRARY_PATH or DYLD_LIBRARY_PATH to
+
+      $builddir/rt:$builddir/rustllvm:$builddir/stage0
+
+    in order to run stage0/rustc-compiled binaries. Set it to:
+
+      $builddir/rt:$builddir/rustllvm:$builddir/stage1
+
+    in order to run stage1/rustc-compiled binaries.
+
+And so on. Feel free to ask questions here or on the list if any of this 
+is confusing.
+
+-Graydon
+
+From graydon at mozilla.com  Fri Mar 25 09:03:21 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 25 Mar 2011 09:03:21 -0700
+Subject: [rust-dev] .def files
+Message-ID: <4D8CBCC9.2080501@mozilla.com>
+
+Hi,
+
+One caveat with the new build system that I forgot to point out is that 
+Patrick changed the way the runtime (C++) libraries are built, to help 
+integrate our LLVM-extension code with core LLVM better. As part of 
+doing this he had to start using .def files to control inter-library 
+exports.
+
+So from now on, all symbols you wish to export from a C++ library in our 
+build need an entry in the associated .def.in file (for example, 
+rt/rustrt.def.in for functions in librustrt.so) and that entry has to 
+exist on all platform / ifdef combinations, even if it's a stub.
+
+Couple recent commits lacked this, and I've edited the change in while 
+integrating (causes 'make check' to fail), so I thought I'd point it out 
+separately.
+
+-Graydon
+
+From fw at deneb.enyo.de  Sat Mar 26 04:46:53 2011
+From: fw at deneb.enyo.de (Florian Weimer)
+Date: Sat, 26 Mar 2011 12:46:53 +0100
+Subject: [rust-dev] Metadata encoding format
+In-Reply-To: <4D8648F4.8010006@mozilla.com> (Patrick Walton's message of "Sun, 
+	20 Mar 2011 11:35:32 -0700")
+References: <4D8648F4.8010006@mozilla.com>
+Message-ID: <87ipv6hzo2.fsf@mid.deneb.enyo.de>
+
+* Patrick Walton:
+
+> I've floated the idea of using EBML [1], which is a dead simple format
+> used by Matroska (including WebM).
+
+Out of curiosity, does EBML allow generation of type definitions for
+ordinary programing languages?  This is very difficult for other
+schema languages based on labeled trees because many constructs which
+look nice on the schema level map very poorly to traditional type
+definitions (especially in a nominal type system).
+
+From giles at thaumas.net  Mon Mar 28 11:55:00 2011
+From: giles at thaumas.net (Ralph Giles)
+Date: Mon, 28 Mar 2011 11:55:00 -0700
+Subject: [rust-dev] Metadata encoding format
+In-Reply-To: <87ipv6hzo2.fsf@mid.deneb.enyo.de>
+References: <4D8648F4.8010006@mozilla.com> <87ipv6hzo2.fsf@mid.deneb.enyo.de>
+Message-ID: <AANLkTikHc-W0LMcmTBzMeA2YJaoZjd+ncvxjx_OrST35@mail.gmail.com>
+
+On 26 March 2011 04:46, Florian Weimer <fw at deneb.enyo.de> wrote:
+
+> Out of curiosity, does EBML allow generation of type definitions for
+> ordinary programing languages?
+
+I'm not sure what this means, but no one else has replied, so:
+
+EBML is just a binary format for a tree of tagged values. Natively it
+supports values of type integer (signed or unsigned), floating point,
+string, date, or binary blob. So those basic types are easy to
+represent, as are arrays and dictionaries, but one needs an additional
+parse layer for string- or blob-encoded data to handle anything more
+complicated.
+
+I suppose it has the advantage of actually having a schema language
+over a custom format of similar complexity.
+
+ -r
+
+From fw at deneb.enyo.de  Mon Mar 28 12:11:41 2011
+From: fw at deneb.enyo.de (Florian Weimer)
+Date: Mon, 28 Mar 2011 21:11:41 +0200
+Subject: [rust-dev] Metadata encoding format
+In-Reply-To: <AANLkTikHc-W0LMcmTBzMeA2YJaoZjd+ncvxjx_OrST35@mail.gmail.com>
+	(Ralph Giles's message of "Mon, 28 Mar 2011 11:55:00 -0700")
+References: <4D8648F4.8010006@mozilla.com> <87ipv6hzo2.fsf@mid.deneb.enyo.de>
+	<AANLkTikHc-W0LMcmTBzMeA2YJaoZjd+ncvxjx_OrST35@mail.gmail.com>
+Message-ID: <8739m7ys9e.fsf@mid.deneb.enyo.de>
+
+* Ralph Giles:
+
+> On 26 March 2011 04:46, Florian Weimer <fw at deneb.enyo.de> wrote:
+>
+>> Out of curiosity, does EBML allow generation of type definitions for
+>> ordinary programing languages?
+>
+> I'm not sure what this means, but no one else has replied, so:
+
+Okay, let me clarify.  DTDs, XML Schema and Relax NG are too general
+to admit synthesizing type information for most programming languages.
+For instance, if you have got this in a DTD:
+
+<!ELEMENT PAGE (TITLE, AUTHOR, 
+        ADDLIST*, ADDFOOTER*, SHIP*,
+        (((BODY | LEAD)?, (SECTION | FAQL)*)
+         | (SECTION | FAQL)+),
+         REVISIONS?)>
+
+then it will be really difficult to generate a useful type from that.
+Even for an ML-like language, the lack of at type name for thinks like
+BODY | LEAD makes that difficult.  There is even more nastiness, such
+as non-determinist content models, but the naming problem is the first
+obstacle.
+
+But this is getting off-topic.  (Coincidentally, I'm looking for a
+schema language which maps nicely to the common core of most static
+type systems, that's why I asked.)
+
+From graydon at mozilla.com  Tue Mar 29 14:20:30 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 29 Mar 2011 14:20:30 -0700
+Subject: [rust-dev] Metadata encoding format
+In-Reply-To: <8739m7ys9e.fsf@mid.deneb.enyo.de>
+References: <4D8648F4.8010006@mozilla.com>
+	<87ipv6hzo2.fsf@mid.deneb.enyo.de>	<AANLkTikHc-W0LMcmTBzMeA2YJaoZjd+ncvxjx_OrST35@mail.gmail.com>
+	<8739m7ys9e.fsf@mid.deneb.enyo.de>
+Message-ID: <4D924D1E.8040006@mozilla.com>
+
+On 11-03-28 12:11 PM, Florian Weimer wrote:
+
+> <!ELEMENT PAGE (TITLE, AUTHOR,
+>          ADDLIST*, ADDFOOTER*, SHIP*,
+>          (((BODY | LEAD)?, (SECTION | FAQL)*)
+>           | (SECTION | FAQL)+),
+>           REVISIONS?)>
+>
+> then it will be really difficult to generate a useful type from that.
+> Even for an ML-like language, the lack of at type name for thinks like
+> BODY | LEAD makes that difficult.  There is even more nastiness, such
+> as non-determinist content models, but the naming problem is the first
+> obstacle.
+
+You probably want cduce (http://www.cduce.org), which is .. pretty much 
+unrelated to our type system :)
+
+> But this is getting off-topic.  (Coincidentally, I'm looking for a
+> schema language which maps nicely to the common core of most static
+> type systems, that's why I asked.)
+
+Every real type system has strange corner cases; I doubt you'll find 
+much short of a proof assistant's logics. But yes, this is way off 
+topic. All we need for linkage is a way to read, write and seek around 
+in some simple / compact tree format; an additional meta-layer of static 
+types for constraining this format is not required. We're the only 
+producer or consumer, and we only produce or consume one kind of thing. 
+Dynamic probing for the stuff we expect with pleasant error messages on 
+failure is just fine.
+
+-Graydon
+
+From peterhull90 at gmail.com  Thu Mar 31 04:30:38 2011
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Thu, 31 Mar 2011 12:30:38 +0100
+Subject: [rust-dev] "A Quick Look at the Rust Programming Language"
+Message-ID: <AANLkTikKB8tySb7Kj1yT6439dSsTd+hraVD2iFpb1fV7@mail.gmail.com>
+
+Probably everyone's seen this by now but Chris Double has posted on his blog:
+http://www.bluishcoder.co.nz/2011/03/31/a-quick-look-at-the-rust-programming-language.html#
+
+Pete
+

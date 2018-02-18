@@ -1,0 +1,2012 @@
+From hsivonen at iki.fi  Wed Nov  7 08:23:09 2012
+From: hsivonen at iki.fi (Henri Sivonen)
+Date: Wed, 7 Nov 2012 18:23:09 +0200
+Subject: [rust-dev] Questions about vectors
+Message-ID: <CAJQvAud8WSktnOWd9zJ=RnovPYGVpA=--67=CZUWpnds45_ohg@mail.gmail.com>
+
+I'm trying to understand how to translate Java arrays into Rust.
+
+Why is mutability different for owned and managed vectors? The
+following program compiles and prints 42 when run:
+fn main() {
+  let mut v: ~[i32] = ~[0, 0];
+  v[0] = 42;
+  let s = i32::to_str(v[0], 10);
+  io::println(s);
+  return;
+}
+
+However, the following program won't compile:
+fn main() {
+  let mut v: @[i32] = @[0, 0];
+  v[0] = 42;
+  let s = i32::to_str(v[0], 10);
+  io::println(s);
+  return;
+}
+
+This compiles, however:
+fn main() {
+  let mut v: @[mut i32] = @[mut 0, 0];
+  v[0] = 42;
+  let s = i32::to_str(v[0], 10);
+  io::println(s);
+  return;
+}
+
+- -
+
+How is one supposed to implement growable buffers?
+
+Can Rust vectors grow in-place?
+http://dl.rust-lang.org/doc/0.4/core/at_vec.html#function-capacity
+suggests they can. How does one append to a vector in-place? What's
+the buffer growth strategy?
+
+On the other hand, if vectors can't grow in-place and one needs to
+explicitly allocate a new vector and copy the contents of the old
+vector over, what's the right way to allocate a long (garbage-filled
+or zero-filled) vector without putting a long series of zeros and, as
+in the source code? That is, how do I say "give me a zero-filled
+vector of length 1024"?
+
+- -
+
+What's the Rust equivalent of System.arrayCopy() for efficiently
+copying a range of elements from a vector to another?
+
+- -
+
+Can a vector of object references have any empty slots? Or do empty
+slots need to have some kind of dummy objects in them to avoid null
+pointers?
+
+-- 
+Henri Sivonen
+hsivonen at iki.fi
+http://hsivonen.iki.fi/
+
+From niko at alum.mit.edu  Wed Nov  7 10:55:42 2012
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Wed, 07 Nov 2012 10:55:42 -0800
+Subject: [rust-dev] Questions about vectors
+In-Reply-To: <CAJQvAud8WSktnOWd9zJ=RnovPYGVpA=--67=CZUWpnds45_ohg@mail.gmail.com>
+References: <CAJQvAud8WSktnOWd9zJ=RnovPYGVpA=--67=CZUWpnds45_ohg@mail.gmail.com>
+Message-ID: <509AAEAE.7060804@alum.mit.edu>
+
+
+
+Henri Sivonen wrote:
+> I'm trying to understand how to translate Java arrays into Rust.
+
+Short answer: The correct translation (as for most Java things) will 
+depend somewhat on how the array is being used.  However, you may find 
+that `DVec<T>` is the closest to a "one-sized fits all" solution.  Also, 
+this array is somewhat in flux: we have some ideas for how to manage 
+things that haven't yet been realized in the libraries (to some extent, 
+this is because language support is still a bit immature).
+
+> Why is mutability different for owned and managed vectors?
+
+In general, mutability is inherited through owned (~) pointers---this 
+applies to both owned vectors but also other ~T types.  This is because 
+the ~ pointer owns the data it points at, and in general we allow you to 
+mutate things that you own.  A managed (@) pointer does not imply 
+ownership; you can think of owning as 'permission to free', and, in that 
+sense, the garbage collector is the owner.
+
+But to put it more practically, @ data may be aliased, so if we allowed 
+you to change one @ from immutable to mutable or vice versa, the types 
+would not be consistent, and that would be unsound.
+
+> This compiles, however:
+> fn main() {
+>    let mut v: @[mut i32] = @[mut 0, 0];
+>    v[0] = 42;
+>    let s = i32::to_str(v[0], 10);
+>    io::println(s);
+>    return;
+> }
+
+Currently you can declare the *elements* of an array mutable using the 
+syntax you gave above.  We generally discourage this because it is not 
+particularly compatible with higher-order functions, since at the moment 
+it is not possible to write a function that is parametric over 
+mutability.  I discussed this somewhat in a blog post, though I think 
+the solution I proposed doesn't quite work out:
+
+     
+http://smallcultfollowing.com/babysteps/blog/2012/05/28/moving-mutability-into-the-type/
+
+ From a personal perspective, I am not fully satisfied with our approach 
+to mutability but I think it's a reasonable compromise.  I hope we can 
+find something better but I think with better library support we can get 
+pretty far with what we have, and it may not be worth fixing.  That's 
+one of those "up in the air" issues.
+
+> How is one supposed to implement growable buffers?
+
+There are a couple of answers here.  The real question is whether you 
+want to define a buffer that needs to be growable for a short time but 
+later becomes immutable, or whether you want to have some kind of buffer 
+that you modify over time.  I'm guessing you want the latter.  In that 
+case, the current best answer is probably to use 
+`libcore::dvec::DVec<T>` (or `@DVec<T>` if you want it to be managed).  
+If you can limit the duration of the mutability, I prefer the `build()` 
+function or a mutable local variable with a ~[T] value. It's more 
+efficient and rules out errors statically.
+
+DVec<T> is pretty straightforward to use.  Something like:
+
+     let v = dvec::DVec();
+     v.push(1);
+     v.push(2);
+     for v.each |i| { ... }
+
+> What's the Rust equivalent of System.arrayCopy() for efficiently
+> copying a range of elements from a vector to another?
+
+I don't know that we have such a function.  We could write one that uses 
+the type_needs_drop() intrinsic to decide between memcpy() and an 
+element-by-element copy.
+
+> Can a vector of object references have any empty slots? Or do empty
+> slots need to have some kind of dummy objects in them to avoid null
+> pointers?
+
+You can use DVec<Option<@T>> if you want the slots to be nullable.
+
+
+Niko
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121107/965efb43/attachment.html>
+
+From peterhull90 at gmail.com  Wed Nov  7 12:39:57 2012
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Wed, 7 Nov 2012 20:39:57 +0000
+Subject: [rust-dev] Questions about vectors
+In-Reply-To: <CAJQvAud8WSktnOWd9zJ=RnovPYGVpA=--67=CZUWpnds45_ohg@mail.gmail.com>
+References: <CAJQvAud8WSktnOWd9zJ=RnovPYGVpA=--67=CZUWpnds45_ohg@mail.gmail.com>
+Message-ID: <CAK9Gx1eSQspR+CvtGOeVwsEdmgbdM-VKJ8iyqOHHi9b+tn-BGQ@mail.gmail.com>
+
+On Wed, Nov 7, 2012 at 4:23 PM, Henri Sivonen <hsivonen at iki.fi> wrote:
+> That is, how do I say "give me a zero-filled
+> vector of length 1024"?
+I do know this one!
+let mut v = vec::from_elem(1024u, 0i32);
+
+Peter
+
+From pwalton at mozilla.com  Wed Nov  7 23:09:13 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Wed, 07 Nov 2012 23:09:13 -0800
+Subject: [rust-dev] Questions about vectors
+In-Reply-To: <509AAEAE.7060804@alum.mit.edu>
+References: <CAJQvAud8WSktnOWd9zJ=RnovPYGVpA=--67=CZUWpnds45_ohg@mail.gmail.com>
+	<509AAEAE.7060804@alum.mit.edu>
+Message-ID: <509B5A99.3000307@mozilla.com>
+
+On 11/7/12 10:55 AM, Niko Matsakis wrote:
+>> Can a vector of object references have any empty slots? Or do empty
+>> slots need to have some kind of dummy objects in them to avoid null
+>> pointers?
+>
+> You can use DVec<Option<@T>> if you want the slots to be nullable.
+
+But note that, for uniquely-owned vectors (~[T]), it is possible to 
+reserve empty slots beyond the real end of the vector, so that the 
+common vec::push() operation (which is semantically just "consume the 
+vector and return a new vector with the element added" but can be 
+optimized into something more efficient if there's extra space) won't 
+have to unconditionally reallocate and copy. If you're interested in 
+doing this, the function is vec::reserve().
+
+Patrick
+
+
+From jhebus at googlemail.com  Thu Nov  8 11:46:33 2012
+From: jhebus at googlemail.com (Paul Harvey)
+Date: Thu, 8 Nov 2012 19:46:33 +0000
+Subject: [rust-dev] Sharing Channels and port in Rust
+Message-ID: <CABR7Q=p+gpYVYxgspL4Vaou4QPrs+0sWCNR0J5pss6xj_myVPg@mail.gmail.com>
+
+Hi all,
+
+This started here(https://github.com/mozilla/rust/issues/3928) and i would
+like to continue with my questions.
+
+So, where i left off was:
+
+* How to share a *cloned channel* with mutliple tasks
+* How to share a port from main into a task
+* How to determine how copyable a channel/port is
+* Is it possible to create dynamic topologies with port and channels in
+Rust at runtime (although i think that this one is a no)
+
+Thanks in advance
+
+Paul
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121108/e6752f6e/attachment.html>
+
+From stefano.d at gmx.net  Wed Nov  7 13:09:08 2012
+From: stefano.d at gmx.net (Stefano Di Martino)
+Date: Wed, 07 Nov 2012 22:09:08 +0100
+Subject: [rust-dev] Ommit verbose elements
+Message-ID: <509ACDF4.3020507@gmx.net>
+
+Hi,
+rust seems to be a next generation language that's really worth it. But 
+I still see elements in the syntax that are just need- and senseless and 
+from the last century, like the semicolon an the end of each command. 
+What is this good for?!
+What are parenthesis like "{" good for? They might make sense in *some* 
+cases, but it is nasty to make this elements to fix syntax rules for 
+every command or code block.
+If you could remove this verbose syntax, it would be worth to call it 
+"next generation language" in a syntax way, too.
+
+Best regards
+Stefano
+
+From catamorphism at gmail.com  Thu Nov  8 12:06:27 2012
+From: catamorphism at gmail.com (Tim Chevalier)
+Date: Thu, 8 Nov 2012 12:06:27 -0800
+Subject: [rust-dev] Ommit verbose elements
+In-Reply-To: <509ACDF4.3020507@gmx.net>
+References: <509ACDF4.3020507@gmx.net>
+Message-ID: <CADcg8=mgqr7Lefj2qQp8C=nd0T+ksV0sUMAe-E0AuR-CnfY1kg@mail.gmail.com>
+
+On Wed, Nov 7, 2012 at 1:09 PM, Stefano Di Martino <stefano.d at gmx.net> wrote:
+> Hi,
+> rust seems to be a next generation language that's really worth it. But I
+> still see elements in the syntax that are just need- and senseless and from
+> the last century, like the semicolon an the end of each command. What is
+> this good for?!
+> What are parenthesis like "{" good for? They might make sense in *some*
+> cases, but it is nasty to make this elements to fix syntax rules for every
+> command or code block.
+> If you could remove this verbose syntax, it would be worth to call it "next
+> generation language" in a syntax way, too.
+
+Please read:
+
+https://github.com/mozilla/rust/wiki/Note-development-policy
+
+In particular, the code of conduct section:
+
+"Respect that people have differences of opinion and that every design
+or implementation choice carries a trade-off and numerous costs. There
+is seldom a right answer.
+
+Please keep unstructured critique to a minimum. If you have solid
+ideas you want to experiment with, make a fork and see how it works."
+
+Please remember that the decisions that you're just learning about now
+are ones that other people have put a ton of time, thought, and effort
+into. Assume that if something strikes you the wrong way, it's
+probably not because no one else has thought about it, but because
+it's the result of a trade-off. As this point in the design of Rust,
+we're unlikely to make any major syntax changes. The focuses right now
+are on completing the few remaining features that aren't done, library
+development, and performance.
+
+Cheers,
+Tim (Rust core team member)
+
+-- 
+Tim Chevalier * http://catamorphism.org/ * Often in error, never in doubt
+'Wouldn't you rather be anything other than the kid who runs around
+telling stuff what he thinks it is?" -- DavEnd
+
+From banderson at mozilla.com  Thu Nov  8 12:07:24 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Thu, 08 Nov 2012 12:07:24 -0800
+Subject: [rust-dev] Ommit verbose elements
+In-Reply-To: <509ACDF4.3020507@gmx.net>
+References: <509ACDF4.3020507@gmx.net>
+Message-ID: <509C10FC.4030602@mozilla.com>
+
+On 11/07/2012 01:09 PM, Stefano Di Martino wrote:
+> Hi,
+> rust seems to be a next generation language that's really worth it. 
+> But I still see elements in the syntax that are just need- and 
+> senseless and from the last century, like the semicolon an the end of 
+> each command. What is this good for?!
+> What are parenthesis like "{" good for? They might make sense in 
+> *some* cases, but it is nasty to make this elements to fix syntax 
+> rules for every command or code block.
+> If you could remove this verbose syntax, it would be worth to call it 
+> "next generation language" in a syntax way, too.
+>
+
+Thanks for the feedback. Syntax is a very personal issue, and one that 
+everybody has an opinion on. Both semicolons and, to a lesser extent, 
+braces in Rust have been debated many times.
+
+Regards,
+Brian
+
+From banderson at mozilla.com  Thu Nov  8 12:27:38 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Thu, 08 Nov 2012 12:27:38 -0800
+Subject: [rust-dev] Sharing Channels and port in Rust
+In-Reply-To: <CABR7Q=p+gpYVYxgspL4Vaou4QPrs+0sWCNR0J5pss6xj_myVPg@mail.gmail.com>
+References: <CABR7Q=p+gpYVYxgspL4Vaou4QPrs+0sWCNR0J5pss6xj_myVPg@mail.gmail.com>
+Message-ID: <509C15BA.7000107@mozilla.com>
+
+On 11/08/2012 11:46 AM, Paul Harvey wrote:
+> Hi all,
+>
+> This started here(https://github.com/mozilla/rust/issues/3928) and i 
+> would like to continue with my questions.
+>
+> So, where i left off was:
+>
+> * How to share a *cloned channel* with mutliple tasks
+> * How to share a port from main into a task
+> * How to determine how copyable a channel/port is
+> * Is it possible to create dynamic topologies with port and channels 
+> in Rust at runtime (although i think that this one is a no)
+>
+
+Here's the last example on that issue that you had problems with:
+
+|let chan = SharedChan(move chan);
+
+let a = chan.clone();
+
+do task::spawn |move a| {
+     send_actor(a);
+}|
+
+
+This will cause a compiler error at `send_actor(a)` because a isn't 
+copyable. Pipe-based channels and ports are never copyable but 
+SharedChan's, like you have here, may be cloned with the .clone() 
+method. Pipes are linear types and are typically moved around with 
+`move` expressions, unless one really needs to create another reference.
+
+With that in mind one might be tempted to `move` a into the `send_actor` 
+function, like `send_actor(move a)`. In this case that won't work 
+because `a` has been captured in a closure, and once variables are 
+captured they are stuck inside the closure (moving a variable out of a 
+closure would leave a 'hole' in the closure environment that make 
+calling the closure a second time unsound). In this case you have two 
+options. Since you have a cloneable SharedChan the easiest thing here is 
+to just clone 'a':
+
+do task::spawn |move a| {
+     send_actor(a.clone())
+}
+
+Another common situation is to have just a `Chan` type, in which case 
+clone is not possible. Right now for such a scenario the common thing to 
+do to move that value around is to use a Cell type.
+
+use std::cell::Cell;
+
+let (port, chan) = pipes::stream();
+let chan_cell = Cell(move chan);
+
+do task::spawn |move chan_cell| {
+     send_actor(chan_cell.take());
+}
+
+The Cell is like a mutable Option type, you can put things in and take 
+things out. It lets one get around the previously mentioned limitation 
+about moving values out of closures. FWIW, Rust will also be getting 
+'once functions', which are closures that may be only called a single 
+time, and whose environments may be moved out. Spawn will eventually 
+take a once function to avoid this problem.
+
+As to 'detecting' how copyable a value is, copyability is an intrinsic 
+property of the type. Copyable types intrinsically implement the `Copy` 
+trait, but there is no declaration on the type itself to indicate it's 
+copyability. Often you only know when the compiler tells you something 
+can't be copied.
+
+Ports can be moved the same as channels.
+
+I don't understand the dynamic topology issue but I think the answer is 
+that pipes can't do that: both the port and channel endpoints are linked 
+to each other at creation; they cannot be created independently and 
+linked later.
+
+Regards,
+Brian
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121108/50a89983/attachment.html>
+
+From gwillen at nerdnet.org  Thu Nov  8 12:30:56 2012
+From: gwillen at nerdnet.org (Glenn Willen)
+Date: Thu, 8 Nov 2012 12:30:56 -0800
+Subject: [rust-dev] Sharing Channels and port in Rust
+In-Reply-To: <509C15BA.7000107@mozilla.com>
+References: <CABR7Q=p+gpYVYxgspL4Vaou4QPrs+0sWCNR0J5pss6xj_myVPg@mail.gmail.com>
+	<509C15BA.7000107@mozilla.com>
+Message-ID: <5490BAEB-E929-4A6B-ABF4-A2536120AA2A@nerdnet.org>
+
+
+On Nov 8, 2012, at 12:27 PM, Brian Anderson wrote:
+> 
+> With that in mind one might be tempted to `move` a into the `send_actor` function, like `send_actor(move a)`. In this case that won't work because `a` has been captured in a closure, and once variables are captured they are stuck inside the closure (moving a variable out of a closure would leave a 'hole' in the closure environment that make calling the closure a second time unsound). In this case you have two options. Since you have a cloneable SharedChan the easiest thing here is to just clone 'a':
+
+Just to cherrypick this one interesting thing: This is only a problem because we don't have one-shot closures, right? There's no inherent reason this shouldn't work, it's just that we don't know statically that the closure won't be called again, even though the programmer knows and intends that it won't.
+
+Glenn
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: PGP.sig
+Type: application/pgp-signature
+Size: 243 bytes
+Desc: This is a digitally signed message part
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121108/9afe3406/attachment.sig>
+
+From banderson at mozilla.com  Thu Nov  8 12:37:16 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Thu, 08 Nov 2012 12:37:16 -0800
+Subject: [rust-dev] Sharing Channels and port in Rust
+In-Reply-To: <5490BAEB-E929-4A6B-ABF4-A2536120AA2A@nerdnet.org>
+References: <CABR7Q=p+gpYVYxgspL4Vaou4QPrs+0sWCNR0J5pss6xj_myVPg@mail.gmail.com>
+	<509C15BA.7000107@mozilla.com>
+	<5490BAEB-E929-4A6B-ABF4-A2536120AA2A@nerdnet.org>
+Message-ID: <509C17FC.9010009@mozilla.com>
+
+On 11/08/2012 12:30 PM, Glenn Willen wrote:
+> On Nov 8, 2012, at 12:27 PM, Brian Anderson wrote:
+>> With that in mind one might be tempted to `move` a into the `send_actor` function, like `send_actor(move a)`. In this case that won't work because `a` has been captured in a closure, and once variables are captured they are stuck inside the closure (moving a variable out of a closure would leave a 'hole' in the closure environment that make calling the closure a second time unsound). In this case you have two options. Since you have a cloneable SharedChan the easiest thing here is to just clone 'a':
+> Just to cherrypick this one interesting thing: This is only a problem because we don't have one-shot closures, right? There's no inherent reason this shouldn't work, it's just that we don't know statically that the closure won't be called again, even though the programmer knows and intends that it won't.
+>
+
+Yes.
+
+From nejucomo at gmail.com  Thu Nov  8 13:38:30 2012
+From: nejucomo at gmail.com (Nathan)
+Date: Thu, 8 Nov 2012 13:38:30 -0800
+Subject: [rust-dev] Ommit verbose elements
+In-Reply-To: <509ACDF4.3020507@gmx.net>
+References: <509ACDF4.3020507@gmx.net>
+Message-ID: <CA+4_Dk7v3-2tS2YHhxN3c4w=gwtuS3DFC17h-emVRwN4Nzw-BQ@mail.gmail.com>
+
+On Wed, Nov 7, 2012 at 1:09 PM, Stefano Di Martino <stefano.d at gmx.net> wrote:
+> Hi,
+> rust seems to be a next generation language that's really worth it. But I
+> still see elements in the syntax that are just need- and senseless and from
+> the last century, like the semicolon an the end of each command. What is
+> this good for?!
+> What are parenthesis like "{" good for? They might make sense in *some*
+> cases, but it is nasty to make this elements to fix syntax rules for every
+> command or code block.
+> If you could remove this verbose syntax, it would be worth to call it "next
+> generation language" in a syntax way, too.
+>
+
+I'd recommend writing a variety of small toy scripts, text-book
+algorithms / data structures, or whatever other small applications you
+are interested in for awhile.
+
+You may find that the syntax grows on you.  That's been the case for
+me.  Actually I think this is true, for me, for all languages once
+I've invested sufficient energy in writing and reading the language.
+
+Regards,
+Nathan Wilcox
+
+
+> Best regards
+> Stefano
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+From asb at asbradbury.org  Thu Nov  8 13:51:16 2012
+From: asb at asbradbury.org (Alex Bradbury)
+Date: Thu, 8 Nov 2012 21:51:16 +0000
+Subject: [rust-dev] Ommit verbose elements
+In-Reply-To: <CA+4_Dk7v3-2tS2YHhxN3c4w=gwtuS3DFC17h-emVRwN4Nzw-BQ@mail.gmail.com>
+References: <509ACDF4.3020507@gmx.net>
+	<CA+4_Dk7v3-2tS2YHhxN3c4w=gwtuS3DFC17h-emVRwN4Nzw-BQ@mail.gmail.com>
+Message-ID: <CA+wH295ZukXwmgpow62mjAzCZajOB8HeXHWbORv53=uk8sxxJA@mail.gmail.com>
+
+On 8 November 2012 21:38, Nathan <nejucomo at gmail.com> wrote:
+> I'd recommend writing a variety of small toy scripts, text-book
+> algorithms / data structures, or whatever other small applications you
+> are interested in for awhile.
+>
+> You may find that the syntax grows on you.  That's been the case for
+> me.  Actually I think this is true, for me, for all languages once
+> I've invested sufficient energy in writing and reading the language.
+
+And if you do, why not do so with some of the programming tasks from
+http://rosettacode.org/wiki/Rosetta_Code and help grow the rather
+disappointingly small collection of Rust examples :)
+http://rosettacode.org/wiki/Category:Rust
+
+Regards,
+
+Alex
+
+From dbp at riseup.net  Thu Nov  8 14:49:25 2012
+From: dbp at riseup.net (Daniel Patterson)
+Date: Thu, 8 Nov 2012 17:49:25 -0500
+Subject: [rust-dev] Ommit verbose elements
+In-Reply-To: <CA+4_Dk7v3-2tS2YHhxN3c4w=gwtuS3DFC17h-emVRwN4Nzw-BQ@mail.gmail.com>
+References: <509ACDF4.3020507@gmx.net>
+	<CA+4_Dk7v3-2tS2YHhxN3c4w=gwtuS3DFC17h-emVRwN4Nzw-BQ@mail.gmail.com>
+Message-ID: <2677CD18-C98A-4886-B83A-571801F1313E@riseup.net>
+
+On Nov 8, 2012, at 4:38 PM, Nathan wrote:
+> I'd recommend writing a variety of small toy scripts, text-book
+> algorithms / data structures, or whatever other small applications you
+> are interested in for awhile.
+> 
+> You may find that the syntax grows on you.  That's been the case for
+> me.  Actually I think this is true, for me, for all languages once
+> I've invested sufficient energy in writing and reading the language.
+
+I feel the same way. It seems that large amount of time has been put into the syntax, and I think it really shows. There is a consistency that is really nice to work with. 
+
+The two languages that I spend the most time in are Python and Haskell, both whitespace delimited, and I find that I am actually happier programming in Rust (modulo any problems to be expected in a new/not complete language). I find the braces to be useful visual indications of blocks, and the semicolons are a nice way of saying "this is a statement" (or, another way of saying that is 'ignore the result of this expression').
+
+From amitsinghai.jain at gmail.com  Fri Nov  9 00:10:57 2012
+From: amitsinghai.jain at gmail.com (Amit Jain)
+Date: Fri, 9 Nov 2012 17:10:57 +0900
+Subject: [rust-dev] [rust] dealing with c style argc argv
+Message-ID: <CAGNzeLy5RD_eCCHbBeseQU=+Yck-Umq9ecYJFjxmOLtm_0F0Ng@mail.gmail.com>
+
+hi,
+
+I am trying to wrap gtk based UI in rust. Not an expert in rust.
+
+
+i created a  libgui.so out of these files
+
+gui.h
+====
+void showGtkUI(int argc, char* argv[]);
+
+
+gui.c
+====
+#include "gui.h"
+#include <gtk/gtk.h>
+void showGtkUI(int argc, char* argv[]){
+
+    GtkWidget *window;
+    //int argc = 1;
+    //char **argv = {"hi"};
+    gtk_init (&argc, &argv);
+
+    window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+    gtk_widget_show  (window);
+
+    gtk_main ();
+
+}
+
+
+now I want to write a rust-gui.rs  ( a rust wrapper for this), but could
+not get any idea how to
+supply the argc and argv .
+
+rust-gui.rs
+============
+
+use libc::{c_char, c_void, c_int, c_uint};
+//use std;
+extern mod gui{
+  fn showGtkUI(argc:c_int, argv:**c_char);
+}
+
+
+fn main( /* what can be args */ ) {
+    // what should I do here.
+}
+
+
+i tried vec [str] etc but every time i get compile errors.
+
+any help.
+
+TIA
+amit
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121109/2616ed62/attachment.html>
+
+From pwalton at mozilla.com  Fri Nov  9 07:39:25 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 09 Nov 2012 07:39:25 -0800
+Subject: [rust-dev] [rust] dealing with c style argc argv
+In-Reply-To: <CAGNzeLy5RD_eCCHbBeseQU=+Yck-Umq9ecYJFjxmOLtm_0F0Ng@mail.gmail.com>
+References: <CAGNzeLy5RD_eCCHbBeseQU=+Yck-Umq9ecYJFjxmOLtm_0F0Ng@mail.gmail.com>
+Message-ID: <509D23AD.9080609@mozilla.com>
+
+On 11/9/12 12:10 AM, Amit Jain wrote:
+> now I want to write a rust-gui.rs <http://rust-gui.rs>  ( a rust wrapper
+> for this), but could not get any idea how to
+> supply the argc and argv .
+>
+> rust-gui.rs <http://rust-gui.rs>
+> ============
+>
+> use libc::{c_char, c_void, c_int, c_uint};
+> //use std;
+> extern mod gui{
+>    fn showGtkUI(argc:c_int, argv:**c_char);
+> }
+>
+>
+> fn main( /* what can be args */ ) {
+>      // what should I do here.
+> }
+>
+>
+> i tried vec [str] etc but every time i get compile errors.
+
+Call os::args(). That returns you a vector of strings containing the 
+arguments.
+
+Patrick
+
+
+From graydon at mozilla.com  Fri Nov  9 13:58:43 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 09 Nov 2012 13:58:43 -0800
+Subject: [rust-dev] OS / version coverage for buildbot
+Message-ID: <509D7C93.80007@mozilla.com>
+
+Hi,
+
+I'm bringing a new buildbot-based system online for building and testing
+rust (and its packages and libraries, eventually). As part of this,
+we're going to be bringing some new machines into the build group.
+Currently our builders ("rustbot" based, not buildbot) build and test on
+machines mozilla owns:
+
+  CentOS 6.0 x64 (Linux 2.6.32, Glibc 2.12, gcc)
+  OSX Lion x64 (10.7.4, clang)
+  OSX Snow Leopard x64 (10.6.8, gcc)
+  Windows Server 2008R2 Enterprise SP1 x64 (mingw gcc)
+  FreeBSD 9.0 x64 (gcc)
+
+This is in addition to our workstations that are, I think, largely a
+mixture of Ubuntu 10, 11 and 12 LTS x64 and OSX Lion x64. Though no
+debian/ubuntu-like machines (much less SLES or other Linuxes) are part
+of the per-commit build machinery.
+
+The new system will have slaves running partly on machines we run and
+also partly in an AWS VPC. This means it's much easier to bring up new
+machines -- even periodic ones -- to test breadth, which is good for
+future release stability. I want to get a feeling for what represents
+breadth though. How far forward and backward, version-wise, do people
+want to see us testing, and how many different OS / distribution /
+toolchain flavours?
+
+I thought I'd ask the mailing list, to get a feeling for the variety of
+sorts-of-systems people test on when I post a release candidate and ask
+for feedback. Or sorts-of-systems people would _like_ to be testing on,
+if we happen to be able to add them easily to the group.
+
+Thanks,
+
+-Graydon
+
+From ben.striegel at gmail.com  Fri Nov  9 15:55:34 2012
+From: ben.striegel at gmail.com (Benjamin Striegel)
+Date: Fri, 9 Nov 2012 18:55:34 -0500
+Subject: [rust-dev] OS / version coverage for buildbot
+In-Reply-To: <509D7C93.80007@mozilla.com>
+References: <509D7C93.80007@mozilla.com>
+Message-ID: <CAAvrL-=hTpe_Wj6LB8kT+k56J0Q=Fc6zsF73K49B90_vsQr24g@mail.gmail.com>
+
+I'm not sure when the MinGW -> MSVC switch is happening, but I think
+Windows 7 testing would be useful. And maybe Windows XP, depending on how
+much trouble that turns out to be. Or is Servo never intended to be
+explicitly compatible with XP?
+
+
+On Fri, Nov 9, 2012 at 4:58 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> Hi,
+>
+> I'm bringing a new buildbot-based system online for building and testing
+> rust (and its packages and libraries, eventually). As part of this,
+> we're going to be bringing some new machines into the build group.
+> Currently our builders ("rustbot" based, not buildbot) build and test on
+> machines mozilla owns:
+>
+>   CentOS 6.0 x64 (Linux 2.6.32, Glibc 2.12, gcc)
+>   OSX Lion x64 (10.7.4, clang)
+>   OSX Snow Leopard x64 (10.6.8, gcc)
+>   Windows Server 2008R2 Enterprise SP1 x64 (mingw gcc)
+>   FreeBSD 9.0 x64 (gcc)
+>
+> This is in addition to our workstations that are, I think, largely a
+> mixture of Ubuntu 10, 11 and 12 LTS x64 and OSX Lion x64. Though no
+> debian/ubuntu-like machines (much less SLES or other Linuxes) are part
+> of the per-commit build machinery.
+>
+> The new system will have slaves running partly on machines we run and
+> also partly in an AWS VPC. This means it's much easier to bring up new
+> machines -- even periodic ones -- to test breadth, which is good for
+> future release stability. I want to get a feeling for what represents
+> breadth though. How far forward and backward, version-wise, do people
+> want to see us testing, and how many different OS / distribution /
+> toolchain flavours?
+>
+> I thought I'd ask the mailing list, to get a feeling for the variety of
+> sorts-of-systems people test on when I post a release candidate and ask
+> for feedback. Or sorts-of-systems people would _like_ to be testing on,
+> if we happen to be able to add them easily to the group.
+>
+> Thanks,
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121109/25217b84/attachment.html>
+
+From pwalton at mozilla.com  Fri Nov  9 15:59:30 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 09 Nov 2012 15:59:30 -0800
+Subject: [rust-dev] OS / version coverage for buildbot
+In-Reply-To: <CAAvrL-=hTpe_Wj6LB8kT+k56J0Q=Fc6zsF73K49B90_vsQr24g@mail.gmail.com>
+References: <509D7C93.80007@mozilla.com>
+	<CAAvrL-=hTpe_Wj6LB8kT+k56J0Q=Fc6zsF73K49B90_vsQr24g@mail.gmail.com>
+Message-ID: <509D98E2.5070403@mozilla.com>
+
+On 11/9/12 3:55 PM, Benjamin Striegel wrote:
+> I'm not sure when the MinGW -> MSVC switch is happening, but I think
+> Windows 7 testing would be useful. And maybe Windows XP, depending on
+> how much trouble that turns out to be. Or is Servo never intended to be
+> explicitly compatible with XP?
+
+Windows XP testing is not a priority for Servo at this time. There are 
+too many features that we want (Direct2D, Direct3D 10, Mandatory 
+Integrity Control) that are not supported in Windows XP.
+
+Patrick
+
+From banderson at mozilla.com  Fri Nov  9 16:02:33 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Fri, 09 Nov 2012 16:02:33 -0800
+Subject: [rust-dev] OS / version coverage for buildbot
+In-Reply-To: <509D7C93.80007@mozilla.com>
+References: <509D7C93.80007@mozilla.com>
+Message-ID: <509D9999.6020801@mozilla.com>
+
+On 11/09/2012 01:58 PM, Graydon Hoare wrote:
+> Hi,
+>
+> I'm bringing a new buildbot-based system online for building and testing
+> rust (and its packages and libraries, eventually). As part of this,
+> we're going to be bringing some new machines into the build group.
+> Currently our builders ("rustbot" based, not buildbot) build and test on
+> machines mozilla owns:
+>
+>    CentOS 6.0 x64 (Linux 2.6.32, Glibc 2.12, gcc)
+>    OSX Lion x64 (10.7.4, clang)
+>    OSX Snow Leopard x64 (10.6.8, gcc)
+>    Windows Server 2008R2 Enterprise SP1 x64 (mingw gcc)
+>    FreeBSD 9.0 x64 (gcc)
+>
+> This is in addition to our workstations that are, I think, largely a
+> mixture of Ubuntu 10, 11 and 12 LTS x64 and OSX Lion x64. Though no
+> debian/ubuntu-like machines (much less SLES or other Linuxes) are part
+> of the per-commit build machinery.
+>
+> The new system will have slaves running partly on machines we run and
+> also partly in an AWS VPC. This means it's much easier to bring up new
+> machines -- even periodic ones -- to test breadth, which is good for
+> future release stability. I want to get a feeling for what represents
+> breadth though. How far forward and backward, version-wise, do people
+> want to see us testing, and how many different OS / distribution /
+> toolchain flavours?
+>
+> I thought I'd ask the mailing list, to get a feeling for the variety of
+> sorts-of-systems people test on when I post a release candidate and ask
+> for feedback. Or sorts-of-systems people would _like_ to be testing on,
+> if we happen to be able to add them easily to the group.
+>
+
+Thanks for getting this all set up, Graydon!
+
+I don't know any additional OSes that are truly vital at the moment, and 
+each will add some maintenance burden, but here are some ideas:
+
+* OS X 10.5 - I don't know any reason that Rust shouldn't work here, but 
+it doesn't get much (if any) testing. Prior to 10.5 OS X didn't have the 
+proper rpath support so don't work. Would be nice to know when it 
+regresses. Provisioning OS X bots is hard though - we would have to buy 
+a used mini probably.
+* Windows 7 - As above, would be nice to establish a baseline that we 
+try not to regress. 2008 is probably not the most common end-user OS, 
+though it's similar to 7. Maybe even go back to Vista if anybody cares. 
+I assume we don't work on XP.
+* 32-bit windowses - Does anybody still use? Is there any practical 
+difference?
+* 32-bit linuxes - These definitely do still show up and sometimes have 
+regressions. Just a single x86 host would be enough.
+* Arch - We've had several users on Arch have difficulty with Rust in 
+the past. Dealing with their rolling releases on bots might be hard.
+* Debian stable and/or sid - This gives us good coverage of a lot of 
+derivative distros. We have had debian-specific reports in the past.
+
+
+
+
+From banderson at mozilla.com  Fri Nov  9 16:12:27 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Fri, 09 Nov 2012 16:12:27 -0800
+Subject: [rust-dev] OS / version coverage for buildbot
+In-Reply-To: <509D9999.6020801@mozilla.com>
+References: <509D7C93.80007@mozilla.com> <509D9999.6020801@mozilla.com>
+Message-ID: <509D9BEB.20205@mozilla.com>
+
+On 11/09/2012 04:02 PM, Brian Anderson wrote:
+> On 11/09/2012 01:58 PM, Graydon Hoare wrote:
+>> Hi,
+>>
+>> I'm bringing a new buildbot-based system online for building and testing
+>> rust (and its packages and libraries, eventually). As part of this,
+>> we're going to be bringing some new machines into the build group.
+>> Currently our builders ("rustbot" based, not buildbot) build and test on
+>> machines mozilla owns:
+>>
+>>    CentOS 6.0 x64 (Linux 2.6.32, Glibc 2.12, gcc)
+>>    OSX Lion x64 (10.7.4, clang)
+>>    OSX Snow Leopard x64 (10.6.8, gcc)
+>>    Windows Server 2008R2 Enterprise SP1 x64 (mingw gcc)
+>>    FreeBSD 9.0 x64 (gcc)
+>>
+>> This is in addition to our workstations that are, I think, largely a
+>> mixture of Ubuntu 10, 11 and 12 LTS x64 and OSX Lion x64. Though no
+>> debian/ubuntu-like machines (much less SLES or other Linuxes) are part
+>> of the per-commit build machinery.
+>>
+>> The new system will have slaves running partly on machines we run and
+>> also partly in an AWS VPC. This means it's much easier to bring up new
+>> machines -- even periodic ones -- to test breadth, which is good for
+>> future release stability. I want to get a feeling for what represents
+>> breadth though. How far forward and backward, version-wise, do people
+>> want to see us testing, and how many different OS / distribution /
+>> toolchain flavours?
+>>
+>> I thought I'd ask the mailing list, to get a feeling for the variety of
+>> sorts-of-systems people test on when I post a release candidate and ask
+>> for feedback. Or sorts-of-systems people would _like_ to be testing on,
+>> if we happen to be able to add them easily to the group.
+>>
+>
+> Thanks for getting this all set up, Graydon!
+>
+> I don't know any additional OSes that are truly vital at the moment, 
+> and each will add some maintenance burden, but here are some ideas:
+>
+> * OS X 10.5 - I don't know any reason that Rust shouldn't work here, 
+> but it doesn't get much (if any) testing. Prior to 10.5 OS X didn't 
+> have the proper rpath support so don't work. Would be nice to know 
+> when it regresses. Provisioning OS X bots is hard though - we would 
+> have to buy a used mini probably.
+> * Windows 7 - As above, would be nice to establish a baseline that we 
+> try not to regress. 2008 is probably not the most common end-user OS, 
+> though it's similar to 7. Maybe even go back to Vista if anybody 
+> cares. I assume we don't work on XP.
+> * 32-bit windowses - Does anybody still use? Is there any practical 
+> difference?
+> * 32-bit linuxes - These definitely do still show up and sometimes 
+> have regressions. Just a single x86 host would be enough.
+> * Arch - We've had several users on Arch have difficulty with Rust in 
+> the past. Dealing with their rolling releases on bots might be hard.
+> * Debian stable and/or sid - This gives us good coverage of a lot of 
+> derivative distros. We have had debian-specific reports in the past.
+>
+
+Also, a linux with a pax kernel. We have support for it but don't test 
+it. We'll probably regress it when we rewrite the build system.
+
+
+From gwillen at nerdnet.org  Fri Nov  9 16:34:05 2012
+From: gwillen at nerdnet.org (Glenn Willen)
+Date: Fri, 9 Nov 2012 16:34:05 -0800
+Subject: [rust-dev] OS / version coverage for buildbot
+In-Reply-To: <509D9999.6020801@mozilla.com>
+References: <509D7C93.80007@mozilla.com> <509D9999.6020801@mozilla.com>
+Message-ID: <BEA64CCE-A889-4892-AD35-710E1D65685D@nerdnet.org>
+
+
+On Nov 9, 2012, at 4:02 PM, Brian Anderson wrote:
+
+> * OS X 10.5 - I don't know any reason that Rust shouldn't work here, but it doesn't get much (if any) testing. Prior to 10.5 OS X didn't have the proper rpath support so don't work. Would be nice to know when it regresses. Provisioning OS X bots is hard though - we would have to buy a used mini probably.
+
+I am a stubborn 10.6 user refusing to update, and given how much of a pain in the ass _that_ is, I can't imagine 10.5 has any significant userbase left. XCode no longer comes with the 10.6 SDK, so I assume it hasn't come with the 10.5 SDK for quite some time. This makes it very difficult for most devs to build for 10.5 (or even 10.6).
+
+Omni group reports 10.5 installs at 4% of their users, and declining. (See http://update.omnigroup.com/ and click on 'Major Version'.) It's actually lower than 10.4, which is curious.
+
+Glenn
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: PGP.sig
+Type: application/pgp-signature
+Size: 243 bytes
+Desc: This is a digitally signed message part
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121109/16e00bae/attachment.sig>
+
+From ted.horst at earthlink.net  Fri Nov  9 16:58:46 2012
+From: ted.horst at earthlink.net (Ted Horst)
+Date: Fri, 9 Nov 2012 18:58:46 -0600
+Subject: [rust-dev] OS / version coverage for buildbot
+In-Reply-To: <509D7C93.80007@mozilla.com>
+References: <509D7C93.80007@mozilla.com>
+Message-ID: <55E94905-B668-47CF-833E-55D168E9699B@earthlink.net>
+
+OSX Mountain Lion x64 (10.8.2, clang) would be good to have as well.
+
+Ted
+
+On 2012-11-09, at 15:58, Graydon Hoare wrote:
+
+> Hi,
+> 
+> I'm bringing a new buildbot-based system online for building and testing
+> rust (and its packages and libraries, eventually). As part of this,
+> we're going to be bringing some new machines into the build group.
+> Currently our builders ("rustbot" based, not buildbot) build and test on
+> machines mozilla owns:
+> 
+>  CentOS 6.0 x64 (Linux 2.6.32, Glibc 2.12, gcc)
+>  OSX Lion x64 (10.7.4, clang)
+>  OSX Snow Leopard x64 (10.6.8, gcc)
+>  Windows Server 2008R2 Enterprise SP1 x64 (mingw gcc)
+>  FreeBSD 9.0 x64 (gcc)
+> 
+> This is in addition to our workstations that are, I think, largely a
+> mixture of Ubuntu 10, 11 and 12 LTS x64 and OSX Lion x64. Though no
+> debian/ubuntu-like machines (much less SLES or other Linuxes) are part
+> of the per-commit build machinery.
+> 
+> The new system will have slaves running partly on machines we run and
+> also partly in an AWS VPC. This means it's much easier to bring up new
+> machines -- even periodic ones -- to test breadth, which is good for
+> future release stability. I want to get a feeling for what represents
+> breadth though. How far forward and backward, version-wise, do people
+> want to see us testing, and how many different OS / distribution /
+> toolchain flavours?
+> 
+> I thought I'd ask the mailing list, to get a feeling for the variety of
+> sorts-of-systems people test on when I post a release candidate and ask
+> for feedback. Or sorts-of-systems people would _like_ to be testing on,
+> if we happen to be able to add them easily to the group.
+> 
+> Thanks,
+> 
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From bilal at bilalhusain.com  Tue Nov 13 08:05:00 2012
+From: bilal at bilalhusain.com (Mohd. Bilal Husain)
+Date: Tue, 13 Nov 2012 21:35:00 +0530
+Subject: [rust-dev] strange uv issue while using net::tcp::TcpSocket
+Message-ID: <CANinyTgP3u+brHsv4sqdbeCOUByDJ8PCuAia=VGDsQGBx1_zrQ@mail.gmail.com>
+
+I was writing a tcp client which reads from a socket and somehow the libuv
+`on_tcp_read_cb` was getting called with nread = -1 and the program was
+terminating with segmentation fault immediately after processing this
+incoming error/eof; which I could somewhat fix using the different
+signature of `on_alloc_cb`
+
+    extern fn on_alloc_cb(&out_buf: uv::ll::uv_buf_t, handle:
+*libc::c_void, suggested_size: libc::size_t) -> uv::ll::uv_buf_t unsafe
+
+as opposed to the library signature
+
+    extern fn on_alloc_cb(handle: *libc::c_void, suggested_size:
+libc::size_t) -> uv::ll::uv_buf_t unsafe
+
+The client has nread > 0 and I am able to read the data but the program
+segfaults shortly after that step.
+
+What am I doing wrong? Has anyone faced a similar issue. What sort of
+debugging information can I provide?
+Thanks for your help :)
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121113/67d7e820/attachment.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: client.rs
+Type: application/octet-stream
+Size: 5720 bytes
+Desc: not available
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121113/67d7e820/attachment.obj>
+
+From banderson at mozilla.com  Tue Nov 13 17:07:21 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Tue, 13 Nov 2012 17:07:21 -0800
+Subject: [rust-dev] strange uv issue while using net::tcp::TcpSocket
+In-Reply-To: <CANinyTgP3u+brHsv4sqdbeCOUByDJ8PCuAia=VGDsQGBx1_zrQ@mail.gmail.com>
+References: <CANinyTgP3u+brHsv4sqdbeCOUByDJ8PCuAia=VGDsQGBx1_zrQ@mail.gmail.com>
+Message-ID: <50A2EEC9.9030908@mozilla.com>
+
+On 11/13/2012 08:05 AM, Mohd. Bilal Husain wrote:
+> I was writing a tcp client which reads from a socket and somehow the 
+> libuv `on_tcp_read_cb` was getting called with nread = -1 and the 
+> program was terminating with segmentation fault immediately after 
+> processing this incoming error/eof; which I could somewhat fix using 
+> the different signature of `on_alloc_cb`
+>
+>     extern fn on_alloc_cb(&out_buf: uv::ll::uv_buf_t, handle: 
+> *libc::c_void, suggested_size: libc::size_t) -> uv::ll::uv_buf_t unsafe
+>
+> as opposed to the library signature
+>
+>     extern fn on_alloc_cb(handle: *libc::c_void, suggested_size: 
+> libc::size_t) -> uv::ll::uv_buf_t unsafe
+>
+> The client has nread > 0 and I am able to read the data but the 
+> program segfaults shortly after that step.
+>
+> What am I doing wrong? Has anyone faced a similar issue. What sort of 
+> debugging information can I provide?
+> Thanks for your help :)
+>
+
+The first thing I always ask when somebody has uv problems is, 'is this 
+on 32-bit x86?'. The issue you describe sounds like it could be a 
+symptom of https://github.com/mozilla/rust/issues/2064, in which rustc 
+fails to use the x86 ABI correctly when calling into C.
+
+From ben.striegel at gmail.com  Wed Nov 14 07:34:27 2012
+From: ben.striegel at gmail.com (Benjamin Striegel)
+Date: Wed, 14 Nov 2012 10:34:27 -0500
+Subject: [rust-dev] OS / version coverage for buildbot
+In-Reply-To: <55E94905-B668-47CF-833E-55D168E9699B@earthlink.net>
+References: <509D7C93.80007@mozilla.com>
+	<55E94905-B668-47CF-833E-55D168E9699B@earthlink.net>
+Message-ID: <CAAvrL-mn1HYQhspovaPGt-ZVu2rXo-n8u1EpjkSFURmpoRYurA@mail.gmail.com>
+
+I second the Debian stable and Arch bots. I'd also welcome bots for both
+the latest stable Ubuntu and for the most recent Ubuntu LTS. Along with the
+CentOS bot, this would give Rust a really solid linux presence.
+
+
+On Fri, Nov 9, 2012 at 7:58 PM, Ted Horst <ted.horst at earthlink.net> wrote:
+
+> OSX Mountain Lion x64 (10.8.2, clang) would be good to have as well.
+>
+> Ted
+>
+> On 2012-11-09, at 15:58, Graydon Hoare wrote:
+>
+> > Hi,
+> >
+> > I'm bringing a new buildbot-based system online for building and testing
+> > rust (and its packages and libraries, eventually). As part of this,
+> > we're going to be bringing some new machines into the build group.
+> > Currently our builders ("rustbot" based, not buildbot) build and test on
+> > machines mozilla owns:
+> >
+> >  CentOS 6.0 x64 (Linux 2.6.32, Glibc 2.12, gcc)
+> >  OSX Lion x64 (10.7.4, clang)
+> >  OSX Snow Leopard x64 (10.6.8, gcc)
+> >  Windows Server 2008R2 Enterprise SP1 x64 (mingw gcc)
+> >  FreeBSD 9.0 x64 (gcc)
+> >
+> > This is in addition to our workstations that are, I think, largely a
+> > mixture of Ubuntu 10, 11 and 12 LTS x64 and OSX Lion x64. Though no
+> > debian/ubuntu-like machines (much less SLES or other Linuxes) are part
+> > of the per-commit build machinery.
+> >
+> > The new system will have slaves running partly on machines we run and
+> > also partly in an AWS VPC. This means it's much easier to bring up new
+> > machines -- even periodic ones -- to test breadth, which is good for
+> > future release stability. I want to get a feeling for what represents
+> > breadth though. How far forward and backward, version-wise, do people
+> > want to see us testing, and how many different OS / distribution /
+> > toolchain flavours?
+> >
+> > I thought I'd ask the mailing list, to get a feeling for the variety of
+> > sorts-of-systems people test on when I post a release candidate and ask
+> > for feedback. Or sorts-of-systems people would _like_ to be testing on,
+> > if we happen to be able to add them easily to the group.
+> >
+> > Thanks,
+> >
+> > -Graydon
+> > _______________________________________________
+> > Rust-dev mailing list
+> > Rust-dev at mozilla.org
+> > https://mail.mozilla.org/listinfo/rust-dev
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121114/bda21803/attachment.html>
+
+From peterhull90 at gmail.com  Wed Nov 14 07:58:21 2012
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Wed, 14 Nov 2012 15:58:21 +0000
+Subject: [rust-dev] OS / version coverage for buildbot
+In-Reply-To: <CAAvrL-mn1HYQhspovaPGt-ZVu2rXo-n8u1EpjkSFURmpoRYurA@mail.gmail.com>
+References: <509D7C93.80007@mozilla.com>
+	<55E94905-B668-47CF-833E-55D168E9699B@earthlink.net>
+	<CAAvrL-mn1HYQhspovaPGt-ZVu2rXo-n8u1EpjkSFURmpoRYurA@mail.gmail.com>
+Message-ID: <CAK9Gx1fPk5DWKHAqnTPeGHMu6L-e6tR=TbTvStkSO7t6YSbdyQ@mail.gmail.com>
+
+FWIW I'm also on OSX 10.6, 32-bit (too poor to update my 2006-era
+iMac!). A question about all these Linuxes - are the differences
+mainly in locating the dependencies (i.e if it gets past ./configure
+it'll probably be OK) or are there differences in the actual binaries?
+
+Pete
+
+From banderson at mozilla.com  Wed Nov 14 12:02:44 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Wed, 14 Nov 2012 12:02:44 -0800
+Subject: [rust-dev] OS / version coverage for buildbot
+In-Reply-To: <CAK9Gx1fPk5DWKHAqnTPeGHMu6L-e6tR=TbTvStkSO7t6YSbdyQ@mail.gmail.com>
+References: <509D7C93.80007@mozilla.com>
+	<55E94905-B668-47CF-833E-55D168E9699B@earthlink.net>
+	<CAAvrL-mn1HYQhspovaPGt-ZVu2rXo-n8u1EpjkSFURmpoRYurA@mail.gmail.com>
+	<CAK9Gx1fPk5DWKHAqnTPeGHMu6L-e6tR=TbTvStkSO7t6YSbdyQ@mail.gmail.com>
+Message-ID: <50A3F8E4.4020505@mozilla.com>
+
+On 11/14/2012 07:58 AM, Peter Hull wrote:
+> FWIW I'm also on OSX 10.6, 32-bit (too poor to update my 2006-era
+> iMac!). A question about all these Linuxes - are the differences
+> mainly in locating the dependencies (i.e if it gets past ./configure
+> it'll probably be OK) or are there differences in the actual binaries?
+>
+
+The differences are mostly in the toolchains, different versions of gcc, 
+clang, python, etc. Arch, for example, installs python3 as 'python', 
+whereas most distros use python2. Linuxes with pax kernels require 
+additional processing of binaries.
+
+
+From amitsinghai.jain at gmail.com  Wed Nov 14 17:53:56 2012
+From: amitsinghai.jain at gmail.com (Amit Jain)
+Date: Thu, 15 Nov 2012 10:53:56 +0900
+Subject: [rust-dev] [rust] dealing with c style argc argv
+In-Reply-To: <509D23AD.9080609@mozilla.com>
+References: <CAGNzeLy5RD_eCCHbBeseQU=+Yck-Umq9ecYJFjxmOLtm_0F0Ng@mail.gmail.com>
+	<509D23AD.9080609@mozilla.com>
+Message-ID: <CAGNzeLxyD+XWXmKBsNYpHpttj+KbrCb2DunSNS0g5kGcPYoHKA@mail.gmail.com>
+
+Thank you every one.
+
+I am able to execute my gui from rust. My example can be found at
+ https://github.com/amuxtux/rustGtk
+
+
+On Sat, Nov 10, 2012 at 12:39 AM, Patrick Walton <pwalton at mozilla.com>wrote:
+
+> On 11/9/12 12:10 AM, Amit Jain wrote:
+>
+>> now I want to write a rust-gui.rs <http://rust-gui.rs>  ( a rust wrapper
+>>
+>> for this), but could not get any idea how to
+>> supply the argc and argv .
+>>
+>> rust-gui.rs <http://rust-gui.rs>
+>>
+>> ============
+>>
+>> use libc::{c_char, c_void, c_int, c_uint};
+>> //use std;
+>> extern mod gui{
+>>    fn showGtkUI(argc:c_int, argv:**c_char);
+>> }
+>>
+>>
+>> fn main( /* what can be args */ ) {
+>>      // what should I do here.
+>> }
+>>
+>>
+>> i tried vec [str] etc but every time i get compile errors.
+>>
+>
+> Call os::args(). That returns you a vector of strings containing the
+> arguments.
+>
+> Patrick
+>
+>
+> ______________________________**_________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/**listinfo/rust-dev<https://mail.mozilla.org/listinfo/rust-dev>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121115/125a99e2/attachment.html>
+
+From banderson at mozilla.com  Thu Nov 15 16:34:21 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Thu, 15 Nov 2012 16:34:21 -0800
+Subject: [rust-dev] Fall-through in alt, break&continue by label
+In-Reply-To: <5075C2E9.4060303@mozilla.com>
+References: <CAJQvAue7fT6r_4+h_sMyZ_00ARtfuG1eg9uMHpSr8UAjNTdFRA@mail.gmail.com>
+	<4F8438AF.9090003@alum.mit.edu>
+	<CAJQvAue8gcvUuqYr1EPnmTreQ2L3U_CJquXsDW-r2ojRLzqmyQ@mail.gmail.com>
+	<506F2F17.1080703@mozilla.com>
+	<CAJQvAufRFhXQXi-pY6o3xhhamRUN=dp7iWgfGEiN4FP3A13R9A@mail.gmail.com>
+	<5075C2E9.4060303@mozilla.com>
+Message-ID: <50A58A0D.9050101@mozilla.com>
+
+On 10/10/2012 11:48 AM, Brian Anderson wrote:
+> On 10/10/2012 04:16 AM, Henri Sivonen wrote:
+>> On Fri, Oct 5, 2012 at 10:03 PM, Brian Anderson 
+>> <banderson at mozilla.com> wrote:
+>>>> Even break and continue by label would be useful without 
+>>>> fall-through in
+>>>> alt.
+>>>
+>>> Thanks, Henri. I've posted this information to our bugtracker:
+>>> https://github.com/mozilla/rust/issues/2216
+>>
+>> Thanks. So does this mean I should work with the assumption that Rust
+>> will get break/continue by label and I should not develop a code
+>> transformation to work around the current lack thereof?
+>
+> Yes, if you still need it, then you can assume we will add it, though 
+> I don't know the timeframe. Sadly, there are a lot of things 
+> [prioritized] for the next release and labeled break and continue 
+> isn't on there. I will add it presently.
+>
+> [prioritized]: https://github.com/mozilla/rust/wiki/Note-0.5-priorities
+
+Tim got labeled break and continue work for 'loop', and I believe for 
+'while' as well. It does not yet work on 'for' loops. Here's a test case 
+to crib off of:
+
+https://github.com/mozilla/rust/blob/incoming/src/test/run-pass/issue-2216.rs
+
+
+From bilal at bilalhusain.com  Thu Nov 15 22:53:36 2012
+From: bilal at bilalhusain.com (Mohd. Bilal Husain)
+Date: Fri, 16 Nov 2012 12:23:36 +0530
+Subject: [rust-dev] strange uv issue while using net::tcp::TcpSocket
+In-Reply-To: <50A2EEC9.9030908@mozilla.com>
+References: <CANinyTgP3u+brHsv4sqdbeCOUByDJ8PCuAia=VGDsQGBx1_zrQ@mail.gmail.com>
+	<50A2EEC9.9030908@mozilla.com>
+Message-ID: <CANinyTi8FwepQefRqQ9=Nxv9VBYE0+Dih14G95hMyMkU-MD7qQ@mail.gmail.com>
+
+You are bang on target. Guilty as charged.
+
+Thanks for pointing this out.
+
+On 14 November 2012 06:37, Brian Anderson <banderson at mozilla.com> wrote:
+
+> On 11/13/2012 08:05 AM, Mohd. Bilal Husain wrote:
+>
+>> I was writing a tcp client which reads from a socket and somehow the
+>> libuv `on_tcp_read_cb` was getting called with nread = -1 and the program
+>> was terminating with segmentation fault immediately after processing this
+>> incoming error/eof; which I could somewhat fix using the different
+>> signature of `on_alloc_cb`
+>>
+>>     extern fn on_alloc_cb(&out_buf: uv::ll::uv_buf_t, handle:
+>> *libc::c_void, suggested_size: libc::size_t) -> uv::ll::uv_buf_t unsafe
+>>
+>> as opposed to the library signature
+>>
+>>     extern fn on_alloc_cb(handle: *libc::c_void, suggested_size:
+>> libc::size_t) -> uv::ll::uv_buf_t unsafe
+>>
+>> The client has nread > 0 and I am able to read the data but the program
+>> segfaults shortly after that step.
+>>
+>> What am I doing wrong? Has anyone faced a similar issue. What sort of
+>> debugging information can I provide?
+>> Thanks for your help :)
+>>
+>>
+> The first thing I always ask when somebody has uv problems is, 'is this on
+> 32-bit x86?'. The issue you describe sounds like it could be a symptom of
+> https://github.com/mozilla/**rust/issues/2064<https://github.com/mozilla/rust/issues/2064>,
+> in which rustc fails to use the x86 ABI correctly when calling into C.
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121116/8832a338/attachment.html>
+
+From bilal at bilalhusain.com  Thu Nov 15 23:18:56 2012
+From: bilal at bilalhusain.com (Mohd. Bilal Husain)
+Date: Fri, 16 Nov 2012 12:48:56 +0530
+Subject: [rust-dev] Ommit verbose elements
+In-Reply-To: <2677CD18-C98A-4886-B83A-571801F1313E@riseup.net>
+References: <509ACDF4.3020507@gmx.net>
+	<CA+4_Dk7v3-2tS2YHhxN3c4w=gwtuS3DFC17h-emVRwN4Nzw-BQ@mail.gmail.com>
+	<2677CD18-C98A-4886-B83A-571801F1313E@riseup.net>
+Message-ID: <CANinyTjWpqoWY0i3J=n3aLQQN11j5XzR4t4NFr5mGZnkotanEg@mail.gmail.com>
+
+The way I interpret that Rust is modern and next-generation:
+
+It gives me a better experience by being intelligent under the hood.
+- it assures me that under normal circumstances, segmentation fault and
+memory leaks are impossible
+- friendly compiler messages
+- ensuring exhaustive matches for a pattern (compile time)
+- let destructuring `let (x, y) = (3, 4)` and expression assignments
+- last expression is returned
+- allows me to skip return type in a function signature when there isn't
+any, empty argument list can be omitted from `do` syntax
+- inferred stack closures, inferred parameter passing modes, default
+mutability
+- syntax sugar, syntax extensions
+- `task::spawn` syntax and task multiplexing, leverages multiple cores of
+CPU by itself/scheduling
+- lot of sigils have different meanings contextually; pipe operator is
+interpreted differently in match arms and expressions
+- built in log
+- and the big one: type inference
+sample effect - the programmer need not explicitly express `%s`, `%d` in
+the sprintf-like `fmt!` (use rustc --pretty typed to see it in action)
+
+Also, its not conservative, offers lesser restrictions, and allows me a lot
+of quirks.
+- nested modules and functions
+- declare synonyms for a type and cast using `as` to interoperate
+- multi-paridigm: C like syntax and operators, has functional concepts -
+vec core library has head, tail, init, last, map, filter, foldl, foldr,
+zip, all, any, contains, each, concat, connect, append, len and dozens of
+other functions; and then there's pattern matching, ADTs
+- FFI to interoperate with C code - unsafe code but neat mapping (though I
+never got this working because of a bug)
+- rename identifier when importing
+- no FIOC
+- managed boxes (GC) and finer controlled unique boxes
+- built in things like str vs more optimized ropes
+- attribute/annotations/directives to override certain behaviours (eg. new
+types are Camel case but there's `#[allow(non_camel_case_types)]`)
+
+Its clean and smart but consistent.
+- Generic
+  type: `~[int]`
+  value: `~[1, 2, 3]`
+  type: `~[~str]`
+  value: `~[~"a", ~"b", ~"c"]`
+- struct
+  define: `struct Point {x: int, y: int};`
+  value: `Point { x: 1.0, y: 2.0}`
+- traits act as nice interfaces/type classes and blend well with generics
+- modules, types, values have different namespaces - this means that you
+can have the same name for the module identifier, type and the value, so,
+no need for case conventions to avoid conflict, if you are not into that
+sort of thing
+
+- just another Rust user (also, pardon my terminology ignorance, not
+well-versed with the PL lingo).
+
+
+On 9 November 2012 04:19, Daniel Patterson <dbp at riseup.net> wrote:
+
+> On Nov 8, 2012, at 4:38 PM, Nathan wrote:
+> > I'd recommend writing a variety of small toy scripts, text-book
+> > algorithms / data structures, or whatever other small applications you
+> > are interested in for awhile.
+> >
+> > You may find that the syntax grows on you.  That's been the case for
+> > me.  Actually I think this is true, for me, for all languages once
+> > I've invested sufficient energy in writing and reading the language.
+>
+> I feel the same way. It seems that large amount of time has been put into
+> the syntax, and I think it really shows. There is a consistency that is
+> really nice to work with.
+>
+> The two languages that I spend the most time in are Python and Haskell,
+> both whitespace delimited, and I find that I am actually happier
+> programming in Rust (modulo any problems to be expected in a new/not
+> complete language). I find the braces to be useful visual indications of
+> blocks, and the semicolons are a nice way of saying "this is a statement"
+> (or, another way of saying that is 'ignore the result of this expression').
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121116/0c41372b/attachment.html>
+
+From asb at asbradbury.org  Tue Nov 20 09:09:30 2012
+From: asb at asbradbury.org (Alex Bradbury)
+Date: Tue, 20 Nov 2012 17:09:30 +0000
+Subject: [rust-dev] Rust build systems (as discussed in 2012-11-13 meeting)
+Message-ID: <CA+wH294GkN9WetSpvoAYG1z3ubk3TSxzEgE4Ld-SbidnKSTvFA@mail.gmail.com>
+
+Hi all,
+
+I was reading through the minutes of rust meetings and came across the
+discussion last week of build systems for rust:
+https://github.com/mozilla/rust/wiki/Meeting-weekly-2012-11-13
+
+Build systems that were mentioned included fbuild
+<http://www.mail-archive.com/felix-language at lists.sourceforge.net/msg01976.html>
+and DJ Bernstein's redo system, which has been implemented by Avery
+Pennarun <https://github.com/apenwarr/redo>
+
+Anyway, one project which was recently posted to the redo mailing list
+that I thought may interest is remake:
+https://groups.google.com/d/msg/redo-list/ULU_hsTxRaU/BHTIuiha3XQJ
+
+Regards,
+
+Alex
+
+From graydon at mozilla.com  Wed Nov 21 09:46:58 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 21 Nov 2012 09:46:58 -0800
+Subject: [rust-dev] Please read: Rust license changing (very slightly)
+Message-ID: <50AD1392.5010709@mozilla.com>
+
+Hi,
+
+We're doing a small bit of housekeeping on the license for Rust this
+cycle. The initial version we published under (MIT; amusingly referred
+to as "BSD" for several versions) is a bit old by liberal-license terms,
+and in particular lacks some provisions newer liberal-licenses have
+worked out concerning patents.
+
+So we're going to "upgrade" the license in the 0.5 cycle from pure MIT
+to dual MIT/ASL2. This is a no-op for most considerations: you can still
+use Rust under MIT terms if you like -- including making proprietary
+derivatives and GPL programs and all manner of restrictive things, which
+are *mostly* all permitted under ASL2 as well -- and since MIT lets you
+to sublicense you can even make up new terms and redistribute your copy
+under those. This doesn't take any freedoms away from recipients of Rust.
+
+What it _does_ is restrict _contributions_ to Rust just the slightest
+bit: they have to be under MIT+ASL2, not just MIT, meaning that a
+contributor will now be agreeing to the additional provisions of ASL2
+when sending us (say) a patch or pull request.
+
+These additional provisions are, as I said, just patent-protection
+clauses; I'm not a lawyer so I will not attempt to paraphrase them here
+-- see section 3 of https://www.apache.org/licenses/LICENSE-2.0.html --
+but I've been advised that the patent landscape is getting sufficiently
+ugly that it's wise to include such language in any open source license
+these days. So here we are. Apparently it is also (still) the case that
+in 2012 every single file needs a bit of legalese added. So we'll be
+adding the following block to all the files in our repository:
+
+  // Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+  // file at the top-level directory of this distribution and at
+  // http://rust-lang.org/COPYRIGHT.
+  //
+  // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+  // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+  // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+  // option. This file may not be copied, modified, or distributed
+  // except according to those terms.
+
+It's a bit boilerplate-y but it's the minimum I could get a consensus on
+between our legal and license experts to cover this case, and it's short
+enough that I can live with it.
+
+Beyond that, I'd ask anyone who has made existing nontrivial
+contributions (I will also email each of you separately) to agree to the
+ASL2 provisions on your existing contributions (as I said, this amounts
+to "grant of associated patents"), such that we can assume the ASL2
+terms do in fact apply to the whole project. Obviously any files we
+can't get that agreement for, we'll have to work through case-by-case.
+
+Thanks,
+(and .. sorry! nobody likes this part)
+
+-Graydon
+
+From mail at shomodj.com  Thu Nov 22 01:53:11 2012
+From: mail at shomodj.com (Boris Shomodjvarac)
+Date: Thu, 22 Nov 2012 10:53:11 +0100
+Subject: [rust-dev] OS / version coverage for buildbot
+In-Reply-To: <CAAvrL-mn1HYQhspovaPGt-ZVu2rXo-n8u1EpjkSFURmpoRYurA@mail.gmail.com>
+References: <509D7C93.80007@mozilla.com>
+	<55E94905-B668-47CF-833E-55D168E9699B@earthlink.net>
+	<CAAvrL-mn1HYQhspovaPGt-ZVu2rXo-n8u1EpjkSFURmpoRYurA@mail.gmail.com>
+Message-ID: <50ADF607.5010809@shomodj.com>
+
+On 14/11/12 16:34, Benjamin Striegel wrote:
+> I second the Debian stable and Arch bots. I'd also welcome bots for both
+> the latest stable Ubuntu and for the most recent Ubuntu LTS. Along with
+> the CentOS bot, this would give Rust a really solid linux presence.
+>
+
+Hi guys,
+
+I'm the current maintainer of rust package on AUR, I would be happy to 
+help with archlinux bots if you need help.
+
+Boris.
+
+-- 
+Understanding recursion is really easy,
+all you have to do is understand recursion. /Joe
+
+
+From omer.zach at gmail.com  Sat Nov 24 20:07:03 2012
+From: omer.zach at gmail.com (Omer Zach)
+Date: Sat, 24 Nov 2012 20:07:03 -0800
+Subject: [rust-dev] Implementing a garbage collector in Rust?
+Message-ID: <CAAAQ8DFMoHB5WzUZ-qcYcnUFuV+9XkV3NfVJXM0V2LGZn1bsqA@mail.gmail.com>
+
+Hi all,
+
+I'm an undergrad at Carnegie Mellon taking a compilers class right now.
+We're implementing compilers for a safe C-like language called C0 (
+http://c0.typesafety.net/), and one of the options for our last project is
+to implement garbage collection for the language. My partner, Brandon, and
+I been reading about and playing with Rust, and want to try writing the
+runtime for the garbage collector in Rust.
+
+Here?s how we were thinking about implementing the C to Rust calls. We?ll
+switch our runtime from a simple C program to a C library. Then we will
+link our Rust program against this C library, and call the ?main? function
+with function pointers to any Rust functions we need to call from our C0
+code (any heap allocation routines). This way, we can (mostly) avoid
+dealing with unsafe memory management. See
+https://github.com/bkase/rust-ffi-example for a simple example.
+
+Seemed like it would be worth shooting you guys an email before we dive
+in?is this a terrible idea or is there anything we should know before we
+get started?
+
+
+Thanks,
+Omer Zach
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121124/0aacfb27/attachment.html>
+
+From sully at msully.net  Sun Nov 25 14:16:53 2012
+From: sully at msully.net (Michael Sullivan)
+Date: Sun, 25 Nov 2012 16:16:53 -0600
+Subject: [rust-dev] Implementing a garbage collector in Rust?
+In-Reply-To: <CAAAQ8DFMoHB5WzUZ-qcYcnUFuV+9XkV3NfVJXM0V2LGZn1bsqA@mail.gmail.com>
+References: <CAAAQ8DFMoHB5WzUZ-qcYcnUFuV+9XkV3NfVJXM0V2LGZn1bsqA@mail.gmail.com>
+Message-ID: <CANW5cDmST+e=0gtQkG6b50YLhL06jRY8iXewwg_Li294ZbRwPg@mail.gmail.com>
+
+I'm a phd student at CMU who has worked on the rust team, taken CMU's
+compilers course (we were saltopus) and knows a fair bit about garbage
+collection. You should stop by my office (GHC 9115) to chat about this.
+Does tomorrow afternoon work?
+
+-sully
+On Nov 25, 2012 4:55 PM, "Omer Zach" <omer.zach at gmail.com> wrote:
+
+> Hi all,
+>
+> I'm an undergrad at Carnegie Mellon taking a compilers class right now.
+> We're implementing compilers for a safe C-like language called C0 (
+> http://c0.typesafety.net/), and one of the options for our last project
+> is to implement garbage collection for the language. My partner, Brandon,
+> and I been reading about and playing with Rust, and want to try writing the
+> runtime for the garbage collector in Rust.
+>
+> Here?s how we were thinking about implementing the C to Rust calls. We?ll
+> switch our runtime from a simple C program to a C library. Then we will
+> link our Rust program against this C library, and call the ?main? function
+> with function pointers to any Rust functions we need to call from our C0
+> code (any heap allocation routines). This way, we can (mostly) avoid
+> dealing with unsafe memory management. See
+> https://github.com/bkase/rust-ffi-example for a simple example.
+>
+> Seemed like it would be worth shooting you guys an email before we dive
+> in?is this a terrible idea or is there anything we should know before we
+> get started?
+>
+>
+> Thanks,
+> Omer Zach
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121125/ba8c251d/attachment.html>
+
+From graydon at mozilla.com  Mon Nov 26 08:26:48 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 26 Nov 2012 08:26:48 -0800
+Subject: [rust-dev] Implementing a garbage collector in Rust?
+In-Reply-To: <CAAAQ8DFMoHB5WzUZ-qcYcnUFuV+9XkV3NfVJXM0V2LGZn1bsqA@mail.gmail.com>
+References: <CAAAQ8DFMoHB5WzUZ-qcYcnUFuV+9XkV3NfVJXM0V2LGZn1bsqA@mail.gmail.com>
+Message-ID: <50B39848.3040803@mozilla.com>
+
+On 24/11/2012 8:07 PM, Omer Zach wrote:
+
+> Seemed like it would be worth shooting you guys an email before we dive
+> in?is this a terrible idea or is there anything we should know before we
+> get started?
+
+It's not a terrible idea, but it is one I think requires a bit more
+care; there are already several pieces of this written (the --gc code in
+the compiler, the core::gc collector, the rt allocator) and lying
+around, and (at least personally) I'd prefer if you or anyone wanting to
+hack on the GC spent energy integrating and improving those pieces, not
+adding another one. Especially not one in C: our long term plan is to
+move as much of the runtime as possible from C to rust; most tasks can
+be done mostly in (unsafe) rust and we find the integration much easier
+when keeping logic there.
+
+-Graydon
+
+
+From knocte at gmail.com  Mon Nov 26 08:11:10 2012
+From: knocte at gmail.com (Andres G. Aragoneses)
+Date: Mon, 26 Nov 2012 16:11:10 +0000
+Subject: [rust-dev] Why in the Rust language functions are not pure by
+	default?
+Message-ID: <k904as$6m1$1@ger.gmane.org>
+
+Hello,
+
+I just wanted to know the rationale behind the decision about having a 
+"pure" keyword instead of an "impure" one (in the same way, the analogy 
+here is that there is an "unsafe" keyword, not a "safe" one).
+
+Thanks
+
+
+From ben.striegel at gmail.com  Mon Nov 26 09:42:06 2012
+From: ben.striegel at gmail.com (Benjamin Striegel)
+Date: Mon, 26 Nov 2012 12:42:06 -0500
+Subject: [rust-dev] Why in the Rust language functions are not pure by
+	default?
+In-Reply-To: <k904as$6m1$1@ger.gmane.org>
+References: <k904as$6m1$1@ger.gmane.org>
+Message-ID: <CAAvrL-n3EJ8-5kF5mR-n2zf-TGgYgmu_APkQ_S8y=AtRRGmE4g@mail.gmail.com>
+
+I believe this was brought up a little while ago:
+
+http://thread.gmane.org/gmane.comp.lang.rust.devel/2504
+
+Not sure if any consensus was reached. But note that at least one future
+design idea could obviate the need for pure annotations at all:
+
+http://smallcultfollowing.com/babysteps/blog/2012/11/18/imagine-never-hearing-the-phrase-aliasable/
+
+
+On Mon, Nov 26, 2012 at 11:11 AM, Andres G. Aragoneses <knocte at gmail.com>wrote:
+
+> Hello,
+>
+> I just wanted to know the rationale behind the decision about having a
+> "pure" keyword instead of an "impure" one (in the same way, the analogy
+> here is that there is an "unsafe" keyword, not a "safe" one).
+>
+> Thanks
+>
+> ______________________________**_________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/**listinfo/rust-dev<https://mail.mozilla.org/listinfo/rust-dev>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121126/2be45cd3/attachment.html>
+
+From graydon at mozilla.com  Mon Nov 26 09:51:14 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 26 Nov 2012 09:51:14 -0800
+Subject: [rust-dev] Why in the Rust language functions are not pure by
+ default?
+In-Reply-To: <k904as$6m1$1@ger.gmane.org>
+References: <k904as$6m1$1@ger.gmane.org>
+Message-ID: <50B3AC12.4080700@mozilla.com>
+
+On 12-11-26 08:11 AM, Andres G. Aragoneses wrote:
+> Hello,
+> 
+> I just wanted to know the rationale behind the decision about having a
+> "pure" keyword instead of an "impure" one (in the same way, the analogy
+> here is that there is an "unsafe" keyword, not a "safe" one).
+
+The decision is an old one related to a time when we had a full effect
+system and typestate system: the definition was too strong to meet in
+most cases and wound up requiring 'impure' (at the time, spelled 'io')
+annotations on nearly every function in normal code. It is no longer
+strongly justified by those reasons, imo, but I suspect any change to it
+now would be accompanied by an attempt to simplify the relationship
+between borrowing and purity altogether (it's a bit unintuitive
+presently). I expect there may still be some reform in this area, though
+the details are mostly in the heads of others presently.
+
+-Graydon
+
+
+From banderson at mozilla.com  Mon Nov 26 12:00:44 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Mon, 26 Nov 2012 12:00:44 -0800
+Subject: [rust-dev] Implementing a garbage collector in Rust?
+In-Reply-To: <50B39848.3040803@mozilla.com>
+References: <CAAAQ8DFMoHB5WzUZ-qcYcnUFuV+9XkV3NfVJXM0V2LGZn1bsqA@mail.gmail.com>
+	<50B39848.3040803@mozilla.com>
+Message-ID: <50B3CA6C.8020107@mozilla.com>
+
+On 11/26/2012 08:26 AM, Graydon Hoare wrote:
+> On 24/11/2012 8:07 PM, Omer Zach wrote:
+>
+>> Seemed like it would be worth shooting you guys an email before we dive
+>> in?is this a terrible idea or is there anything we should know before we
+>> get started?
+> It's not a terrible idea, but it is one I think requires a bit more
+> care; there are already several pieces of this written (the --gc code in
+> the compiler, the core::gc collector, the rt allocator) and lying
+> around, and (at least personally) I'd prefer if you or anyone wanting to
+> hack on the GC spent energy integrating and improving those pieces, not
+> adding another one. Especially not one in C: our long term plan is to
+> move as much of the runtime as possible from C to rust; most tasks can
+> be done mostly in (unsafe) rust and we find the integration much easier
+> when keeping logic there.
+>
+
+I welcome anybody working on the GC, but after literally years of false 
+starts I think we have a path forward to making a GC for Rust and I 
+would prefer that somebody implement that instead of starting from 
+scratch. The details in this proposal describe only a strategy for 
+calling a Rust function from a C function, which I don't see as part of 
+the GC problem, mostly because the GC should be written in Rust.
+
+For reference here are the basic steps I think are required to implement 
+a simple GC:
+
+* Make sure all the allocations (boxes) contain the correct type 
+descriptors. Currently they all contain *some* type descriptor, but they 
+are not all correct. The last person to tackle the GC bounced off of 
+this step.
+* Add owned allocations that contain managed types to a linked list in 
+the task, similarly to the linked list of managed boxes. The managed 
+types in these allocations are candidates for garbage collection and the 
+GC needs a way to access them.
+* Write a GC function in Rust, in core, that finds live values with a 
+precise scan of the heap lists and a conservative scan of the stack 
+(also a linked list).
+* Replace refcounting with GC
+
+
+From pwalton at mozilla.com  Mon Nov 26 12:11:42 2012
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Mon, 26 Nov 2012 12:11:42 -0800
+Subject: [rust-dev] Implementing a garbage collector in Rust?
+In-Reply-To: <50B3CA6C.8020107@mozilla.com>
+References: <CAAAQ8DFMoHB5WzUZ-qcYcnUFuV+9XkV3NfVJXM0V2LGZn1bsqA@mail.gmail.com>
+	<50B39848.3040803@mozilla.com> <50B3CA6C.8020107@mozilla.com>
+Message-ID: <50B3CCFE.9070302@mozilla.com>
+
+On 11/26/12 12:00 PM, Brian Anderson wrote:
+> * Make sure all the allocations (boxes) contain the correct type
+> descriptors. Currently they all contain *some* type descriptor, but they
+> are not all correct. The last person to tackle the GC bounced off of
+> this step.
+
+Note that this is not needed if you want conservative-on-the-heap, which 
+I think would be good to get working first. Obviously this is not 
+acceptable for production, especially on 32-bit, but let's not let the 
+perfect be the enemy of the working.
+
+Patrick
+
+
+From mbrubeck at mozilla.com  Mon Nov 26 12:34:16 2012
+From: mbrubeck at mozilla.com (Matt Brubeck)
+Date: Mon, 26 Nov 2012 12:34:16 -0800
+Subject: [rust-dev] Implementing a garbage collector in Rust?
+In-Reply-To: <50B39848.3040803@mozilla.com>
+References: <CAAAQ8DFMoHB5WzUZ-qcYcnUFuV+9XkV3NfVJXM0V2LGZn1bsqA@mail.gmail.com>
+	<50B39848.3040803@mozilla.com>
+Message-ID: <50B3D248.8090502@mozilla.com>
+
+On 11/26/2012 8:26 AM, Graydon Hoare wrote:
+> It's not a terrible idea, but it is one I think requires a bit more
+> care; there are already several pieces of this written (the --gc code in
+> the compiler, the core::gc collector, the rt allocator) and lying
+> around, and (at least personally) I'd prefer if you or anyone wanting to
+> hack on the GC spent energy integrating and improving those pieces, not
+> adding another one.
+
+Note that Omer was interested in writing a garbage collector *for* the 
+C0 language that his class has implemented, and writing this GC *in* the 
+Rust language.
+
+Meanwhile, it sounds like Graydon and the folks replying to him are 
+talking about implementing garbage collection *for* Rust, which is a 
+very different project.
+
+From banderson at mozilla.com  Mon Nov 26 12:34:00 2012
+From: banderson at mozilla.com (Brian Anderson)
+Date: Mon, 26 Nov 2012 12:34:00 -0800
+Subject: [rust-dev] Implementing a garbage collector in Rust?
+In-Reply-To: <CAAAQ8DFMoHB5WzUZ-qcYcnUFuV+9XkV3NfVJXM0V2LGZn1bsqA@mail.gmail.com>
+References: <CAAAQ8DFMoHB5WzUZ-qcYcnUFuV+9XkV3NfVJXM0V2LGZn1bsqA@mail.gmail.com>
+Message-ID: <50B3D238.3040009@mozilla.com>
+
+On 11/24/2012 08:07 PM, Omer Zach wrote:
+> Hi all,
+>
+> I'm an undergrad at Carnegie Mellon taking a compilers class right 
+> now. We're implementing compilers for a safe C-like language called C0 
+> (http://c0.typesafety.net/), and one of the options for our last 
+> project is to implement garbage collection for the language. My 
+> partner, Brandon, and I been reading about and playing with Rust, and 
+> want to try writing the runtime for the garbage collector in Rust.
+>
+> Here?s how we were thinking about implementing the C to Rust calls. 
+> We?ll switch our runtime from a simple C program to a C library. Then 
+> we will link our Rust program against this C library, and call the 
+> ?main? function with function pointers to any Rust functions we need 
+> to call from our C0 code (any heap allocation routines). This way, we 
+> can (mostly) avoid dealing with unsafe memory management. See 
+> https://github.com/bkase/rust-ffi-example for a simple example.
+>
+> Seemed like it would be worth shooting you guys an email before we 
+> dive in?is this a terrible idea or is there anything we should know 
+> before we get started?
+>
+
+Sully pointed out that my previous reply was off the mark and you are 
+not interested in implementing *the Rust GC* but instead implementing a 
+GC for another language (implemented in C) in Rust. You want to use 
+Rust's safe memory management from a C application.
+
+The Rust runtime is not set up to do this yet. Currently, to run Rust 
+code in any supported way that code must execute in the context of a 
+Rust task, in the context of the Rust runtime. Calling Rust code from 
+outside the runtime is not done anywhere. I would suggest that if you 
+want to take this approach now you make the application a Rust 
+application that starts the runtime and immediately calls into your C 
+application in a task context. Then you can use `extern fn` pointers to 
+call back into Rust code.
+
+The approach of calling arbitrary Rust functions from arbitrary C 
+requires some redesign of the runtime, tracked here: 
+https://github.com/mozilla/rust/issues/3608
+
+Here are the main problems you are going to hit:
+
+* Rust functions have their own ABI that your C code will need to 
+understand. The first argument is a return pointer and the second is an 
+environment pointer. The return value is unused. The convention for 
+passing simple word size types is the same as C (cdecl) so stick to 
+pointers and integers. More complicated types in C sometimes follow 
+peculiar conventions when passed by value.
+* Anything that requires the memory allocator, tasks, etc. needs access 
+to a thread-local task pointer, which doesn't exist if the runtime isn't 
+set up
+* The thread control block contains a pointer to the current stack 
+segment, used for stack growth. This is checked on entry to every 
+function and should be set up correctly before main, even if stack 
+growth is not used.
+
+
+
+From graydon at mozilla.com  Mon Nov 26 13:21:47 2012
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 26 Nov 2012 13:21:47 -0800
+Subject: [rust-dev] Implementing a garbage collector in Rust?
+In-Reply-To: <50B3D248.8090502@mozilla.com>
+References: <CAAAQ8DFMoHB5WzUZ-qcYcnUFuV+9XkV3NfVJXM0V2LGZn1bsqA@mail.gmail.com>
+	<50B39848.3040803@mozilla.com> <50B3D248.8090502@mozilla.com>
+Message-ID: <50B3DD6B.7010506@mozilla.com>
+
+On 12-11-26 12:34 PM, Matt Brubeck wrote:
+
+> Note that Omer was interested in writing a garbage collector *for* the
+> C0 language that his class has implemented, and writing this GC *in* the
+> Rust language.
+> 
+> Meanwhile, it sounds like Graydon and the folks replying to him are
+> talking about implementing garbage collection *for* Rust, which is a
+> very different project.
+
+Oops! Apologies, yes, I misread.
+
+-Graydon
+
+
+From me at kevincantu.org  Mon Nov 26 20:50:42 2012
+From: me at kevincantu.org (Kevin Cantu)
+Date: Mon, 26 Nov 2012 20:50:42 -0800
+Subject: [rust-dev] Implementing a garbage collector in Rust?
+In-Reply-To: <50B3DD6B.7010506@mozilla.com>
+References: <CAAAQ8DFMoHB5WzUZ-qcYcnUFuV+9XkV3NfVJXM0V2LGZn1bsqA@mail.gmail.com>
+	<50B39848.3040803@mozilla.com> <50B3D248.8090502@mozilla.com>
+	<50B3DD6B.7010506@mozilla.com>
+Message-ID: <CABq6+adscf1OtQLTzP_iY7Dw66Hnbq5ZCZ4mXXX7jaDCnY4iYQ@mail.gmail.com>
+
+This may be one of my favorite threads on this mailing list.  A simple good
+question reveals deeper good questions and unsolved problems. :)
+On Nov 26, 2012 1:21 PM, "Graydon Hoare" <graydon at mozilla.com> wrote:
+
+> On 12-11-26 12:34 PM, Matt Brubeck wrote:
+>
+> > Note that Omer was interested in writing a garbage collector *for* the
+> > C0 language that his class has implemented, and writing this GC *in* the
+> > Rust language.
+> >
+> > Meanwhile, it sounds like Graydon and the folks replying to him are
+> > talking about implementing garbage collection *for* Rust, which is a
+> > very different project.
+>
+> Oops! Apologies, yes, I misread.
+>
+> -Graydon
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121126/b3ed3d94/attachment.html>
+
+From omer.zach at gmail.com  Wed Nov 28 23:12:49 2012
+From: omer.zach at gmail.com (Omer Zach)
+Date: Wed, 28 Nov 2012 23:12:49 -0800
+Subject: [rust-dev] Implementing a garbage collector in Rust?
+In-Reply-To: <CABq6+adscf1OtQLTzP_iY7Dw66Hnbq5ZCZ4mXXX7jaDCnY4iYQ@mail.gmail.com>
+References: <CAAAQ8DFMoHB5WzUZ-qcYcnUFuV+9XkV3NfVJXM0V2LGZn1bsqA@mail.gmail.com>
+	<50B39848.3040803@mozilla.com> <50B3D248.8090502@mozilla.com>
+	<50B3DD6B.7010506@mozilla.com>
+	<CABq6+adscf1OtQLTzP_iY7Dw66Hnbq5ZCZ4mXXX7jaDCnY4iYQ@mail.gmail.com>
+Message-ID: <CAAAQ8DFiuzM5MLLgC1egVDReddRr28Tt4f4SiKj===2pjJC7ow@mail.gmail.com>
+
+Thanks for the help! Brandon met with Sully who was very helpful and so far
+we're making good progress.
+
+On Mon, Nov 26, 2012 at 8:50 PM, Kevin Cantu <me at kevincantu.org> wrote:
+
+> This may be one of my favorite threads on this mailing list.  A simple
+> good question reveals deeper good questions and unsolved problems. :)
+> On Nov 26, 2012 1:21 PM, "Graydon Hoare" <graydon at mozilla.com> wrote:
+>
+>> On 12-11-26 12:34 PM, Matt Brubeck wrote:
+>>
+>> > Note that Omer was interested in writing a garbage collector *for* the
+>> > C0 language that his class has implemented, and writing this GC *in* the
+>> > Rust language.
+>> >
+>> > Meanwhile, it sounds like Graydon and the folks replying to him are
+>> > talking about implementing garbage collection *for* Rust, which is a
+>> > very different project.
+>>
+>> Oops! Apologies, yes, I misread.
+>>
+>> -Graydon
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20121128/374c41f4/attachment.html>
+

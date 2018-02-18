@@ -1,0 +1,13 @@
+From jingxuanzhang at mail.dlut.edu.cn  Tue Mar 29 09:34:25 2016
+From: jingxuanzhang at mail.dlut.edu.cn (jingxuanzhang at mail.dlut.edu.cn)
+Date: Tue, 29 Mar 2016 17:34:25 +0800 (CST)
+Subject: [rust-dev] [Rust-dev] What makes good API tutorials
+Message-ID: <9698561.254.1459244065345.JavaMail.admin@admin-PC>
+
+Dear Colleague,
+API tutorials can teach developers how to use an unfamiliar API. Our research group is investigating the quality of API tutorials for developers. We sincerely invite you to participate in a simple survey (less than 5 minutes to complete) related to some aspects of API tutorials. This survey could greatly help developers and researchers in better understanding what makes good API tutorials. Please visit https://www.surveymonkey.com/r/9NFJJLL to response to the survey.
+Best Wishes and many thanks!
+Jingxuan Zhang
+School of Software, Dalian University of Technology
+
+

@@ -1,0 +1,2481 @@
+From noelgrandin at gmail.com  Mon Aug  1 04:51:36 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Mon, 01 Aug 2011 13:51:36 +0200
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+Message-ID: <4E369348.6060003@gmail.com>
+
+
+Perhaps it would be possible to apply some compile-time transformation to mitigate the problem:
+
+Transform
+
+void f() {
+    .....
+    f(); 
+}
+
+into
+
+void f() {
+   ....
+   take ownership
+   f1();
+   drop ownership
+}
+void f1() {
+   ....
+   f1();
+}
+
+
+Marijn Haverbeke wrote:
+> I've been throwing around some ideas about a simpler way to 'alias'
+> (non-owning reference) things with Patrick, and am in the process of
+> working out some ideas. A bunch of the possible directions, and the
+> ones that seem most promising to me at the moment, work poorly with
+> tail calls. Having the ownership management (take/drop) of parameters
+> happen entirely on the caller side means that the caller can optimize
+> them away in some situations. Supporting tail calls means that the
+> take must happen in the caller, but the drop in the callee. These two
+> things are at odds, and I'm currently leaning in the direction of
+> giving up tail calls.
+>
+> I'm coming from a functional background and am very aware of the
+> awesome elegance of tail calls. However, in actual rust code, they
+> seem to be used rarely. I think the reason for this is that, in Rust,
+> scope and memory management are very closely intertwined, which
+> prevents most elegant recursive patterns from being efficient. If you
+> have GC, you can skip in and out of scopes with very little penalty.
+> In Rust's memory model, you tend to pay a hefty price in allocation
+> and complexity for this jumping, and the loop-based way to write
+> something is usually simpler anyway.
+>
+> This is not to say that tail calls are useless. They work well in a
+> few specific situations (simple forwarding functions, recursive things
+> that don't build a data structure). What I want to say is that they
+> might not be worth the cost, and that we can do some very promising
+> things if we lose them. I am also not at a point where I know for sure
+> that my sketch of the new aliasing system will be viable. I just want
+> to know whether I should feel free to explore this option. Who feels
+> strongly that tail calls should be preserved?
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From marijnh at gmail.com  Mon Aug  1 06:16:34 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 1 Aug 2011 15:16:34 +0200
+Subject: [rust-dev] Half-indent for case blocks looks terrible
+In-Reply-To: <CAJnHWXtwn-2QbvweP0iBCm2D5c+2OoQQpysfCi1BsXuOH9VHdg@mail.gmail.com>
+References: <CAJnHWXtwn-2QbvweP0iBCm2D5c+2OoQQpysfCi1BsXuOH9VHdg@mail.gmail.com>
+Message-ID: <CAJnHWXv8=euHd+YLCH7SKosedD-Jta5aaVUZ-c7-h+M5Wf6ZQg@mail.gmail.com>
+
+One way out would be to use 2-space indents everywhere. I've always
+preferred this anyway. What are the reasons for using 4-space
+indenting?
+
+From marijnh at gmail.com  Mon Aug  1 06:52:13 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 1 Aug 2011 15:52:13 +0200
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <4E369348.6060003@gmail.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+	<4E369348.6060003@gmail.com>
+Message-ID: <CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>
+
+> Perhaps it would be possible to apply some compile-time transformation to mitigate the problem:
+
+I don't really understand your transformation, but it seems like the
+resulting code would still consume stack space for the 'tail' call.
+
+From noelgrandin at gmail.com  Mon Aug  1 07:10:54 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Mon, 01 Aug 2011 16:10:54 +0200
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+	<4E369348.6060003@gmail.com>
+	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>
+Message-ID: <4E36B3EE.9070707@gmail.com>
+
+Hi
+
+You are correct, my original transformation was not very well spelled out.
+
+Effectively, I'm transforming a normal method into a method where the take happens in the caller and the drop happens in
+the callee.
+It'll consume two stack frames - one for the original method, and one for the extra helper method.
+So perhaps a better writing of the transform is this: (leaving out the additional transforming required for early returns)
+
+original method
+----------------------
+void foo(T param1) {    
+    T var1 = ...
+    foo(var1)
+}
+
+transformed method
+-----------------------------
+void foo(T param1) {
+    T var1 = ....
+    take(var1)
+    foo_helper(var1)
+}
+void foo_helper(T param1) {
+foo_helper_start:
+    T var1 = ...
+    take(var1)
+    drop(param1)
+    param1 = var1 // assign reference
+    goto foo_helper_start   
+}
+
+
+Marijn Haverbeke wrote:
+>> Perhaps it would be possible to apply some compile-time transformation to mitigate the problem:
+> I don't really understand your transformation, but it seems like the
+> resulting code would still consume stack space for the 'tail' call.
+
+
+From marijnh at gmail.com  Mon Aug  1 07:18:19 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 1 Aug 2011 16:18:19 +0200
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <4E36B3EE.9070707@gmail.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+	<4E369348.6060003@gmail.com>
+	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>
+	<4E36B3EE.9070707@gmail.com>
+Message-ID: <CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+
+Ah, I see what you mean now. But this kind of rewriting requires
+knowledge of the tail-called function (which may be in another module,
+or passed in by value), and a bunch of extra complexity. It doesn't
+really have the elegance of classical tail calls.
+
+From noelgrandin at gmail.com  Mon Aug  1 07:23:47 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Mon, 01 Aug 2011 16:23:47 +0200
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+	<4E369348.6060003@gmail.com>
+	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>
+	<4E36B3EE.9070707@gmail.com>
+	<CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+Message-ID: <4E36B6F3.5020309@gmail.com>
+
+True, but the 99% case for tail-called functions is where the tail-caller, and the tail-callee are the same function.
+So, sure, we don't have all the power of classical tail calls. But we have lots of other power to compensate for it :-)
+And we can support the majority use-case at the cost of some compiler complexity.
+
+Marijn Haverbeke wrote:
+> Ah, I see what you mean now. But this kind of rewriting requires
+> knowledge of the tail-called function (which may be in another module,
+> or passed in by value), and a bunch of extra complexity. It doesn't
+> really have the elegance of classical tail calls.
+
+
+From sebastian.sylvan at gmail.com  Mon Aug  1 07:39:50 2011
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Mon, 1 Aug 2011 07:39:50 -0700
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <4E36B6F3.5020309@gmail.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+	<4E369348.6060003@gmail.com>
+	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>
+	<4E36B3EE.9070707@gmail.com>
+	<CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+	<4E36B6F3.5020309@gmail.com>
+Message-ID: <CAGZgfT5Ms3kBk7qNCLBHwggqthe6zwZ_YBp=feh4u6NWoxBrXQ@mail.gmail.com>
+
+A counter-point is that those are the cases that could usually be
+rewritten as a loop anyway. The cases where tail-calls are
+indispensible are things like having a long running "server process"
+that branches on incoming messages and "jumps" to different states by
+tail calling to the appropriate function. Without tail calls that
+would have to be obscured behind an explicit model of a state machine
+or a gigantic monolithic switch statement in a loop, or something,
+making the code significantly harder to write/read/maintain.
+
+On Mon, Aug 1, 2011 at 7:23 AM, Noel Grandin <noelgrandin at gmail.com> wrote:
+> True, but the 99% case for tail-called functions is where the tail-caller, and the tail-callee are the same function.
+> So, sure, we don't have all the power of classical tail calls. But we have lots of other power to compensate for it :-)
+> And we can support the majority use-case at the cost of some compiler complexity.
+>
+> Marijn Haverbeke wrote:
+>> Ah, I see what you mean now. But this kind of rewriting requires
+>> knowledge of the tail-called function (which may be in another module,
+>> or passed in by value), and a bunch of extra complexity. It doesn't
+>> really have the elegance of classical tail calls.
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+
+
+-- 
+Sebastian Sylvan
+
+From noelgrandin at gmail.com  Mon Aug  1 07:56:20 2011
+From: noelgrandin at gmail.com (Noel Grandin)
+Date: Mon, 01 Aug 2011 16:56:20 +0200
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <CAGZgfT5Ms3kBk7qNCLBHwggqthe6zwZ_YBp=feh4u6NWoxBrXQ@mail.gmail.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+	<4E369348.6060003@gmail.com>
+	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>
+	<4E36B3EE.9070707@gmail.com>
+	<CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+	<4E36B6F3.5020309@gmail.com>
+	<CAGZgfT5Ms3kBk7qNCLBHwggqthe6zwZ_YBp=feh4u6NWoxBrXQ@mail.gmail.com>
+Message-ID: <4E36BE94.9010600@gmail.com>
+
+
+That kind of coding is easily modelled by returning closures to a core event loop routine.
+
+Sebastian Sylvan wrote:
+> A counter-point is that those are the cases that could usually be
+> rewritten as a loop anyway. The cases where tail-calls are
+> indispensible are things like having a long running "server process"
+> that branches on incoming messages and "jumps" to different states by
+> tail calling to the appropriate function. Without tail calls that
+> would have to be obscured behind an explicit model of a state machine
+> or a gigantic monolithic switch statement in a loop, or something,
+> making the code significantly harder to write/read/maintain.
+>
+> On Mon, Aug 1, 2011 at 7:23 AM, Noel Grandin <noelgrandin at gmail.com> wrote:
+>> True, but the 99% case for tail-called functions is where the tail-caller, and the tail-callee are the same function.
+>> So, sure, we don't have all the power of classical tail calls. But we have lots of other power to compensate for it :-)
+>> And we can support the majority use-case at the cost of some compiler complexity.
+>>
+>> Marijn Haverbeke wrote:
+>>> Ah, I see what you mean now. But this kind of rewriting requires
+>>> knowledge of the tail-called function (which may be in another module,
+>>> or passed in by value), and a bunch of extra complexity. It doesn't
+>>> really have the elegance of classical tail calls.
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>
+>
+
+
+From catamorphism at gmail.com  Mon Aug  1 11:25:54 2011
+From: catamorphism at gmail.com (Tim Chevalier)
+Date: Mon, 1 Aug 2011 11:25:54 -0700
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <4E36BE94.9010600@gmail.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+	<4E369348.6060003@gmail.com>
+	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>
+	<4E36B3EE.9070707@gmail.com>
+	<CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+	<4E36B6F3.5020309@gmail.com>
+	<CAGZgfT5Ms3kBk7qNCLBHwggqthe6zwZ_YBp=feh4u6NWoxBrXQ@mail.gmail.com>
+	<4E36BE94.9010600@gmail.com>
+Message-ID: <CADcg8=kiNmdyxkvHcb25kAQSXzvcBUFQ04svuGs6ScCGU1c-Dg@mail.gmail.com>
+
+On Mon, Aug 1, 2011 at 7:56 AM, Noel Grandin <noelgrandin at gmail.com> wrote:
+>
+> That kind of coding is easily modelled by returning closures to a core event loop routine.
+>
+
+Maybe I'm missing something here, but closures are typically
+heap-allocated, whereas in Sebastian's scenario:
+
+> Sebastian Sylvan wrote:
+>> A counter-point is that those are the cases that could usually be
+>> rewritten as a loop anyway. The cases where tail-calls are
+>> indispensible are things like having a long running "server process"
+>> that branches on incoming messages and "jumps" to different states by
+>> tail calling to the appropriate function.
+
+I don't see there being any allocation? Remember that "constant space"
+is one reason why tail calls are desirable.
+
+Cheers,
+Tim
+
+-- 
+Tim Chevalier * http://cs.pdx.edu/~tjc/ * Often in error, never in doubt
+?I cannot hide my anger to spare you guilt, nor hurt feelings, nor
+answering anger; for to do so insults and trivializes all our efforts.
+Guilt is not a response to anger; it is a response to one?s own
+actions or lack of action.? -- Audre Lorde
+
+From respindola at mozilla.com  Mon Aug  1 19:45:57 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Mon, 01 Aug 2011 22:45:57 -0400
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+	<4E369348.6060003@gmail.com>
+	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>
+	<4E36B3EE.9070707@gmail.com>
+	<CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+Message-ID: <4E3764E5.6040201@mozilla.com>
+
+On 11-08-01 10:18 AM, Marijn Haverbeke wrote:
+> Ah, I see what you mean now. But this kind of rewriting requires
+> knowledge of the tail-called function (which may be in another module,
+> or passed in by value), and a bunch of extra complexity. It doesn't
+> really have the elegance of classical tail calls.
+
+I think we had decide to only allow tail calls inside a crate. In part because
+of limitations on which calls llvm guarantees are tail.
+
+But I would vote for dropping tail calls. Even if we do them inside crates only,
+there is still a mismatch with rust where "tail" is a property of the call only
+and llvm where the callee must know it is can be tailcalled.
+
+Cheers,
+Rafael
+
+From marijnh at gmail.com  Wed Aug  3 06:44:37 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Wed, 3 Aug 2011 15:44:37 +0200
+Subject: [rust-dev] Destructuring let and for bindings are available
+Message-ID: <CAJnHWXt2kSAcBK7RUchJpScVwtu1M+B_B0T1gYcCDJiaRjiOiQ@mail.gmail.com>
+
+Yesterday's snapshot made it safe to start using destructuring
+patterns in let, for, and for each. I also fixed a few bugs that
+prevented for and for each from properly deriving a type for the loop
+variable when you didn't specify one. The happy result is that you can
+now do things like this:
+
+    for @{key, val} in my_hash.items() {
+        // Do stuff with the key and val variables
+    }
+
+It's still no Python, but we're getting close!
+
+From graydon at mozilla.com  Wed Aug  3 15:59:47 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 03 Aug 2011 15:59:47 -0700
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <4E3764E5.6040201@mozilla.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>	<4E369348.6060003@gmail.com>	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>	<4E36B3EE.9070707@gmail.com>	<CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+	<4E3764E5.6040201@mozilla.com>
+Message-ID: <4E39D2E3.7020807@mozilla.com>
+
+On 11-08-01 07:45 PM, Rafael ?vila de Esp?ndola wrote:
+> On 11-08-01 10:18 AM, Marijn Haverbeke wrote:
+>> Ah, I see what you mean now. But this kind of rewriting requires
+>> knowledge of the tail-called function (which may be in another module,
+>> or passed in by value), and a bunch of extra complexity. It doesn't
+>> really have the elegance of classical tail calls.
+>
+> I think we had decide to only allow tail calls inside a crate. In part because
+> of limitations on which calls llvm guarantees are tail.
+>
+> But I would vote for dropping tail calls. Even if we do them inside crates only,
+> there is still a mismatch with rust where "tail" is a property of the call only
+> and llvm where the callee must know it is can be tailcalled.
+
+Yeah. I concur. Tail calls are something I'm willing to give up for a 
+few reasons.
+
+   - Linkage models don't guarantee the ability to do cross-crate tail
+     calls. Sad but apparently true.
+
+   - Tail calling hurts optimization in the non-tail-call case a fair
+     bit, both in the codegen (stack movement) sense and in the sense of
+     permitting the compiler to pair up take/drop as Marijn noted.
+
+   - I agree with Sebastian that tail *recursion* is not the compelling
+     case of tail calls at all; that's nice for textbooks but the bigger
+     use-case is state machines. However: we have early returns and
+     mutable alias arguments; it's not really clear we need them nearly
+     as much as (say) a pure-expression language. They're really just an
+     optimization, to avoid the cost of doing a switch on a first class
+     value (current state gets encoded into the PC directly, rather than
+     a state variable). It's really not clear to me that this case is
+     a sufficiently important one to bend the rest of the language for.
+
+Any champions for 'em? I have stood up for them many times in the past 
+but they continue to be a sticky cost we pay on many design choices, I'd 
+be ok ceasing to pay that.
+
+-Graydon
+
+From pwalton at mozilla.com  Fri Aug  5 09:13:04 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Fri, 05 Aug 2011 09:13:04 -0700
+Subject: [rust-dev] Can we have our tuples back?
+Message-ID: <4E3C1690.10904@mozilla.com>
+
+The lack of them makes destructuring assignment a lot less convenient...
+
+Patrick
+
+From tellrob at gmail.com  Fri Aug  5 11:03:32 2011
+From: tellrob at gmail.com (Rob Arnold)
+Date: Fri, 5 Aug 2011 11:03:32 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <4E3C1690.10904@mozilla.com>
+References: <4E3C1690.10904@mozilla.com>
+Message-ID: <CAPe5QEYWgQ6-7YF0U7FqCyhfTpCHYBC9NPW1iXtPBzCW_vRdwQ@mail.gmail.com>
+
+I for one welcome the return of our tuple overlords!
+
+-Rob
+
+On Fri, Aug 5, 2011 at 9:13 AM, Patrick Walton <pwalton at mozilla.com> wrote:
+
+> The lack of them makes destructuring assignment a lot less convenient...
+>
+> Patrick
+> ______________________________**_________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/**listinfo/rust-dev<https://mail.mozilla.org/listinfo/rust-dev>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110805/bcd2e9ff/attachment.html>
+
+From graydon at mozilla.com  Mon Aug  8 14:33:55 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 08 Aug 2011 14:33:55 -0700
+Subject: [rust-dev] Half-indent for case blocks looks terrible
+In-Reply-To: <CAJnHWXv8=euHd+YLCH7SKosedD-Jta5aaVUZ-c7-h+M5Wf6ZQg@mail.gmail.com>
+References: <CAJnHWXtwn-2QbvweP0iBCm2D5c+2OoQQpysfCi1BsXuOH9VHdg@mail.gmail.com>
+	<CAJnHWXv8=euHd+YLCH7SKosedD-Jta5aaVUZ-c7-h+M5Wf6ZQg@mail.gmail.com>
+Message-ID: <4E405643.1050209@mozilla.com>
+
+On 11-08-01 06:16 AM, Marijn Haverbeke wrote:
+> One way out would be to use 2-space indents everywhere. I've always
+> preferred this anyway. What are the reasons for using 4-space
+> indenting?
+
+More visually distinct, serves as a disincentive to over-nesting rather 
+than factoring code into separate functions. Default stance for most 
+non-GNU unix people (I think?)
+
+Discussing whitespace, mmm.
+
+-Graydon
+
+From pwalton at mozilla.com  Mon Aug  8 14:34:24 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Mon, 08 Aug 2011 14:34:24 -0700
+Subject: [rust-dev] Half-indent for case blocks looks terrible
+In-Reply-To: <4E405643.1050209@mozilla.com>
+References: <CAJnHWXtwn-2QbvweP0iBCm2D5c+2OoQQpysfCi1BsXuOH9VHdg@mail.gmail.com>
+	<CAJnHWXv8=euHd+YLCH7SKosedD-Jta5aaVUZ-c7-h+M5Wf6ZQg@mail.gmail.com>
+	<4E405643.1050209@mozilla.com>
+Message-ID: <4E405660.4000403@mozilla.com>
+
+On 8/8/11 2:33 PM, Graydon Hoare wrote:
+> On 11-08-01 06:16 AM, Marijn Haverbeke wrote:
+>> One way out would be to use 2-space indents everywhere. I've always
+>> preferred this anyway. What are the reasons for using 4-space
+>> indenting?
+>
+> More visually distinct, serves as a disincentive to over-nesting rather
+> than factoring code into separate functions. Default stance for most
+> non-GNU unix people (I think?)
+
+Default stance for Mozilla, too.
+
+Patrick
+
+From brendan at mozilla.org  Mon Aug  8 14:43:25 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Mon, 8 Aug 2011 14:43:25 -0700
+Subject: [rust-dev] Half-indent for case blocks looks terrible
+In-Reply-To: <4E405643.1050209@mozilla.com>
+References: <CAJnHWXtwn-2QbvweP0iBCm2D5c+2OoQQpysfCi1BsXuOH9VHdg@mail.gmail.com>
+	<CAJnHWXv8=euHd+YLCH7SKosedD-Jta5aaVUZ-c7-h+M5Wf6ZQg@mail.gmail.com>
+	<4E405643.1050209@mozilla.com>
+Message-ID: <5F71F70E-9EF1-4224-A714-28251AABAAB2@mozilla.org>
+
+On Aug 8, 2011, at 2:33 PM, Graydon Hoare wrote:
+
+> On 11-08-01 06:16 AM, Marijn Haverbeke wrote:
+>> One way out would be to use 2-space indents everywhere. I've always
+>> preferred this anyway. What are the reasons for using 4-space
+>> indenting?
+> 
+> More visually distinct, serves as a disincentive to over-nesting rather than factoring code into separate functions. Default stance for most non-GNU unix people (I think?)
+
+Not sure -- varies. Some still use Unix tabs and map tabs to 4-space stops.
+
+(GNU bracing style is pure evil, btw. Nuff said.)
+
+
+> Discussing whitespace, mmm.
+
+A victory condition!
+
+/be
+
+From dherman at mozilla.com  Tue Aug  9 18:56:38 2011
+From: dherman at mozilla.com (David Herman)
+Date: Tue, 9 Aug 2011 21:56:38 -0400
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <4E3C1690.10904@mozilla.com>
+References: <4E3C1690.10904@mozilla.com>
+Message-ID: <F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+
+I believe eliminating tuples was a mistake. Just look at what happens to the zip function:
+
+    fn zip<T,U>(&[T] a1, &[U] a2) -> [{ fst: T, snd: U }]
+
+or with a typedef for pairs:
+
+    fn zip<T,U>(&[T] a1, &[U] a2) -> [Pair<T, U>]
+
+Another use case: debugging with polymorphic log:
+
+    log (x, y, z);
+
+is way more convenient than:
+
+    log #fmt(...);
+
+Tuples are simple and lightweight. I haven't heard any arguments for what harm they cause. The compiler complexity is not far-reaching, it's just a few more cases in the structural recursions over Rust types.
+
+The argument against has mostly been "they don't provide much value and you *should* use records instead." I disagree. There are plenty of cases when programming in-the-small where tuples are cleaner and simpler than records, and those little cases add up.
+
+Dave
+
+On Aug 5, 2011, at 12:13 PM, Patrick Walton wrote:
+
+> The lack of them makes destructuring assignment a lot less convenient...
+> 
+> Patrick
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From dherman at mozilla.com  Tue Aug  9 19:28:49 2011
+From: dherman at mozilla.com (David Herman)
+Date: Tue, 9 Aug 2011 22:28:49 -0400
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <4E39D2E3.7020807@mozilla.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>	<4E369348.6060003@gmail.com>	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>	<4E36B3EE.9070707@gmail.com>	<CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+	<4E3764E5.6040201@mozilla.com> <4E39D2E3.7020807@mozilla.com>
+Message-ID: <59524C03-4464-4D05-A7BB-6FDA69C7BB64@mozilla.com>
+
+I'll try to stick up for tail calls, at least down the road (I'd say having them in the first release doesn't really matter).
+
+A few points:
+
+- As you guys have said, this issue seems pretty tied in with the memory management semantics, particularly with refcounting. But I'm still not convinced that refcounting has proved itself. We'll need to have a GC before long, and once we do, I think it would still be worthwhile to consider the possibility of decreasing or eliminating our use of refcounting. If we were to move away from refcounting, the "callee-drops" semantics goes away.
+
+- Separate from the take/drop issue, I'm probably too far away from the compiler to know what the stack movement is that's hurting the non-tail-call cases. What's the issue there?
+
+- I find the state machine use case pretty compelling. It's a pretty natural style, which is easy to code up; it might not be as efficient as loops, depending on how we implemented it, but if it's more understandable/maintainable it can be worth the trade-off.
+
+- A variation of state machines is jump tables, e.g. in a bytecode interpreter.
+
+- Full disclosure: I agree that tail calls are less important for Rust than for, say, Erlang, because of loops and because of iteration abstractions (either iterators or blocks, depending on which way we go). But I still think they make for a nice tool that's hard to replicate when it's not provided by the language.
+
+Dave
+
+> Yeah. I concur. Tail calls are something I'm willing to give up for a few reasons.
+> 
+>  - Linkage models don't guarantee the ability to do cross-crate tail
+>    calls. Sad but apparently true.
+> 
+>  - Tail calling hurts optimization in the non-tail-call case a fair
+>    bit, both in the codegen (stack movement) sense and in the sense of
+>    permitting the compiler to pair up take/drop as Marijn noted.
+> 
+>  - I agree with Sebastian that tail *recursion* is not the compelling
+>    case of tail calls at all; that's nice for textbooks but the bigger
+>    use-case is state machines. However: we have early returns and
+>    mutable alias arguments; it's not really clear we need them nearly
+>    as much as (say) a pure-expression language. They're really just an
+>    optimization, to avoid the cost of doing a switch on a first class
+>    value (current state gets encoded into the PC directly, rather than
+>    a state variable). It's really not clear to me that this case is
+>    a sufficiently important one to bend the rest of the language for.
+> 
+> Any champions for 'em? I have stood up for them many times in the past but they continue to be a sticky cost we pay on many design choices, I'd be ok ceasing to pay that.
+> 
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From graydon at mozilla.com  Wed Aug 10 16:33:55 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 10 Aug 2011 16:33:55 -0700
+Subject: [rust-dev] Proposal: Eliminate "let" hoisting
+In-Reply-To: <4E35819C.8020302@mozilla.com>
+References: <4E34708C.7000405@mozilla.com>	<40685B01-9C6D-4FB1-91F7-6E38374E72DB@mozilla.org>
+	<4E35819C.8020302@mozilla.com>
+Message-ID: <4E431563.2010608@mozilla.com>
+
+On 11-07-31 09:23 AM, Patrick Walton wrote:
+
+> So I should have been more clear -- in this scheme local variables would
+> be the only non-hoisted bindings. It's rare that local variables need to
+> be mutually recursive; the only time is when you want mutually recursive
+> capturing lambdas, and in that case I don't think manually hoisting is
+> too bad. Absent mutual recursion, I don't see any benefit to hoisting
+> local variables, other than (a) consistency between items and locals and
+> (b) simplifying the compiler implementation a bit (but note that we
+> actually get this wrong at the moment -- we initialize local variables
+> at the time we see the "let", which can cause segfaults).
+
+Segfaults? That is surprising. What's wrong with doing what we do now 
+(in terms of safety)?
+
+In terms of where a variable's scope begins, at its declaration line vs. 
+the previous brace, I'm not terribly fussy. I did it the way I did 
+mostly for simplicity sake. Feel free to change if it bugs you.
+
+(Also note: there *shouldn't* be any use-before-init happening in any 
+interpretation, as we have a typestate system that should catch all that.)
+
+-Graydon
+
+From graydon at mozilla.com  Wed Aug 10 16:37:00 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 10 Aug 2011 16:37:00 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+Message-ID: <4E43161C.8050303@mozilla.com>
+
+On 11-08-09 06:56 PM, David Herman wrote:
+> I believe eliminating tuples was a mistake. Just look at what happens to the zip function:
+
+I'm mostly dragging my feet on this because we removed them for a 
+reason, and I prefer not to thrash on decisions *too* much, it's just 
+wasted effort beyond a point.
+
+I don't remember the reason exactly. I thought there was a syntactic 
+collision somewhere down in the pattern syntax. But I can't recall 
+exactly what it is.
+
+Marijn? I have a feeling you might recall.
+
+(there's also the minimalism argument; but that's a weak one I could go 
+either way on)
+
+-Graydon
+
+From msullivan at mozilla.com  Wed Aug 10 17:25:39 2011
+From: msullivan at mozilla.com (Michael Sullivan)
+Date: Wed, 10 Aug 2011 17:25:39 -0700 (PDT)
+Subject: [rust-dev] Proposal: Eliminate "let" hoisting
+In-Reply-To: <4E431563.2010608@mozilla.com>
+Message-ID: <1844190056.151259.1313022339240.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+----- Original Message -----
+> Segfaults? That is surprising. What's wrong with doing what we do now
+> (in terms of safety)?
+> 
+Currently we zero out locals at the declaration site, which means that with silly code like:
+{
+    x = ...;
+    // do things with x
+    let x;
+    // do other things with x
+}
+we will zero the x at the "let x;". I think the actual failure we ran into was that when it got zeroed, it caused the variable to not get cleaned up properly. Eric was writing code like this as a protest and tripped over it.
+
+It's a bug, but I maintain that the real problem is that the program is allowed.
+
+From graydon at mozilla.com  Wed Aug 10 17:29:00 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 10 Aug 2011 17:29:00 -0700
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <59524C03-4464-4D05-A7BB-6FDA69C7BB64@mozilla.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>	<4E369348.6060003@gmail.com>	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>	<4E36B3EE.9070707@gmail.com>	<CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+	<4E3764E5.6040201@mozilla.com> <4E39D2E3.7020807@mozilla.com>
+	<59524C03-4464-4D05-A7BB-6FDA69C7BB64@mozilla.com>
+Message-ID: <4E43224C.9050304@mozilla.com>
+
+On 11-08-09 07:28 PM, David Herman wrote:
+> I'll try to stick up for tail calls, at least down the road (I'd say having them in the first release doesn't really matter).
+
+I don't think they'll be very easy to retrofit if we don't keep 'em 
+alive. Though they're not really alive now. And for various reasons this 
+is seeming more and more dubious to me.
+
+> - As you guys have said, this issue seems pretty tied in with the memory management semantics, particularly with refcounting. But I'm still not convinced that refcounting has proved itself. We'll need to have a GC before long, and once we do, I think it would still be worthwhile to consider the possibility of decreasing or eliminating our use of refcounting. If we were to move away from refcounting, the "callee-drops" semantics goes away.
+
+This may well be -- we'll probably do a branch that does 
+gc-on-all-shared-nodes just to see how it performs -- but I don't want 
+to get into imaginary accounting on the refcounting costs. The issues 
+are more that
+
+> - Separate from the take/drop issue, I'm probably too far away from the compiler to know what the stack movement is that's hurting the non-tail-call cases. What's the issue there?
+
+The caller of a non-tail-call has to adjust the stack back to its 
+"proper" position when a callee returns, because the ABI to support tail 
+calls in the callee (at the caller's choice) means that arg-passing is 
+ownership-passing, and it effectively gave up control of the portion of 
+the stack that it put the outgoing args into when it passed them to the 
+callee. This is called "callee-pop" arguments. And it costs the callers 
+another sp -= args after each call.
+
+Beyond that though, there's this basic fact that for a few cases they 
+won't work. Like .. trans-crate calls probably won't, and move-in 
+arguments on polymorphic values won't, possibly/probably self calls in 
+wrapped objects, some of the things marijn and patrick have been 
+discussing for guaranteeing alias lifetimes, possibly a bunch of others; 
+we keep running into cases where the constraint is "that's nice but 
+breaks tail calls". So it's more a question of trying to figure whether 
+it's worth bending all these other things into contortions to preseve 
+them. We're hardly using them now.
+
+> - I find the state machine use case pretty compelling. It's a pretty natural style, which is easy to code up; it might not be as efficient as loops, depending on how we implemented it, but if it's more understandable/maintainable it can be worth the trade-off.
+
+It can definitely read quite naturally, yes. Not debating that, just 
+weighing costs vs. benefits.
+
+> - A variation of state machines is jump tables, e.g. in a bytecode interpreter.
+
+I think the optimization case there is actually computed gotos, not tail 
+calls. You don't want to throw out the interpreter frame; you want to 
+return to it for the next opcode. We don't support computed gotos 
+(though I guess we could; it'd probably be 'unsafe' :)
+
+> - Full disclosure: I agree that tail calls are less important for Rust than for, say, Erlang, because of loops and because of iteration abstractions (either iterators or blocks, depending on which way we go). But I still think they make for a nice tool that's hard to replicate when it's not provided by the language.
+
+Agreed it's hard to replicate. What I'm getting at is that at present, 
+it seems they're rather hard to *support* everywhere, period. How useful 
+are tail calls if they only work in "very restricted" circumstances? 
+It's a bit of an offense against language orthogonality and 
+compositionality, y'know?
+
+-Graydon
+
+From jruderman at gmail.com  Wed Aug 10 19:16:07 2011
+From: jruderman at gmail.com (Jesse Ruderman)
+Date: Wed, 10 Aug 2011 19:16:07 -0700
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <4E43224C.9050304@mozilla.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+	<4E369348.6060003@gmail.com>
+	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>
+	<4E36B3EE.9070707@gmail.com>
+	<CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+	<4E3764E5.6040201@mozilla.com> <4E39D2E3.7020807@mozilla.com>
+	<59524C03-4464-4D05-A7BB-6FDA69C7BB64@mozilla.com>
+	<4E43224C.9050304@mozilla.com>
+Message-ID: <CAB-YmG3+AN2yaHtjQqEqS4m9s2YR0h-OX=BtPqOHeL=fNnQOfQ@mail.gmail.com>
+
+> Agreed it's hard to replicate. What I'm getting at is that at present, it
+> seems they're rather hard to *support* everywhere, period. How useful are
+> tail calls if they only work in "very restricted" circumstances? It's a bit
+> of an offense against language orthogonality and compositionality, y'know?
+
+The point of having a "be" keyword, in my mind, is to give programmers
+a way to tell the compiler "let me know if I'm doing anything that
+prevents this call from being optimized". Seen that way, it's
+essentially a static assertion. The offense against compositionality
+didn't come from the "be" keyword; it came from the inability to
+optimize the call, which exists with or without the "be" keyword.
+
+The error messages can make sense, right? I admit to not understanding
+most of the cases.
+
+"Cannot optimize tail call _here_ because resource 'ofile' is in
+scope. 'ofile' was declared _here_. Suggest adding braces or adding
+'drop ofile;' or switching 'be' to 'ret'."
+
+"Cannot optimize tail call _here_ because it's a self call in a
+wrapped object. I'm terribly sorry."
+
+From graydon at mozilla.com  Thu Aug 11 11:27:36 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 11 Aug 2011 11:27:36 -0700
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <CAB-YmG3+AN2yaHtjQqEqS4m9s2YR0h-OX=BtPqOHeL=fNnQOfQ@mail.gmail.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>	<4E369348.6060003@gmail.com>	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>	<4E36B3EE.9070707@gmail.com>	<CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>	<4E3764E5.6040201@mozilla.com>	<4E39D2E3.7020807@mozilla.com>	<59524C03-4464-4D05-A7BB-6FDA69C7BB64@mozilla.com>	<4E43224C.9050304@mozilla.com>
+	<CAB-YmG3+AN2yaHtjQqEqS4m9s2YR0h-OX=BtPqOHeL=fNnQOfQ@mail.gmail.com>
+Message-ID: <4E441F18.2000200@mozilla.com>
+
+On 11-08-10 07:16 PM, Jesse Ruderman wrote:
+
+> The point of having a "be" keyword, in my mind, is to give programmers
+> a way to tell the compiler "let me know if I'm doing anything that
+> prevents this call from being optimized". Seen that way, it's
+> essentially a static assertion. The offense against compositionality
+> didn't come from the "be" keyword; it came from the inability to
+> optimize the call, which exists with or without the "be" keyword.
+
+The conflict is how hard we try to work to make sure compositionality 
+reigns, and we get to use 'be' everywhere, or "enough to be useful". If 
+we don't try very hard at all, we can possibly ship it, but it'll only 
+be usable in a handful of cases.
+
+I mean, at the limit merely "having all callees be tail-callable" -- 
+those where it's even *possible* in the runtime model -- is itself a 
+performance hit and C-ABI-compatibility break due to the callee-pops 
+nature of the arg passing. This is possible but it's a penalty. One 
+we're currently paying and .. might like to stop, if we can.
+
+> The error messages can make sense, right? I admit to not understanding
+> most of the cases.
+
+They can make sense, yes. Just a question of extent, cost, tradeoff.
+
+-Graydon
+
+From graydon at mozilla.com  Thu Aug 11 15:05:37 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 11 Aug 2011 15:05:37 -0700
+Subject: [rust-dev] LLVM bump to rev 137336
+Message-ID: <4E445231.40508@mozilla.com>
+
+Please update your LLVMs accordingly.
+
+-Graydon
+
+From marijnh at gmail.com  Thu Aug 11 16:10:08 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 12 Aug 2011 01:10:08 +0200
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <4E43161C.8050303@mozilla.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+Message-ID: <CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+
+> I don't remember the reason exactly. I thought there was a syntactic
+> collision somewhere down in the pattern syntax. But I can't recall exactly
+> what it is.
+
+The pattern thing was a red herring (it was part of the proposal that
+didn't really hold together). As I understood things, we wanted to
+remove tuples for minimalism reasons (less data types, less syntax,
+etc).
+
+I still think this was a good decision. With the exception of the
+zip/unzip functions, all the code I touched when removing tuples got
+more readable in the process. Pure, abstract pairs / triples of things
+are rare. Usually, the fields have clear roles, and it is beneficial
+to name them. 'val._0' does not tell you what you're getting, and I
+found myself constantly looking up the order of the fields in tuples,
+even those returned by functions I wrote myself.
+
+As for destructuring, records seem to work very well there. In most
+cases, you'll use the field names for your variables, so you get
+simply
+
+    let {key, val} = someexpression();
+
+When they clash, you get a slightly more verbose '{key: keyname}'
+syntax, but nothing that makes me want to revive tuples.
+
+From pwalton at mozilla.com  Thu Aug 11 17:28:16 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 11 Aug 2011 17:28:16 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+	<CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+Message-ID: <4E4473A0.1010700@mozilla.com>
+
+On 8/11/11 4:10 PM, Marijn Haverbeke wrote:
+> I still think this was a good decision. With the exception of the
+> zip/unzip functions, all the code I touched when removing tuples got
+> more readable in the process. Pure, abstract pairs / triples of things
+> are rare. Usually, the fields have clear roles, and it is beneficial
+> to name them. 'val._0' does not tell you what you're getting, and I
+> found myself constantly looking up the order of the fields in tuples,
+> even those returned by functions I wrote myself.
+
+Polymorphic log still seems to want tuples.
+
+Patrick
+
+From pwalton at mozilla.com  Thu Aug 11 17:31:28 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 11 Aug 2011 17:31:28 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+	<CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+Message-ID: <4E447460.4030809@mozilla.com>
+
+On 8/11/11 4:10 PM, Marijn Haverbeke wrote:
+> As for destructuring, records seem to work very well there. In most
+> cases, you'll use the field names for your variables, so you get
+> simply
+>
+>      let {key, val} = someexpression();
+
+Also, what I'd like to do is this:
+
+   let x, y = 1, 2;
+
+I have to write:
+
+   let { x, y } = { x: 1, y: 2 };
+
+Which violates DRY, or:
+
+   let x = 1; let y = 2;
+
+Which is wordy.
+
+Patrick
+
+From brendan at mozilla.org  Thu Aug 11 18:00:36 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Thu, 11 Aug 2011 18:00:36 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <4E447460.4030809@mozilla.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+	<CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+	<4E447460.4030809@mozilla.com>
+Message-ID: <EF367CAE-C191-4E40-8F34-3969604D9B89@mozilla.org>
+
+On Aug 11, 2011, at 5:31 PM, Patrick Walton wrote:
+
+> On 8/11/11 4:10 PM, Marijn Haverbeke wrote:
+>> As for destructuring, records seem to work very well there. In most
+>> cases, you'll use the field names for your variables, so you get
+>> simply
+>> 
+>>     let {key, val} = someexpression();
+> 
+> Also, what I'd like to do is this:
+> 
+>  let x, y = 1, 2;
+
+JS1.8.x today:
+
+  let [x, y] = [1, 2];
+
+Optimizes to avoid array construction.
+
+Wish we didn't have [] all over, but I foolishly cloned C/C++/Java's comma operator.
+
+/be
+
+
+From pwalton at mozilla.com  Thu Aug 11 18:39:26 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 11 Aug 2011 18:39:26 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <4E447460.4030809@mozilla.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+	<CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+	<4E447460.4030809@mozilla.com>
+Message-ID: <4E44844E.9050400@mozilla.com>
+
+Per a conversation with Brendan, it occurred to us that the main problem 
+may be the ugliness of the access syntax; x._0 doesn't read too nicely. 
+We could do x[0] perhaps (with typeck ensuring that what's inside 
+brackets is a constant), or x#0 per Standard ML, or even special case 
+".fst" and ".snd" for the first couple of elements...
+
+Patrick
+
+From graydon at mozilla.com  Thu Aug 11 19:17:58 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 11 Aug 2011 19:17:58 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <EF367CAE-C191-4E40-8F34-3969604D9B89@mozilla.org>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+	<CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+	<4E447460.4030809@mozilla.com>
+	<EF367CAE-C191-4E40-8F34-3969604D9B89@mozilla.org>
+Message-ID: <4E448D56.3060304@mozilla.com>
+
+On 11/08/2011 6:00 PM, Brendan Eich wrote:
+
+>> Also, what I'd like to do is this:
+>>
+>>   let x, y = 1, 2;
+>
+> JS1.8.x today:
+>
+>    let [x, y] = [1, 2];
+>
+> Optimizes to avoid array construction.
+>
+> Wish we didn't have [] all over, but I foolishly cloned C/C++/Java's comma operator.
+
+We'd have to (at minimum, I think) write patrick's example as:
+
+   let (x, y) = (1, 2);
+
+since a naked-comma-makes-a-tuple would make situations like function 
+argument lists ambiguous. We'd be adding a mode to the parser where it 
+"knows" it's inside an simple-paren pair and should consider comma to 
+mean tuple-formation. Unless you know a different trick.
+
+I wonder if we can get away with just saying that a *let* declaration 
+permits multiplicity, the same way it permits trailing optional 
+typarams; if this is truly the important case that's biting. It's 
+decidedly less work to support a declarator form:
+
+   let x = 1, y = 2;
+
+than to add (even if re-adding) another tycon.
+
+-Graydon
+
+
+
+From pwalton at mozilla.com  Thu Aug 11 19:20:45 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 11 Aug 2011 19:20:45 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <4E448D56.3060304@mozilla.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+	<CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+	<4E447460.4030809@mozilla.com>
+	<EF367CAE-C191-4E40-8F34-3969604D9B89@mozilla.org>
+	<4E448D56.3060304@mozilla.com>
+Message-ID: <4E448DFD.5090202@mozilla.com>
+
+On 8/11/11 7:17 PM, Graydon Hoare wrote:
+> I wonder if we can get away with just saying that a *let* declaration
+> permits multiplicity, the same way it permits trailing optional
+> typarams; if this is truly the important case that's biting. It's
+> decidedly less work to support a declarator form:
+>
+> let x = 1, y = 2;
+>
+> than to add (even if re-adding) another tycon.
+
+Should log permit multiple values too?
+
+I don't see why adding the tycon back introduces so much complexity, to 
+be honest.
+
+Patrick
+
+From brendan at mozilla.org  Thu Aug 11 19:26:21 2011
+From: brendan at mozilla.org (Brendan Eich)
+Date: Thu, 11 Aug 2011 19:26:21 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <4E448DFD.5090202@mozilla.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+	<CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+	<4E447460.4030809@mozilla.com>
+	<EF367CAE-C191-4E40-8F34-3969604D9B89@mozilla.org>
+	<4E448D56.3060304@mozilla.com> <4E448DFD.5090202@mozilla.com>
+Message-ID: <BB9F0C71-BE11-48E9-9844-FDED1A699B9E@mozilla.org>
+
+On Aug 11, 2011, at 7:20 PM, Patrick Walton wrote:
+
+> On 8/11/11 7:17 PM, Graydon Hoare wrote:
+>> I wonder if we can get away with just saying that a *let* declaration
+>> permits multiplicity, the same way it permits trailing optional
+>> typarams; if this is truly the important case that's biting. It's
+>> decidedly less work to support a declarator form:
+>> 
+>> let x = 1, y = 2;
+>> 
+>> than to add (even if re-adding) another tycon.
+> 
+> Should log permit multiple values too?
+> 
+> I don't see why adding the tycon back introduces so much complexity, to be honest.
+
+Right, wasn't it just another case in several alts?
+
+We should take one for the team of users, who otherwise have to multiply their record declarations beyond necessity if tuples would do. I'm speaking from relative ignorance here, so please be gentle if my many/few summary judgment is wrong.
+
+/be
+
+From msullivan at mozilla.com  Thu Aug 11 19:30:20 2011
+From: msullivan at mozilla.com (Michael Sullivan)
+Date: Thu, 11 Aug 2011 19:30:20 -0700 (PDT)
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <4E44844E.9050400@mozilla.com>
+Message-ID: <1922807277.168371.1313116220764.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+> Per a conversation with Brendan, it occurred to us that the main
+> problem
+> may be the ugliness of the access syntax; x._0 doesn't read too
+> nicely.
+My opinion is that we should bring back tuples but that the standard way to access the elements should be destructuring let. There are a bunch of little cases where it is nice to not need to name your fields. My biggest example is when you want to use an if or a case as an expression that returns multiple values. I don't really care about ugliness of direct tuple field access; you generally shouldn't be doing it!
+
+> We could do x[0] perhaps (with typeck ensuring that what's inside
+> brackets is a constant), or x#0 per Standard ML, or even special case
+> ".fst" and ".snd" for the first couple of elements...
+
+Standard ML does "#1 x". It's even uglier than what rust does since you probably need to parenthesize it. It's also very rarely used. #n is a function that can be used in a first class manner, and in my experience it is essentially only used when it is being passed to a higher-order function. (For example, "map #1 xs" to build up a list of the first elements of each tuple in a list of tuples.) When you want to access the elements directly, you do a let binding.
+
+I'd be perfectly happy with reintroducing lambdas and not having any way to access them other than let binding (although this is probably a minority viewpoint). In my experience, wanting to access tuple elements without let binding them out is usually a pretty good sign that you should be using a record instead. (Haskell doesn't provide any way to pull the nth element out of an arbitrary tuple other than pattern matching, although it does provide "fst" and "snd" functions in the Prelude that work on pairs.)
+
+-sully
+
+From graydon at mozilla.com  Thu Aug 11 19:38:05 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 11 Aug 2011 19:38:05 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <4E448DFD.5090202@mozilla.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+	<CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+	<4E447460.4030809@mozilla.com>
+	<EF367CAE-C191-4E40-8F34-3969604D9B89@mozilla.org>
+	<4E448D56.3060304@mozilla.com> <4E448DFD.5090202@mozilla.com>
+Message-ID: <4E44920D.5020304@mozilla.com>
+
+On 11/08/2011 7:20 PM, Patrick Walton wrote:
+
+> Should log permit multiple values too?
+
+I get the feeling log is going to turn into a macro, with a version that 
+is combined with #fmt. But this is just a guess.
+
+> I don't see why adding the tycon back introduces so much complexity, to
+> be honest.
+
+It's 3 new AST nodes (an expr form, a type form, a pattern form) as well 
+as a new ty::t node, a new case in every stage in the compiler that 
+interacts with any of those, and new parsing logic in each of those 
+grammars to handle disambiguating comma in other contexts.
+
+More significant than the amount-of-work to do it, is the ongoing 
+(slight) cognitive cost to all users. It adds these cases to everyone 
+who has to think about the language, tool it, write it, etc. That's the 
+complexity I'm more concerned about. I can hack up the code if need be.
+
+We decided the cost-savings argument overruled the convenience argument 
+last time.
+
+-Graydon
+
+From pwalton at mozilla.com  Thu Aug 11 19:46:31 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 11 Aug 2011 19:46:31 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <4E44920D.5020304@mozilla.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+	<CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+	<4E447460.4030809@mozilla.com>
+	<EF367CAE-C191-4E40-8F34-3969604D9B89@mozilla.org>
+	<4E448D56.3060304@mozilla.com> <4E448DFD.5090202@mozilla.com>
+	<4E44920D.5020304@mozilla.com>
+Message-ID: <4E449407.9010504@mozilla.com>
+
+On 8/11/11 7:38 PM, Graydon Hoare wrote:
+> More significant than the amount-of-work to do it, is the ongoing
+> (slight) cognitive cost to all users. It adds these cases to everyone
+> who has to think about the language, tool it, write it, etc. That's the
+> complexity I'm more concerned about. I can hack up the code if need be.
+
+I think these costs are minimal, but it's up to you.
+
+Patrick
+
+From pwalton at mozilla.com  Thu Aug 11 20:53:46 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 11 Aug 2011 20:53:46 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <4E448D56.3060304@mozilla.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+	<CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+	<4E447460.4030809@mozilla.com>
+	<EF367CAE-C191-4E40-8F34-3969604D9B89@mozilla.org>
+	<4E448D56.3060304@mozilla.com>
+Message-ID: <4E44A3CA.20600@mozilla.com>
+
+On 8/11/11 7:17 PM, Graydon Hoare wrote:
+> since a naked-comma-makes-a-tuple would make situations like function
+> argument lists ambiguous. We'd be adding a mode to the parser where it
+> "knows" it's inside an simple-paren pair and should consider comma to
+> mean tuple-formation. Unless you know a different trick.
+
+Python seems to solve this; going to dig through the source a little bit 
+to see what it does unless an experienced Pythonista speaks up :)
+
+Patrick
+
+From dherman at mozilla.com  Thu Aug 11 22:25:24 2011
+From: dherman at mozilla.com (David Herman)
+Date: Thu, 11 Aug 2011 22:25:24 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+	<CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+Message-ID: <4C28C264-25A9-4FB1-8305-68E3D773EA2A@mozilla.com>
+
+> I still think this was a good decision. With the exception of the
+> zip/unzip functions, all the code I touched when removing tuples got
+> more readable in the process. Pure, abstract pairs / triples of things
+> are rare. Usually, the fields have clear roles, and it is beneficial
+> to name them. 'val._0' does not tell you what you're getting, and I
+> found myself constantly looking up the order of the fields in tuples,
+> even those returned by functions I wrote myself.
+
+So you acknowledge that zip/unzip are more readable with tuples, but you feel that in many other cases records are preferable when it could become hard to remember which element is which. I agree! But this doesn't argue against having tuples in the language, it argues against using tuples when a record would be preferable.
+
+Dave
+
+
+From dherman at mozilla.com  Thu Aug 11 22:28:37 2011
+From: dherman at mozilla.com (David Herman)
+Date: Thu, 11 Aug 2011 22:28:37 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <4E44920D.5020304@mozilla.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+	<CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+	<4E447460.4030809@mozilla.com>
+	<EF367CAE-C191-4E40-8F34-3969604D9B89@mozilla.org>
+	<4E448D56.3060304@mozilla.com> <4E448DFD.5090202@mozilla.com>
+	<4E44920D.5020304@mozilla.com>
+Message-ID: <F4630FE2-6FC5-49A7-A8CE-A1BFB8B03E97@mozilla.com>
+
+>> I don't see why adding the tycon back introduces so much complexity, to
+>> be honest.
+> 
+> It's 3 new AST nodes (an expr form, a type form, a pattern form) as well as a new ty::t node, a new case in every stage in the compiler that interacts with any of those, and new parsing logic in each of those grammars to handle disambiguating comma in other contexts.
+> 
+> More significant than the amount-of-work to do it, is the ongoing (slight) cognitive cost to all users. It adds these cases to everyone who has to think about the language, tool it, write it, etc. That's the complexity I'm more concerned about. I can hack up the code if need be.
+> 
+> We decided the cost-savings argument overruled the convenience argument last time.
+
+I don't agree. Tuples are familiar from many other languages, and not just egghead languages. Python, for example. And there's very little cognitive load: they're just structs but with anonymous fields. That's pretty simple.
+
+In the bigger picture, Rust has so many more complex features that the complaint that tuples strain the complexity budget just doesn't sit right with me.
+
+Dave
+
+
+From dherman at mozilla.com  Thu Aug 11 22:31:40 2011
+From: dherman at mozilla.com (David Herman)
+Date: Thu, 11 Aug 2011 22:31:40 -0700
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <1922807277.168371.1313116220764.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+References: <1922807277.168371.1313116220764.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+Message-ID: <DD237D80-D2C5-44A7-9D6E-30A0E03F1B55@mozilla.com>
+
+> My opinion is that we should bring back tuples but that the standard way to access the elements should be destructuring let.
+
+This seems reasonable to me, except you'd want to allow destructuring tuples anywhere patterns are allowed (e.g., function parameters, alt, etc).
+
+> Standard ML does "#1 x". It's even uglier than what rust does since you probably need to parenthesize it. It's also very rarely used. #n is a function that can be used in a first class manner, and in my experience it is essentially only used when it is being passed to a higher-order function. (For example, "map #1 xs" to build up a list of the first elements of each tuple in a list of tuples.) When you want to access the elements directly, you do a let binding.
+> 
+> I'd be perfectly happy with reintroducing lambdas and not having any way to access them other than let binding (although this is probably a minority viewpoint). In my experience, wanting to access tuple elements without let binding them out is usually a pretty good sign that you should be using a record instead. (Haskell doesn't provide any way to pull the nth element out of an arbitrary tuple other than pattern matching, although it does provide "fst" and "snd" functions in the Prelude that work on pairs.)
+
+Again, totally reasonable. And users could always write their own tuple-destructuring functions if they *wanted* to (at least for any given tuple size), but by not providing these in the standard library we'd be telegraphing the message "a record might be preferable here."
+
+Dave
+
+
+From marijnh at gmail.com  Fri Aug 12 00:41:11 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Fri, 12 Aug 2011 09:41:11 +0200
+Subject: [rust-dev] Can we have our tuples back?
+In-Reply-To: <4E448D56.3060304@mozilla.com>
+References: <4E3C1690.10904@mozilla.com>
+	<F8C68BAF-9152-4260-868F-301A88DF2699@mozilla.com>
+	<4E43161C.8050303@mozilla.com>
+	<CAJnHWXvOb_ND7xW6hWCoONgk7FXKj_LuXpdvLESoAy_JQQw-3g@mail.gmail.com>
+	<4E447460.4030809@mozilla.com>
+	<EF367CAE-C191-4E40-8F34-3969604D9B89@mozilla.org>
+	<4E448D56.3060304@mozilla.com>
+Message-ID: <CAJnHWXtKseRoL1-_eDL6YEbKN-jpYrK8BnZ2FAcorNsB36M7RA@mail.gmail.com>
+
+> ?let x = 1, y = 2;
+
+I guess no one got the memo, but this already works.
+
+From pwalton at mozilla.com  Sat Aug 13 12:16:47 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 13 Aug 2011 12:16:47 -0700
+Subject: [rust-dev] Dynamically sized frames and GC
+Message-ID: <4E46CD9F.9020007@mozilla.com>
+
+So it turns out that dynamically-sized frames are quite tricky to get 
+right with GC. Essentially, when crawling the stack, the GC needs to 
+rerun all of the dynamic size and alignment calculations in order to 
+determine the layout of the frame so that it can find the roots. LLVM 
+has no support for this.
+
+Note that this problem is similar to the issue with dynamically-sized 
+frames and stack growth.
+
+There are different ways to handle this problem (monomorphization being 
+an especially attractive one, I think), but it seems to me that the 
+simplest solution for a 0.1 release to just have GC bail out when it 
+discovers a dynamically-sized frame on the stack. Is this okay with others?
+
+Patrick
+
+From marijnh at gmail.com  Sat Aug 13 12:47:35 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 13 Aug 2011 21:47:35 +0200
+Subject: [rust-dev] Dynamically sized frames and GC
+In-Reply-To: <4E46CD9F.9020007@mozilla.com>
+References: <4E46CD9F.9020007@mozilla.com>
+Message-ID: <CAJnHWXsyjhkW45qsE02T+i+H87+fpWs-pCsuv_S2Z=eQbukO_w@mail.gmail.com>
+
+> There are different ways to handle this problem (monomorphization being an
+> especially attractive one, I think), but it seems to me that the simplest
+> solution for a 0.1 release to just have GC bail out when it discovers a
+> dynamically-sized frame on the stack. Is this okay with others?
+
+Where bailing out means it simply allocates more memory and doesn't
+collect anything? I can imaging a long-running computation inside some
+generic function 'leaking' until it runs out of memory. Does every
+generic have a dynamically sized frame or only those who create locals
+of parameterized variables? I agree that for 0.1 we can probably live
+with this but it does seem like something that we can expect to trip
+up a few users.
+
+From pwalton at mozilla.com  Sat Aug 13 12:52:46 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sat, 13 Aug 2011 12:52:46 -0700
+Subject: [rust-dev] Dynamically sized frames and GC
+In-Reply-To: <CAJnHWXsyjhkW45qsE02T+i+H87+fpWs-pCsuv_S2Z=eQbukO_w@mail.gmail.com>
+References: <4E46CD9F.9020007@mozilla.com>
+	<CAJnHWXsyjhkW45qsE02T+i+H87+fpWs-pCsuv_S2Z=eQbukO_w@mail.gmail.com>
+Message-ID: <4E46D60E.9050001@mozilla.com>
+
+On 08/13/2011 12:47 PM, Marijn Haverbeke wrote:
+> Where bailing out means it simply allocates more memory and doesn't
+> collect anything? I can imaging a long-running computation inside some
+> generic function 'leaking' until it runs out of memory.
+
+Yup, it can definitely leak. We need to solve this problem for real at 
+some point.
+
+> Does every generic have a dynamically sized frame or only those who create locals
+> of parameterized variables?
+
+Only the latter. We'd need to add an analysis pass that determines 
+whether the frame is dynamically-sized.
+
+Patrick
+
+
+
+From niko at alum.mit.edu  Mon Aug 15 07:41:47 2011
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Mon, 15 Aug 2011 16:41:47 +0200
+Subject: [rust-dev] pointers and values in rust
+Message-ID: <4E49302B.5080900@alum.mit.edu>
+
+Hello,
+
+I am taking some time to experiment with Rust and try to get a better 
+understanding of the syntax and semantics.  I have been experimenting 
+with small programs and just wanted to check and see if I am 
+understanding things correctly.
+
+* If you have a variable of type "T" (for example, "int" or "vec[int]"), 
+this is a value type.  That is, the value itself is generally immutable, 
+with the exception of objects and records, which may have mutable 
+fields.  This is essentially the same as in O'Caml.
+
+* A box type like @T is an instance of type T that lives in the heap.  
+The value in the box is immutable.  To make it mutable, you do @mutable T.
+
+* An alias type like &T is a pointer to a value of type T.  This value 
+must live either on the stack or in the field of a record.  It may point 
+to a mutable location or a non-mutable location.
+
+* A mutable alias type like "& mutable T" is a pointer to a mutable 
+location of type T.
+
+* Equality is "deep" equality for values of type "T", "&T", "*T", 
+pointer equality for mutable values like "@mutable T" or records with 
+mutable fields.
+
+In particular, I am trying to understand the precise intention beyond 
+alias types (&T).  Is it correct that an alias type points to some 
+variable whose address is guaranteed to outlive the current function? 
+The compiler presumably wants to be able to copy values of type &T 
+without worrying about reference counts or garbage collection? This 
+would explain why a variable "x" of type "@T" cannot be used as the 
+value for a parameter of type "&T", and one must write "*x" instead, 
+because "*x" makes a temporary copy of the value at the time of the call.
+
+I haven't begun looking at unique types like "~T" yet, but I know they 
+exist.  Not sure if there are other type variations I am not aware of.
+
+I haven't explored memory management much in my own tests, but from 
+reading threads etc
+
+
+Niko
+
+From niko at alum.mit.edu  Mon Aug 15 07:52:24 2011
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Mon, 15 Aug 2011 16:52:24 +0200
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E49302B.5080900@alum.mit.edu>
+References: <4E49302B.5080900@alum.mit.edu>
+Message-ID: <4E4932A8.7090906@alum.mit.edu>
+
+Niko Matsakis wrote:
+> I haven't explored memory management much in my own tests, but from 
+> reading threads etc 
+Sorry, I forgot to finish this paragraph.  I was going to write that 
+"from reading threads I believe that non-boxed values are (conceptually) 
+deallocated when the variables go out of scope (the implementation may 
+internally use reference counters, e.g., for vectors, but this is 
+invisible to the user).  Boxed values (@T) are deallocated when their 
+reference count reaches zero."
+
+
+Niko
+
+From graydon at mozilla.com  Mon Aug 15 11:13:40 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 15 Aug 2011 11:13:40 -0700
+Subject: [rust-dev] Dynamically sized frames and GC
+In-Reply-To: <4E46D60E.9050001@mozilla.com>
+References: <4E46CD9F.9020007@mozilla.com>	<CAJnHWXsyjhkW45qsE02T+i+H87+fpWs-pCsuv_S2Z=eQbukO_w@mail.gmail.com>
+	<4E46D60E.9050001@mozilla.com>
+Message-ID: <4E4961D4.7020905@mozilla.com>
+
+On 11-08-13 12:52 PM, Patrick Walton wrote:
+> On 08/13/2011 12:47 PM, Marijn Haverbeke wrote:
+>> Where bailing out means it simply allocates more memory and doesn't
+>> collect anything? I can imaging a long-running computation inside some
+>> generic function 'leaking' until it runs out of memory.
+>
+> Yup, it can definitely leak. We need to solve this problem for real at
+> some point.
+>
+>> Does every generic have a dynamically sized frame or only those who
+>> create locals
+>> of parameterized variables?
+>
+> Only the latter. We'd need to add an analysis pass that determines
+> whether the frame is dynamically-sized.
+
+Two slightly more appealing (to me) solutions:
+
+  (1) The stack-growth work being done has, IIRC, a "parallel-stack"
+      stack for dynamic allocas, simply to address this sort of ugly;
+      likely we can make sure that we're using this for dynamic allocas
+      by the time we ship, so you don't have "dynamic frames" per se.
+
+  (2) Possibly just ban dynamic allocas. It's not clear to me that we
+      need them. Can't take dynamic args by value already; maybe dynamic
+      locals aren't needed either. In the limit you can always make a
+      local ~T, not as efficient but at least it won't leak.
+
+For now I'd be happy to see a gc that can collect even the simplest 
+cyclic objects; it can give up on confusing frames if that keeps you moving.
+
+-Graydon
+
+From marijnh at gmail.com  Tue Aug 16 04:50:21 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 16 Aug 2011 13:50:21 +0200
+Subject: [rust-dev] Local let scope overhaul
+Message-ID: <CAJnHWXv_c-1sbTqkQvu7u92UV8CL32ECA4D4Qv72MZ+CVq-t=Q@mail.gmail.com>
+
+I just pushed something that will make the following program valid:
+
+    let x = 10;
+
+From marijnh at gmail.com  Tue Aug 16 04:59:46 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Tue, 16 Aug 2011 13:59:46 +0200
+Subject: [rust-dev] Local let scope overhaul
+In-Reply-To: <CAJnHWXv_c-1sbTqkQvu7u92UV8CL32ECA4D4Qv72MZ+CVq-t=Q@mail.gmail.com>
+References: <CAJnHWXv_c-1sbTqkQvu7u92UV8CL32ECA4D4Qv72MZ+CVq-t=Q@mail.gmail.com>
+Message-ID: <CAJnHWXucS54E5Mm3Wf-bEaPsfGnVjGWRUA4LvmdfWM55ZXbgkQ@mail.gmail.com>
+
+[Thank you, gmail send hotkey. So, as I was saying...]
+
+I just pushed something that will make the following program valid:
+
+    fn main() {
+     ? ?let x = 10;
+        let x = x + 10;
+        log x;
+    }
+
+let bindings now have a scope starting from their definition, and may
+shadow each other (you'll still get an unused variable warning if you
+shadow something without using it first). My main motivation was to
+make destructuring more powerful -- you can't assign to arbitrary
+lvalues in destructuring patterns, only introduce new variables. So,
+for example, with trans' result records, you can now (after next
+snapshot) do...
+
+    let {bcx, val} = trans_something(bcx, something);
+    let {bcx, _} = trans_something_else(bcx, val);
+
+... without making up new variable names at every assignment.
+
+There was a bug in which sully expressed the expectation that things
+work this way (https://github.com/graydon/rust/issues/649), an no one
+objected. If someone wants to object post-hoc, now is the time.
+
+Also, since the other passes use the results of resolve, I assumed
+that just changing resolve would be enough (and this seems to be the
+case in practice). If you can think of another pass that might be
+affected by this change, let me know.
+
+(As an aside, I really wouldn't mind if more people dumped summaries
+of semantic changes they make to the list like this. I have only a
+vague idea what is going on with move semantics, kinds, and the task
+system at the moment. I'd like to know, but I don't want to constantly
+pester individual people with questions.)
+
+Best,
+Marijn
+
+From eholk at mozilla.com  Tue Aug 16 10:00:18 2011
+From: eholk at mozilla.com (Eric Holk)
+Date: Tue, 16 Aug 2011 10:00:18 -0700 (PDT)
+Subject: [rust-dev] Task/Comm System Updates
+In-Reply-To: <1978711580.211387.1313512940325.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+Message-ID: <1263434855.211766.1313514018026.JavaMail.root@zimbra1.shared.sjc1.mozilla.com>
+
+I've been spending the last week or so working on moving the task and communication system to a library (Issue #531). Yesterday I committed changes that remove support for the spawn primitive and the task type from the compiler. Before long I'll do the same with the send and receive operators, as well as the port and chan related primitives. Here's a summary of the changes, how to use the new system, things that will be changing, and caveats.
+
+ * Spawn has been removed. Use std::task::_spawn instead, although this will be renamed to std::task::spawn soon. Spawn takes a thunk, so what previously would have been `spawn foo(1, 2, 3)` will usually become `_spawn(bind foo(1, 2, 3))`.
+
+ * task::join is replaced with task::join_id. task::join will come back soon though.
+
+ * Ports are replaced with the std::comm::_port data type (which will be renamed port). You make one using std::comm::mk_port[T](). Ports are currently objects (although this will be changing too), so you receive from a port by doing `p.recv()`.
+
+ * Chans have been replaced with the std::comm::_chan data type (again, to be renamed just chan). You make one from a port by doing `p.mk_chan()`. Send using std::comm::send, such as `send(c, 42)`. Chans are represented internally as a pair of a task id and a port id, so they're really easy to send over channels now.
+
+ * Chans and ports have a kind restriction, they can only be made for unique kinded types. Send uses move-mode, which deinitializes whatever you send. This means you need to make sure to copy the thing you're sending if you want to use it again. Fortunately, in practice we seem to mostly send temporaries, so this isn't a big deal.
+
+ * Spawn should have a kind restriction but does not currently. Be careful what you put in its closure. In particular, if you close over strings, you will probably leak memory. For this cause, use [u8] instead.
+
+ * Overall, the system feels more robust now. A lot of weird memory issues I had been seeing before seem to have basically disappeared (largely due to move-mode and the kind restriction, I suspect).
+
+ * There's currently a race condition in task::join_id that means you can't reliably get the exit status if you join a task after it has already terminated. This shows up most often as run-pass tests failing but not being detected or compile-fail tests successfully failing but reporting success instead. Fortunately, when something goes wrong, we leak memory which other parts of our runtime catch, so a failure still fails the test run.
+
+ * A few parts of the system are a bit clunky (for example, prefixing everything with underscores). I'll be working on making this look a little nicer. Since it's in a library and easy enough to do this, I'll try to maintain backward compatibility so we don't have to rewrite all our task/comm code every time I make a change. The old versions will probably be marked as deprecated somehow (#[deprecated]?) and then removed at some point.
+
+Please try out the new system, ask questions, make comments, etc.
+
+-Eric
+
+From paul.stansifer at gmail.com  Wed Aug 17 15:31:58 2011
+From: paul.stansifer at gmail.com (Paul Stansifer)
+Date: Wed, 17 Aug 2011 15:31:58 -0700
+Subject: [rust-dev] a new Rust macro syntax
+Message-ID: <CA+VxxZdAi8vwk-41Yeapz_NCgcpZz-4gUn2=zUnuGD6hACtsHw@mail.gmail.com>
+
+Patrick proposed a new syntax for macro invocations. Summary from
+https://github.com/graydon/rust/wiki/Syntax-extension:
+
+Expr ? "#" Path BalancedLexemes
+BalancedLexemes ? "(" BalancedLexemes * ")"
+BalancedLexemes ? "[" BalancedLexemes * "]"
+BalancedLexemes ? "{" BalancedLexemes * "}"
+BalancedLexemes ? AnyOtherLexeme
+
+The macro system will need a way to call back into the parser to turn the
+lexemes into actual syntax. This is non-trivial, especially ergonomics-wise,
+but should be doable, and would allow for a great deal of flexibility in
+macro definition.
+
+Interleaving parsing and expansion makes it a bold plan. I can't possibly
+get it done before I have to go. But what do people think about this idea in
+principle?
+
+We previously rejected such interleaving because they would make external
+tools impossible to write. But, with the requirement of balanced delimiters,
+it's always possible to find the end of a macro invocation. The invocation
+itself is a syntactic black hole, but this would be the case anyways (we
+would lose the ability to identify where the expressions are in the macro
+arguments, but that doesn't really matter, since tools can't use that
+information anyways). The best-effort syntax highlighting Emacs and Vim do
+would usually do the right thing.
+
+Any immediate thoughts?
+
+Thanks for the use of your brains,
+Paul
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110817/2d09d20c/attachment.html>
+
+From pwalton at mozilla.com  Thu Aug 18 17:58:40 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Thu, 18 Aug 2011 17:58:40 -0700
+Subject: [rust-dev] LLVM patch for gcroot intrinsics
+Message-ID: <4E4DB540.30305@mozilla.com>
+
+Here's a patch to LLVM that makes Rust build again at -O0 (issue #836 on 
+our bug tracker). Rafael, could you upstream it when you get a chance?
+
+Thanks!
+
+Patrick
+
+
+Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
+===================================================================
+--- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(revision 137913)
++++ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(working copy)
+@@ -4957,11 +4957,16 @@
+    }
+    case Intrinsic::gcroot:
+      if (GFI) {
+-      const Value *Alloca = I.getArgOperand(0);
+-      const Constant *TypeMap = cast<Constant>(I.getArgOperand(1));
++      const Value *Alloca = I.getArgOperand(0)->stripPointerCasts();
++      assert(isa<AllocaInst>(Alloca) && "First argument to gcroot() 
+must be "
++             "an alloca or a bitcast of one!");
+
++      const Value *TypeMap = I.getArgOperand(1);
++      assert(isa<Constant>(TypeMap) && "Second argument to gcroot() 
+must be "
++             "a constant!");
++
+        FrameIndexSDNode *FI = 
+cast<FrameIndexSDNode>(getValue(Alloca).getNode());
+-      GFI->addStackRoot(FI->getIndex(), TypeMap);
++      GFI->addStackRoot(FI->getIndex(), cast<Constant>(TypeMap));
+      }
+      return 0;
+    case Intrinsic::gcread:
+
+From graydon at mozilla.com  Thu Aug 18 22:20:32 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 18 Aug 2011 22:20:32 -0700
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E49302B.5080900@alum.mit.edu>
+References: <4E49302B.5080900@alum.mit.edu>
+Message-ID: <4E4DF2A0.9050905@mozilla.com>
+
+On 15/08/2011 7:41 AM, Niko Matsakis wrote:
+
+> I am taking some time to experiment with Rust and try to get a better
+> understanding of the syntax and semantics. I have been experimenting
+> with small programs and just wanted to check and see if I am
+> understanding things correctly.
+
+Glad to hear your questions! Sorry I've been slow in responding to this.
+
+> * If you have a variable of type "T" (for example, "int" or "vec[int]"),
+> this is a value type. That is, the value itself is generally immutable,
+> with the exception of objects and records, which may have mutable
+> fields. This is essentially the same as in O'Caml.
+
+More or less. We're in the likely to change the 'mutable' 
+field-qualifier to be a full type constructor, for a 
+mutable-cell-that-holds-T, but the distinction is mostly fine detail. It 
+means you'll be able to write "cell 10" to construct a 
+mutable-cell-of-int rather than only fields-within-records or such. 
+Hopefully simplifies things. We've flip-flopped on this issue a few 
+times already.
+
+Also note that vec[int] has gone away from the compiler; we've been 
+changing from always-shared-and-refcounted vectors to more explicitly 
+differentiated vectors: those with uniquely-owned components and/or 
+possibly-shared components. Vectors are somewhat of a special case 
+though. For the rest of this email, let's try talking about non-vectors 
+-- say, integers, tuples, records, etc. -- as it makes the topic a bit 
+clearer :)
+
+> * A box type like @T is an instance of type T that lives in the heap.
+> The value in the box is immutable. To make it mutable, you do @mutable T.
+
+Correct. More specifically @T is a *shared* boxed T. It has a refcount 
+and/or a word of GC header, such that multiple @T variables can point to 
+the same shared heap allocation.
+
+We are also in the process of implementing a *unique* box type ~T where 
+there is always exactly one ~T variable pointing to the heap allocation.
+
+> * An alias type like &T is a pointer to a value of type T. This value
+> must live either on the stack or in the field of a record. It may point
+> to a mutable location or a non-mutable location.
+
+Correct. An alias can point to a stack-local, a field of a record, the 
+interior of a shared box ... any such place. But the compiler is obliged 
+to prove that the referent outlives the reference, or else reject 
+compiling the code that forms the alias.
+
+> * A mutable alias type like "& mutable T" is a pointer to a mutable
+> location of type T.
+
+Correct.
+
+> * Equality is "deep" equality for values of type "T", "&T", "*T",
+> pointer equality for mutable values like "@mutable T" or records with
+> mutable fields.
+
+Not quite. I think at present we're doing (or aiming to do) this:
+
+    T :  interior values, compare contents
+   ~T :  unique pointers, compare contents
+   @T :  shared pointers, compare pointer-value
+   *T :  unsafe pointers, compare pointer-value
+   &T :  alias values, compare however aliased type compares
+
+> In particular, I am trying to understand the precise intention beyond
+> alias types (&T). Is it correct that an alias type points to some
+> variable whose address is guaranteed to outlive the current function?
+
+Yes.
+
+> The compiler presumably wants to be able to copy values of type &T
+> without worrying about reference counts or garbage collection?
+
+Yes. The & type is for passing parameters by-pointer when you really 
+only intend to "loan access to the referent" to the callee, not actually 
+give ownership (shared or otherwise).
+
+> This
+> would explain why a variable "x" of type "@T" cannot be used as the
+> value for a parameter of type "&T", and one must write "*x" instead,
+> because "*x" makes a temporary copy of the value at the time of the call.
+
+It doesn't make a temporary copy. It just dereferences the shared @ 
+pointer, so the alias points to the interior of the box. Otherwise the 
+alias would point to the @ itself.
+
+For example, all this code is correct (if slightly odd):
+
+fn takes_a_box_alias(x: &@int) { log *x; }
+
+fn takes_an_int_alias(x: &int) { log x; }
+
+fn main() {
+     let y = @10;
+     takes_a_box_alias(y);
+     takes_an_int_alias(*y);
+}
+
+> I haven't begun looking at unique types like "~T" yet, but I know they
+> exist. Not sure if there are other type variations I am not aware of.
+
+No, these are all the pointer types.
+
+> I haven't explored memory management much in my own tests, but from
+> reading threads I believe that non-boxed values are (conceptually)
+ > deallocated when the variables go out of scope (the implementation
+ > may internally use reference counters, e.g., for vectors, but this
+ > is invisible to the user).  Boxed values (@T) are deallocated when
+ > their reference count reaches zero."
+
+More or less. Interior (allocated-in-frame) variables, yes, they die 
+when they go out of scope.
+
+We initially based the @ box type entirely on reference counting, with 
+that being a mandatory part of the semantics to ensure proper top-down 
+destruction order on values with destructors. We initially prohibited 
+cycles (this was before publishing anything), then later relaxed that 
+restriction and tried stratifying types into maybe-cyclic and 
+definitely-acyclic (with GC applied only to the former). There are still 
+vestiges of this distinction in the runtime interface.
+
+Now that we have unique boxes and a kind system that differentiates 
+unique types from shared (rather than maybe-cyclic from 
+definitely-acyclic) we're likely to make the refcounting/GC distinction 
+within the shared kind more vague, as you say, and just require that 
+types carrying destructors ("resources") don't inhabit the shared kind, 
+so there's always a single owner and an unambiguous top-down destruction 
+sequence on *them*. Then shared boxes may wind up being any mix of 
+refcounting and general cycle-aware GC; I expect a few of the project 
+members will make a branch where those boxes are 100% GC'ed to see how 
+it performs, we'll have to see.
+
+Hth, feel free to ask followup questions.
+
+-Graydon
+
+From marijnh at gmail.com  Fri Aug 19 15:48:53 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Sat, 20 Aug 2011 00:48:53 +0200
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <4E441F18.2000200@mozilla.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+	<4E369348.6060003@gmail.com>
+	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>
+	<4E36B3EE.9070707@gmail.com>
+	<CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+	<4E3764E5.6040201@mozilla.com> <4E39D2E3.7020807@mozilla.com>
+	<59524C03-4464-4D05-A7BB-6FDA69C7BB64@mozilla.com>
+	<4E43224C.9050304@mozilla.com>
+	<CAB-YmG3+AN2yaHtjQqEqS4m9s2YR0h-OX=BtPqOHeL=fNnQOfQ@mail.gmail.com>
+	<4E441F18.2000200@mozilla.com>
+Message-ID: <CAJnHWXuaAjmGT4vHHiH4YO5zWruS_f01uzrixkHXZ9vLkW-7Fg@mail.gmail.com>
+
+So, I've been working hard to undermine tail calls. There's a pull
+request at https://github.com/graydon/rust/pull/849 that removes some
+of the tail-call-inspired awkwardness from our calling convention. I
+have two reasons for wanting to go in this direction:
+
+ - The alias-optimizing issues discussed earlier in this thread
+
+ - The fact that, to have a sane ivec representation, the objects
+needs pointers into themselves. We were passing them by value, which
+removes them from llvm's memory model (they might be in registers),
+which makes it impossible to maintain internal pointers.
+
+The changes makes the compiler 5% smaller, and both patches remove
+more code than they add, so in terms of complexity, this is a definite
+win.
+
+If you have reasons to object to this patch that go beyond "but in
+<garbage-collected language of choice> tail calls are very important",
+let's hear them. Also, if LLVM allows, I'll probably work on
+supporting a limited form of tail calls (can only take
+garbage-collected values, immediate values, and
+aliases-passed-to-the-caller as arguments), which should cover a lot
+of sane cases without putting a heavy toll on our calling convention.
+
+From dherman at mozilla.com  Mon Aug 22 14:19:44 2011
+From: dherman at mozilla.com (David Herman)
+Date: Mon, 22 Aug 2011 14:19:44 -0700
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <CAJnHWXuaAjmGT4vHHiH4YO5zWruS_f01uzrixkHXZ9vLkW-7Fg@mail.gmail.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+	<4E369348.6060003@gmail.com>
+	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>
+	<4E36B3EE.9070707@gmail.com>
+	<CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+	<4E3764E5.6040201@mozilla.com> <4E39D2E3.7020807@mozilla.com>
+	<59524C03-4464-4D05-A7BB-6FDA69C7BB64@mozilla.com>
+	<4E43224C.9050304@mozilla.com>
+	<CAB-YmG3+AN2yaHtjQqEqS4m9s2YR0h-OX=BtPqOHeL=fNnQOfQ@mail.gmail.com>
+	<4E441F18.2000200@mozilla.com>
+	<CAJnHWXuaAjmGT4vHHiH4YO5zWruS_f01uzrixkHXZ9vLkW-7Fg@mail.gmail.com>
+Message-ID: <06E178AA-DE24-4BEB-BBA7-5A8769D55B5C@mozilla.com>
+
+I understand that tail calls aren't working with the current state of things, and I won't get in the way. Fair warning: I am not promising I won't argue for bringing them back at some point in the future.
+
+> - The alias-optimizing issues discussed earlier in this thread
+
+I've been chatting with Patrick, and I still think it's conceivable that we could have an ABI where tail calls are "pay-as-you-go," i.e., where they don't incur a cost on every non-tail-call. As I said before, I think when the time is right, we should investigate whether GC works better than refcounting, at which point I definitely think we should reconsider tail calls.
+
+> The changes makes the compiler 5% smaller, and both patches remove
+> more code than they add, so in terms of complexity, this is a definite
+> win.
+
+Certainly it's a win in terms of development costs, but that doesn't mean it's a savings for the user. JFTR, I don't think we should be making decisions about removing features because of savings in the compiler.
+
+> If you have reasons to object to this patch that go beyond "but in
+> <garbage-collected language of choice> tail calls are very important",
+> let's hear them.
+
+Please don't mock or misconstrue the arguments of others if you aren't going to address them directly.
+
+Dave
+
+
+From dherman at mozilla.com  Tue Aug 23 14:38:47 2011
+From: dherman at mozilla.com (David Herman)
+Date: Tue, 23 Aug 2011 14:38:47 -0700
+Subject: [rust-dev] Are tail calls dispensable?
+In-Reply-To: <06E178AA-DE24-4BEB-BBA7-5A8769D55B5C@mozilla.com>
+References: <CAJnHWXv7Eb4RxBEmyP6hDbRUTTsdt=aRxmBG+Z_UDHoZhi7Wyg@mail.gmail.com>
+	<4E369348.6060003@gmail.com>
+	<CAJnHWXtTSsMng6jkmF6Nofwrhj-FAksUhSXA9nYrxYaci-Ph1A@mail.gmail.com>
+	<4E36B3EE.9070707@gmail.com>
+	<CAJnHWXs5-+dovgpagLnpp9+u7bQqe6-hJBdU_gKFbz7Zyb1kEg@mail.gmail.com>
+	<4E3764E5.6040201@mozilla.com> <4E39D2E3.7020807@mozilla.com>
+	<59524C03-4464-4D05-A7BB-6FDA69C7BB64@mozilla.com>
+	<4E43224C.9050304@mozilla.com>
+	<CAB-YmG3+AN2yaHtjQqEqS4m9s2YR0h-OX=BtPqOHeL=fNnQOfQ@mail.gmail.com>
+	<4E441F18.2000200@mozilla.com>
+	<CAJnHWXuaAjmGT4vHHiH4YO5zWruS_f01uzrixkHXZ9vLkW-7Fg@mail.gmail.com>
+	<06E178AA-DE24-4BEB-BBA7-5A8769D55B5C@mozilla.com>
+Message-ID: <3B29F230-AD3A-43C1-B4C2-0564A6EE87C2@mozilla.com>
+
+>> The changes makes the compiler 5% smaller, and both patches remove
+>> more code than they add, so in terms of complexity, this is a definite
+>> win.
+> 
+> Certainly it's a win in terms of development costs, but that doesn't mean it's a savings for the user. JFTR, I don't think we should be making decisions about removing features because of savings in the compiler.
+
+Oh, I misunderstood this point -- you probably meant 5% codegen savings, not 5% LOC savings. Yes, that's definitely important. Making ivecs always on the heap makes sense to me.
+
+Dave
+
+
+From niko at alum.mit.edu  Thu Aug 25 05:30:30 2011
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Thu, 25 Aug 2011 14:30:30 +0200
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E4DF2A0.9050905@mozilla.com>
+References: <4E49302B.5080900@alum.mit.edu> <4E4DF2A0.9050905@mozilla.com>
+Message-ID: <4E564066.4090107@alum.mit.edu>
+
+Thanks for the answers; mostly it all makes sense, but I have a few 
+follow-up questions.
+> Also note that vec[int] has gone away from the compiler; we've been 
+> changing from always-shared-and-refcounted vectors to more explicitly 
+> differentiated vectors: those with uniquely-owned components and/or 
+> possibly-shared components. Vectors are somewhat of a special case 
+> though. For the rest of this email, let's try talking about 
+> non-vectors -- say, integers, tuples, records, etc. -- as it makes the 
+> topic a bit clearer :)
+I don't quite follow the distinctions here.  How do I notate a vector 
+with uniquely-owned components? "vec[~T]" vs "vec[@T]"? Also, what is 
+the distinction between a "vec" and an "ivec"?
+>> * A box type like @T is an instance of type T that lives in the heap.
+>> The value in the box is immutable. To make it mutable, you do 
+>> @mutable T.
+> Correct. More specifically @T is a *shared* boxed T. It has a refcount 
+> and/or a word of GC header, such that multiple @T variables can point 
+> to the same shared heap allocation.
+>
+> We are also in the process of implementing a *unique* box type ~T 
+> where there is always exactly one ~T variable pointing to the heap 
+> allocation.
+What will be the syntax for working with this unique box type?
+>> * Equality is "deep" equality for values of type "T", "&T", "*T",
+>> pointer equality for mutable values like "@mutable T" or records with
+>> mutable fields.
+> Not quite. I think at present we're doing (or aiming to do) this:
+>
+>    T :  interior values, compare contents
+>   ~T :  unique pointers, compare contents
+>   @T :  shared pointers, compare pointer-value
+>   *T :  unsafe pointers, compare pointer-value
+> &T :  alias values, compare however aliased type compares
+This more-or-less corresponds to what I expected.  However, it's not 
+quite what I observed.  For example:
+
+     if @[1,2,3] == (@[1,2] + @[3]) {
+         stdout.write_line("TRUE");
+     }
+
+prints "TRUE".  I guess the pointers could be equal but it would be a 
+bit surprising to me.
+>> This would explain why a variable "x" of type "@T" cannot be used as the
+>> value for a parameter of type "&T", and one must write "*x" instead,
+>> because "*x" makes a temporary copy of the value at the time of the 
+>> call.
+> It doesn't make a temporary copy. It just dereferences the shared @ 
+> pointer, so the alias points to the interior of the box. Otherwise the 
+> alias would point to the @ itself.
+>
+> For example, all this code is correct (if slightly odd):
+>
+> fn takes_a_box_alias(x: &@int) { log *x; }
+>
+> fn takes_an_int_alias(x: &int) { log x; }
+>
+> fn main() {
+>     let y = @10;
+>     takes_a_box_alias(y);
+>     takes_an_int_alias(*y);
+> }
+So this clearly gets into the alias analysis discussion that I saw 
+earlier (and didn't fully follow, as I hadn't experimented much with 
+Rust yet).  In other words, changes to a mutable alias argument, may 
+affect the other alias parameters, possibly freeing interior values and 
+so forth.  Is there a summary of the current alias rules (intended or 
+implemented, as the case may be)?
+
+
+Niko
+
+
+
+From graydon at mozilla.com  Sun Aug 28 15:42:09 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 28 Aug 2011 15:42:09 -0700
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E564066.4090107@alum.mit.edu>
+References: <4E49302B.5080900@alum.mit.edu> <4E4DF2A0.9050905@mozilla.com>
+	<4E564066.4090107@alum.mit.edu>
+Message-ID: <4E5AC441.3000701@mozilla.com>
+
+On 25/08/2011 5:30 AM, Niko Matsakis wrote:
+
+> I don't quite follow the distinctions here. How do I notate a vector
+> with uniquely-owned components? "vec[~T]" vs "vec[@T]"? Also, what is
+> the distinction between a "vec" and an "ivec"?
+
+An 'ivec' is just an informal name we have been using during the gradual 
+conversion of vectors from default-shared to default-unique. When 
+complete -- and I think it's most useful to speak of what we're aiming 
+for, rather than the in-transition current state of affairs -- the idea 
+is that [] will be a unique type constructor (a pointer that uniquely 
+owns a storage vector in the heap) and if you want to make a shared 
+version, you apply a shared-box to it, like @[].
+
+The notations vec[T] for types and vec(a,b,c) for values have been 
+replaced, I believe, entirely with the more uniform and shorter 
+notations [T] for types and [a,b,c] for values.
+
+The components of a vector are *components*, not the vector itself. When 
+you place shared components in the vector, the vector remains uniquely 
+owned, but the components may point to shared values. This makes the 
+*kind* of the vector-of-shared things "shared", despite the vector type 
+constructor being a unique type constructor. If you keep all the 
+components (and components-of-components, all the way down) unique, then 
+the kind of the vector is "unique", and it can be transmitted over 
+channels or such. If there's any sharing in any substructure of a type, 
+it is of "shared" kind.
+
+In other words: individual type constructors may be unique or shared 
+(really only @ is shared) but *kind* judgments are recursive, defined 
+for a full type expression (and all its subexpressions), not just a 
+single term in it.
+
+>>> * A box type like @T is an instance of type T that lives in the heap.
+>>> The value in the box is immutable. To make it mutable, you do
+>>> @mutable T.
+>> Correct. More specifically @T is a *shared* boxed T. It has a refcount
+>> and/or a word of GC header, such that multiple @T variables can point
+>> to the same shared heap allocation.
+>>
+>> We are also in the process of implementing a *unique* box type ~T
+>> where there is always exactly one ~T variable pointing to the heap
+>> allocation.
+
+> What will be the syntax for working with this unique box type?
+
+Prefix ~ for a unique box, rather than @ for a shared box.
+
+The constructor is the same for type terms, expression terms and pattern 
+terms. That is, ~int is the type ~10, say, and will match with a pattern ~p.
+
+> This more-or-less corresponds to what I expected. However, it's not
+> quite what I observed. For example:
+>
+> if @[1,2,3] == (@[1,2] + @[3]) {
+> stdout.write_line("TRUE");
+> }
+>
+> prints "TRUE". I guess the pointers could be equal but it would be a bit
+> surprising to me.
+
+Yeah. That's probably a bug.
+
+> So this clearly gets into the alias analysis discussion that I saw
+> earlier (and didn't fully follow, as I hadn't experimented much with
+> Rust yet). In other words, changes to a mutable alias argument, may
+> affect the other alias parameters, possibly freeing interior values and
+> so forth. Is there a summary of the current alias rules (intended or
+> implemented, as the case may be)?
+
+I haven't written one up, no. Nor am I able to, as Marijn is largely in 
+charge of that feature, and possibly the only one who has the rules 
+fresh enough in his mind to elaborate them. He promises a section on 
+this in the manual :)
+
+Hth, sorry for the slow reply again. You ask good questions, that 
+require a little free time to answer precisely!
+
+-Graydon
+
+From graydon at mozilla.com  Sun Aug 28 15:47:19 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 28 Aug 2011 15:47:19 -0700
+Subject: [rust-dev] LLVM version bump to 138708
+Message-ID: <4E5AC577.4010908@mozilla.com>
+
+Please update your LLVMs. They moved headers around.
+
+-Graydon
+
+From pwalton at mozilla.com  Sun Aug 28 18:44:29 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Sun, 28 Aug 2011 18:44:29 -0700
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E5AC441.3000701@mozilla.com>
+References: <4E49302B.5080900@alum.mit.edu> <4E4DF2A0.9050905@mozilla.com>
+	<4E564066.4090107@alum.mit.edu> <4E5AC441.3000701@mozilla.com>
+Message-ID: <4E5AEEFD.7080804@mozilla.com>
+
+On 08/28/2011 03:42 PM, Graydon Hoare wrote:
+>> This more-or-less corresponds to what I expected. However, it's not
+>> quite what I observed. For example:
+>>
+>> if @[1,2,3] == (@[1,2] + @[3]) {
+>> stdout.write_line("TRUE");
+>> }
+>>
+>> prints "TRUE". I guess the pointers could be equal but it would be a bit
+>> surprising to me.
+>
+> Yeah. That's probably a bug.
+
+I thought == (and <, >) were supposed to be deep? That's how I 
+implemented them anyway.
+
+Patrick
+
+From graydon at mozilla.com  Sun Aug 28 19:10:20 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 28 Aug 2011 19:10:20 -0700
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E5AEEFD.7080804@mozilla.com>
+References: <4E49302B.5080900@alum.mit.edu> <4E4DF2A0.9050905@mozilla.com>
+	<4E564066.4090107@alum.mit.edu> <4E5AC441.3000701@mozilla.com>
+	<4E5AEEFD.7080804@mozilla.com>
+Message-ID: <4E5AF50C.80101@mozilla.com>
+
+On 28/08/2011 6:44 PM, Patrick Walton wrote:
+> On 08/28/2011 03:42 PM, Graydon Hoare wrote:
+>>> This more-or-less corresponds to what I expected. However, it's not
+>>> quite what I observed. For example:
+>>>
+>>> if @[1,2,3] == (@[1,2] + @[3]) {
+>>> stdout.write_line("TRUE");
+>>> }
+>>>
+>>> prints "TRUE". I guess the pointers could be equal but it would be a bit
+>>> surprising to me.
+>>
+>> Yeah. That's probably a bug.
+>
+> I thought == (and <, >) were supposed to be deep? That's how I
+> implemented them anyway.
+
+Non on shared boxes. They might be cyclic, so it might not terminate.
+
+We're no longer statically differentiating the cyclic from the acyclic.
+
+-Graydon
+
+
+
+From niko at alum.mit.edu  Sun Aug 28 23:31:40 2011
+From: niko at alum.mit.edu (Niko Matsakis)
+Date: Mon, 29 Aug 2011 08:31:40 +0200
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E5AC441.3000701@mozilla.com>
+References: <4E49302B.5080900@alum.mit.edu> <4E4DF2A0.9050905@mozilla.com>
+	<4E564066.4090107@alum.mit.edu> <4E5AC441.3000701@mozilla.com>
+Message-ID: <4E5B324C.8080607@alum.mit.edu>
+
+Thanks, this all makes a lot of sense.  I think I will go try and play 
+with a few example programs using unique types to get a sense for how 
+those work before I ask any more questions in that direction.
+
+
+Niko
+
+Graydon Hoare wrote:
+> On 25/08/2011 5:30 AM, Niko Matsakis wrote:
+>
+>> I don't quite follow the distinctions here. How do I notate a vector
+>> with uniquely-owned components? "vec[~T]" vs "vec[@T]"? Also, what is
+>> the distinction between a "vec" and an "ivec"?
+>
+> An 'ivec' is just an informal name we have been using during the 
+> gradual conversion of vectors from default-shared to default-unique. 
+> When complete -- and I think it's most useful to speak of what we're 
+> aiming for, rather than the in-transition current state of affairs -- 
+> the idea is that [] will be a unique type constructor (a pointer that 
+> uniquely owns a storage vector in the heap) and if you want to make a 
+> shared version, you apply a shared-box to it, like @[].
+>
+> The notations vec[T] for types and vec(a,b,c) for values have been 
+> replaced, I believe, entirely with the more uniform and shorter 
+> notations [T] for types and [a,b,c] for values.
+>
+> The components of a vector are *components*, not the vector itself. 
+> When you place shared components in the vector, the vector remains 
+> uniquely owned, but the components may point to shared values. This 
+> makes the *kind* of the vector-of-shared things "shared", despite the 
+> vector type constructor being a unique type constructor. If you keep 
+> all the components (and components-of-components, all the way down) 
+> unique, then the kind of the vector is "unique", and it can be 
+> transmitted over channels or such. If there's any sharing in any 
+> substructure of a type, it is of "shared" kind.
+>
+> In other words: individual type constructors may be unique or shared 
+> (really only @ is shared) but *kind* judgments are recursive, defined 
+> for a full type expression (and all its subexpressions), not just a 
+> single term in it.
+>
+>>>> * A box type like @T is an instance of type T that lives in the heap.
+>>>> The value in the box is immutable. To make it mutable, you do
+>>>> @mutable T.
+>>> Correct. More specifically @T is a *shared* boxed T. It has a refcount
+>>> and/or a word of GC header, such that multiple @T variables can point
+>>> to the same shared heap allocation.
+>>>
+>>> We are also in the process of implementing a *unique* box type ~T
+>>> where there is always exactly one ~T variable pointing to the heap
+>>> allocation.
+>
+>> What will be the syntax for working with this unique box type?
+>
+> Prefix ~ for a unique box, rather than @ for a shared box.
+>
+> The constructor is the same for type terms, expression terms and 
+> pattern terms. That is, ~int is the type ~10, say, and will match with 
+> a pattern ~p.
+>
+>> This more-or-less corresponds to what I expected. However, it's not
+>> quite what I observed. For example:
+>>
+>> if @[1,2,3] == (@[1,2] + @[3]) {
+>> stdout.write_line("TRUE");
+>> }
+>>
+>> prints "TRUE". I guess the pointers could be equal but it would be a bit
+>> surprising to me.
+>
+> Yeah. That's probably a bug.
+>
+>> So this clearly gets into the alias analysis discussion that I saw
+>> earlier (and didn't fully follow, as I hadn't experimented much with
+>> Rust yet). In other words, changes to a mutable alias argument, may
+>> affect the other alias parameters, possibly freeing interior values and
+>> so forth. Is there a summary of the current alias rules (intended or
+>> implemented, as the case may be)?
+>
+> I haven't written one up, no. Nor am I able to, as Marijn is largely 
+> in charge of that feature, and possibly the only one who has the rules 
+> fresh enough in his mind to elaborate them. He promises a section on 
+> this in the manual :)
+>
+> Hth, sorry for the slow reply again. You ask good questions, that 
+> require a little free time to answer precisely!
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+
+From pwalton at mozilla.com  Mon Aug 29 00:39:18 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Mon, 29 Aug 2011 00:39:18 -0700
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E5AF50C.80101@mozilla.com>
+References: <4E49302B.5080900@alum.mit.edu> <4E4DF2A0.9050905@mozilla.com>
+	<4E564066.4090107@alum.mit.edu> <4E5AC441.3000701@mozilla.com>
+	<4E5AEEFD.7080804@mozilla.com> <4E5AF50C.80101@mozilla.com>
+Message-ID: <4E5B4226.80505@mozilla.com>
+
+On 08/28/2011 07:10 PM, Graydon Hoare wrote:
+> Non on shared boxes. They might be cyclic, so it might not terminate.
+>
+> We're no longer statically differentiating the cyclic from the acyclic.
+
+Well, this prevents people from using the built-in "=" as the hash table 
+key comparison function in many cases (most commonly, if the key is 
+@str). I think that may violate POLS pretty severely.
+
+Patrick
+
+From marijnh at gmail.com  Mon Aug 29 00:58:59 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 29 Aug 2011 09:58:59 +0200
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E564066.4090107@alum.mit.edu>
+References: <4E49302B.5080900@alum.mit.edu> <4E4DF2A0.9050905@mozilla.com>
+	<4E564066.4090107@alum.mit.edu>
+Message-ID: <CAJnHWXs8JxfqvGj+QbsS2+1rTUN75DNMQZZa5Uen32wqOth4Nw@mail.gmail.com>
+
+> So this clearly gets into the alias analysis discussion that I saw earlier
+> (and didn't fully follow, as I hadn't experimented much with Rust yet).
+
+The problem is that using a reference to something that's not directly
+owned by the code that uses the reference is unsafe if the referenced
+thing is overwritten. The solution we're currently using is described
+in [1]. The main issue with this approach it is alluded to in [2].
+
+[1] https://github.com/graydon/rust/commit/beda82ddf1f482f286a8d9af3402626dc56d6fea
+[2] https://github.com/graydon/rust/commit/77c1b9650f055932bcad5983b9847517eba6c516
+
+From graydon at mozilla.com  Mon Aug 29 08:34:10 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 29 Aug 2011 08:34:10 -0700
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E5B4226.80505@mozilla.com>
+References: <4E49302B.5080900@alum.mit.edu> <4E4DF2A0.9050905@mozilla.com>
+	<4E564066.4090107@alum.mit.edu> <4E5AC441.3000701@mozilla.com>
+	<4E5AEEFD.7080804@mozilla.com> <4E5AF50C.80101@mozilla.com>
+	<4E5B4226.80505@mozilla.com>
+Message-ID: <4E5BB172.40206@mozilla.com>
+
+On 29/08/2011 12:39 AM, Patrick Walton wrote:
+> On 08/28/2011 07:10 PM, Graydon Hoare wrote:
+>> Non on shared boxes. They might be cyclic, so it might not terminate.
+>>
+>> We're no longer statically differentiating the cyclic from the acyclic.
+>
+> Well, this prevents people from using the built-in "=" as the hash table
+> key comparison function in many cases (most commonly, if the key is
+> @str). I think that may violate POLS pretty severely.
+
+I'm not saying I like this fact! Merely that between the two clearly-bad 
+options of this POLS-violation and the possibility of == and < operators 
+not terminating, I *think* I prefer the former.
+
+You think it's better if we just tell users that the operators are 
+always structurally recursive, and will explode (after, say, exhausting 
+all physical memory, with our convenient extensible stacks) if applied 
+to cyclic structures? I mean, that's certainly legitimate too; it's not 
+like we protect users against other forms of infinite recursion in their 
+own code. It just feels slightly more-hazardous in this case. Kinda a 
+gut feeling; hard to justify.
+
+(Others: feel free to chime in, we've been back-and-forth on this issue 
+in conversation since ... years now?)
+
+-Graydon
+
+From marijnh at gmail.com  Mon Aug 29 12:09:10 2011
+From: marijnh at gmail.com (Marijn Haverbeke)
+Date: Mon, 29 Aug 2011 21:09:10 +0200
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E5BB172.40206@mozilla.com>
+References: <4E49302B.5080900@alum.mit.edu> <4E4DF2A0.9050905@mozilla.com>
+	<4E564066.4090107@alum.mit.edu> <4E5AC441.3000701@mozilla.com>
+	<4E5AEEFD.7080804@mozilla.com> <4E5AF50C.80101@mozilla.com>
+	<4E5B4226.80505@mozilla.com> <4E5BB172.40206@mozilla.com>
+Message-ID: <CAJnHWXswgpTU0K_5fvBKhBbus4_AcdHpoa+QAoOSwf6rsPbzyA@mail.gmail.com>
+
+> (Others: feel free to chime in, we've been back-and-forth on this issue in
+> conversation since ... years now?)
+
+There are other options. Lisp implementations (where cyclic data
+structures are no exception) tend to implement equal in a cycle-safe
+way. Typically, you'd have a quick, unsafe version that keeps a depth
+count, and gives up at a given depth, falling back to a more
+expensive, cycle-aware implementation. When generating cmp as glue
+directly in the object files, you probably don't want to do such a
+thing, but with interpreted comparison through shapes, it wouldn't be
+hard to do.
+
+From pwalton at mozilla.com  Mon Aug 29 12:11:55 2011
+From: pwalton at mozilla.com (Patrick Walton)
+Date: Mon, 29 Aug 2011 12:11:55 -0700
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E5BB172.40206@mozilla.com>
+References: <4E49302B.5080900@alum.mit.edu> <4E4DF2A0.9050905@mozilla.com>
+	<4E564066.4090107@alum.mit.edu> <4E5AC441.3000701@mozilla.com>
+	<4E5AEEFD.7080804@mozilla.com> <4E5AF50C.80101@mozilla.com>
+	<4E5B4226.80505@mozilla.com> <4E5BB172.40206@mozilla.com>
+Message-ID: <4E5BE47B.3030901@mozilla.com>
+
+On 8/29/11 8:34 AM, Graydon Hoare wrote:
+> (Others: feel free to chime in, we've been back-and-forth on this issue
+> in conversation since ... years now?)
+
+Dave suggested pointer equality only on mutable boxes, but deep equality 
+on immutable boxes. This might be a nice sweet spot.
+
+Patrick
+
+
+From graydon at mozilla.com  Tue Aug 30 10:41:11 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 30 Aug 2011 10:41:11 -0700
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E5BE47B.3030901@mozilla.com>
+References: <4E49302B.5080900@alum.mit.edu>
+	<4E4DF2A0.9050905@mozilla.com>	<4E564066.4090107@alum.mit.edu>
+	<4E5AC441.3000701@mozilla.com>	<4E5AEEFD.7080804@mozilla.com>
+	<4E5AF50C.80101@mozilla.com>	<4E5B4226.80505@mozilla.com>
+	<4E5BB172.40206@mozilla.com> <4E5BE47B.3030901@mozilla.com>
+Message-ID: <4E5D20B7.1060400@mozilla.com>
+
+On 11-08-29 12:11 PM, Patrick Walton wrote:
+> On 8/29/11 8:34 AM, Graydon Hoare wrote:
+>> (Others: feel free to chime in, we've been back-and-forth on this issue
+>> in conversation since ... years now?)
+>
+> Dave suggested pointer equality only on mutable boxes, but deep equality
+> on immutable boxes. This might be a nice sweet spot.
+
+Feels more POLS-violating to me than either shallow or deep+fail.
+
+Or, um, marijn's suggestion might also be ok (if odd in a systems 
+language), about a fast path + slow path combo.
+
+Switching by mutability feels particularly surprising.
+
+-Graydon
+
+From dherman at mozilla.com  Tue Aug 30 14:06:35 2011
+From: dherman at mozilla.com (David Herman)
+Date: Tue, 30 Aug 2011 14:06:35 -0700
+Subject: [rust-dev] pointers and values in rust
+In-Reply-To: <4E5D20B7.1060400@mozilla.com>
+References: <4E49302B.5080900@alum.mit.edu>
+	<4E4DF2A0.9050905@mozilla.com>	<4E564066.4090107@alum.mit.edu>
+	<4E5AC441.3000701@mozilla.com>	<4E5AEEFD.7080804@mozilla.com>
+	<4E5AF50C.80101@mozilla.com>	<4E5B4226.80505@mozilla.com>
+	<4E5BB172.40206@mozilla.com> <4E5BE47B.3030901@mozilla.com>
+	<4E5D20B7.1060400@mozilla.com>
+Message-ID: <8E0C5FAA-FA4B-4609-8D36-E2B3E6E6DA63@mozilla.com>
+
+What I was describing came from an essay by Henry Baker:
+
+    http://home.pipeline.com/~hbaker1/ObjectIdentity.html
+
+IIRC his argument was: identity is an abstraction violation for immutable data structures (you should be free to copy or share immutable data without changing program behavior), but identity is critical for mutable data because contents are ephemeral and don't completely identify the data structure.
+
+The slow path for structural equality seems wrong for Rust to me: either it's an expensive footgun or we work extra hard to optimize dynamically ? la:
+
+    http://www.cs.indiana.edu/~dyb/pubs/equal-abstract.html
+
+but either way seems wrong for a systems language.
+
+(I have a general worry that we shouldn't get too creative with our equality operators, since historically they've been such a source of problems -- Common Lisp has too many, Scheme's is too expensive, JS's are bonkers. I'm not opposed to having more than one, although if any are truly polymorphic they could perhaps be functions instead of infix operators.)
+
+Dave
+
+On Aug 30, 2011, at 10:41 AM, Graydon Hoare wrote:
+
+> On 11-08-29 12:11 PM, Patrick Walton wrote:
+>> On 8/29/11 8:34 AM, Graydon Hoare wrote:
+>>> (Others: feel free to chime in, we've been back-and-forth on this issue
+>>> in conversation since ... years now?)
+>> 
+>> Dave suggested pointer equality only on mutable boxes, but deep equality
+>> on immutable boxes. This might be a nice sweet spot.
+> 
+> Feels more POLS-violating to me than either shallow or deep+fail.
+> 
+> Or, um, marijn's suggestion might also be ok (if odd in a systems language), about a fast path + slow path combo.
+> 
+> Switching by mutability feels particularly surprising.
+> 
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+

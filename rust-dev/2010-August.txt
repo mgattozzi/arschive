@@ -1,0 +1,2934 @@
+From graydon at mozilla.com  Tue Aug  3 13:38:37 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 03 Aug 2010 13:38:37 -0700
+Subject: [rust-dev] possible restriction on type-parametric arguments
+Message-ID: <4C587E4D.2050503@mozilla.com>
+
+Hi,
+
+I've been considering a restriction on argument-passing in rust: to make 
+type-parametric arguments only passable in boxes or by-alias. IOW, prohibit:
+
+    fn f[T](T x);
+
+But require it to be done as:
+
+    fn f[T](&T x);
+
+This simplifies some stuff at the ABI level, and may make LLVM happier 
+since there's no possibility of the first implicit type-descriptor 
+argument influencing the sizes of later arguments within the same 
+arguments structure (and/or set-of-registers). Just a hunch; it's not 
+urgent but I thought I'd float the idea. Any objections?
+
+-Graydon
+
+From rfrostig at mozilla.com  Tue Aug  3 14:12:16 2010
+From: rfrostig at mozilla.com (Roy Frostig)
+Date: Tue, 3 Aug 2010 14:12:16 -0700
+Subject: [rust-dev] possible restriction on type-parametric arguments
+In-Reply-To: <4C587E4D.2050503@mozilla.com>
+References: <4C587E4D.2050503@mozilla.com>
+Message-ID: <AANLkTin09G8-Ejg-W3eZWfCDA=1PUwZ39nxLwajmOfFr@mail.gmail.com>
+
+As anecdote, a quick grep through the lib directory shows that we only take
+type-parametric arguments by value in four places (granted, the standard
+library isn't huge).  Better yet, each of these occurrences looks like it
+wants to be a pass-by-alias instead.  That is, in a few minutes, a quick
+grep through the lib directory will show no desire to take type-parametric
+arguments by value.
+
+froy
+
+On Tue, Aug 3, 2010 at 1:38 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> Hi,
+>
+> I've been considering a restriction on argument-passing in rust: to make
+> type-parametric arguments only passable in boxes or by-alias. IOW, prohibit:
+>
+>   fn f[T](T x);
+>
+> But require it to be done as:
+>
+>   fn f[T](&T x);
+>
+> This simplifies some stuff at the ABI level, and may make LLVM happier
+> since there's no possibility of the first implicit type-descriptor argument
+> influencing the sizes of later arguments within the same arguments structure
+> (and/or set-of-registers). Just a hunch; it's not urgent but I thought I'd
+> float the idea. Any objections?
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://mail.mozilla.org/private/rust-dev/attachments/20100803/3d54c47a/attachment.html>
+
+From dherman at mozilla.com  Tue Aug  3 14:30:40 2010
+From: dherman at mozilla.com (David Herman)
+Date: Tue, 3 Aug 2010 14:30:40 -0700
+Subject: [rust-dev] possible restriction on type-parametric arguments
+In-Reply-To: <4C587E4D.2050503@mozilla.com>
+References: <4C587E4D.2050503@mozilla.com>
+Message-ID: <27F14809-5230-40BC-BDAE-489C9CDE55AA@mozilla.com>
+
+I like the idea. My sense is that it's more conservative (i.e., less novel/risky). I guess C++ allows it because they commit to the code-duplication model (correct me if I'm wrong there), but if you don't want to commit to code duplication, simply restricting the types only to allow pointers seems like the reasonable thing to do, and happily the type system can actually express that.
+
+Dave
+
+On Aug 3, 2010, at 1:38 PM, Graydon Hoare wrote:
+
+> Hi,
+> 
+> I've been considering a restriction on argument-passing in rust: to make type-parametric arguments only passable in boxes or by-alias. IOW, prohibit:
+> 
+>   fn f[T](T x);
+> 
+> But require it to be done as:
+> 
+>   fn f[T](&T x);
+> 
+> This simplifies some stuff at the ABI level, and may make LLVM happier since there's no possibility of the first implicit type-descriptor argument influencing the sizes of later arguments within the same arguments structure (and/or set-of-registers). Just a hunch; it's not urgent but I thought I'd float the idea. Any objections?
+> 
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From zeppieri at gmail.com  Tue Aug  3 14:48:41 2010
+From: zeppieri at gmail.com (Jon Zeppieri)
+Date: Tue, 3 Aug 2010 17:48:41 -0400
+Subject: [rust-dev] possible restriction on type-parametric arguments
+In-Reply-To: <4C587E4D.2050503@mozilla.com>
+References: <4C587E4D.2050503@mozilla.com>
+Message-ID: <AANLkTikL8jdKQvmQYXb9OyDDL0w8-wjUQGD555tzApmO@mail.gmail.com>
+
+The restriction will also apply to the return type, right? (Well, you can't
+return an alias -- nor would you want to -- but you could return a
+type-parametric box?)
+-Jon
+
+On Tue, Aug 3, 2010 at 4:38 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> Hi,
+>
+> I've been considering a restriction on argument-passing in rust: to make
+> type-parametric arguments only passable in boxes or by-alias. IOW, prohibit:
+>
+>   fn f[T](T x);
+>
+> But require it to be done as:
+>
+>   fn f[T](&T x);
+>
+> This simplifies some stuff at the ABI level, and may make LLVM happier
+> since there's no possibility of the first implicit type-descriptor argument
+> influencing the sizes of later arguments within the same arguments structure
+> (and/or set-of-registers). Just a hunch; it's not urgent but I thought I'd
+> float the idea. Any objections?
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://mail.mozilla.org/private/rust-dev/attachments/20100803/7f3c1e3d/attachment.html>
+
+From graydon at mozilla.com  Tue Aug  3 14:56:35 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 03 Aug 2010 14:56:35 -0700
+Subject: [rust-dev] possible restriction on type-parametric arguments
+In-Reply-To: <AANLkTikL8jdKQvmQYXb9OyDDL0w8-wjUQGD555tzApmO@mail.gmail.com>
+References: <4C587E4D.2050503@mozilla.com>
+	<AANLkTikL8jdKQvmQYXb9OyDDL0w8-wjUQGD555tzApmO@mail.gmail.com>
+Message-ID: <4C589093.7040305@mozilla.com>
+
+On 10-08-03 02:48 PM, Jon Zeppieri wrote:
+> The restriction will also apply to the return type, right? (Well, you can't
+> return an alias -- nor would you want to -- but you could return a
+> type-parametric box?)
+
+Outputs are currently handled uniformly in rustboot by passing a 
+write-alias to the callee and having them write into a slot in the 
+caller. So nothing much changes there in the current ABI.
+
+If we were using an ABI in which there were "return" values passed along 
+any other mechanism (in registers say) that mechanism would have to be 
+modified to be address-carrying for parametric types, sure. But this is 
+transparent to the user. IOW, unlike inputs, the compiler gets to choose 
+the "slot mode" for the output type; user code never denotes the output 
+slot, so it's a moot point.
+
+-Graydon
+
+From graydon at mozilla.com  Tue Aug  3 14:59:22 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 03 Aug 2010 14:59:22 -0700
+Subject: [rust-dev] Fwd: linkage
+Message-ID: <4C58913A.8040707@mozilla.com>
+
+Forwarding to list again, since a lot of people joined in the meantime, 
+and I figure most didn't see this one the first time.
+
+-Graydon
+
+
+-------- Original Message --------
+Subject: linkage
+Date: Thu, 29 Jul 2010 18:57:04 -0700
+From: Graydon Hoare <graydon at mozilla.com>
+To: rust-dev at mozilla.org
+
+Hi,
+
+I wanted to go over some of the options facing us regarding the linkage
+model in rust, and get feedback on people's different preferences. It
+turns out this kind of thing effects a lot of code, in somewhat subtle ways.
+
+How Things Are Presently in rustboot:
+(warning: kinda surprising)
+
+   - All code is compiled PIC.
+     - There are no relocs.
+     - Actual-pointers are derived programmatically.
+
+   - Object-file symbols are used only minimally.
+     - Symbols from libc.so and librustrt.so use normal
+       C ld.so-style dynamic linkage.
+     - On some platforms we emit local mangled symbols for rust items
+       and glue functions within a crate. These are just to help with
+       debugging. They serve no functional role.
+     - 'rust_crate' is the only extern symbol a crate exposes to ld.so.
+     - 'rust_crate' points to a descriptor that points
+       to the DWARF sections .debug_abbrev and .debug_info
+
+   - All further linkage is driven lazily by thunks inside a crate.
+     - Calling a native C library thunks to librustrt.so which calls
+       dlopen() and dlsym() on the C library, caches the result.
+     - Calling a 'use'd function in a rust library thunks to
+       librustrt.so which calls dlopen() on the C library, grabs
+       'rust_crate', crawls the DWARF to navigate the module structure,
+       and caches the result. Lookup is scoped to the crate's module
+       namespace, with the import prefix stripped off.
+
+   - Crate-dependency is acyclic. A crate can't depend on itself.
+
+   - We present an "SPI" for embeddings to use, on the theory that an
+     embedding might wish to load a rust crate in-process and spin up
+     a thread domain to interact with the environment. We funnel all
+     environment-interactions (logging, malloc/free, signals etc.)
+     through this SPI. Or we should. That's the aim anyway. At the moment
+     we don't always succeed.
+
+This scheme sounds a bit ad-hoc, but it's based on a few specific goals
+and observations:
+
+   - The ability to refcount a crate (and everything we pull out of it)
+     such that it can be unloaded and a replacement reloaded at runtime.
+     Hot-reloading, in other words. Also REPL-ing and such.
+
+   - The ability to get type information -- including type abbreviations
+     imported at compile time -- out of a crate's DWARF without separate
+     'include' files or anything. We pull type info out of the same DWARF
+     we drive the linkage itself off. Figured there was no point
+     duplicating the information.
+
+   - Crates are acyclic *anyways* because I didn't want to permit
+     recursive type definitions crossing crate boundaries; module
+     systems that support separate compilation of mutually-recursive
+     types exist but they're pretty exotic and involve a lot of
+     machinery.
+
+Now, personally I like and am still interested in some aspects of this
+model, but I realize there are a lot of pressures working against it and
+it might be time to revisit. It has shortcomings and the goals might be
+achieved differently. Here are some issues:
+
+   - This scheme means that the crate structure is the last word on the
+     runtime linkage boundaries. If you realize you actually want two
+     crates combined into a single loadable unit, you can't exactly
+     statically link or combine LLVM .bc files or anything. This is
+     solvable to some extent if you're combining a rust crate with
+     another rust crate (just include one .rc file in the other, should
+     work plus or minus some plumbing) but it won't get you far if you
+     want to inline a bunch of C code into rust by mixing LLVM .bc files.
+
+   - "Always having DWARF" is a nice side-effect of the existing scheme,
+     but the visual studio debugger doesn't speak DWARF. You have to use
+     gdb (or the forthcoming LLDB I guess) on win32. So not necessarily
+     as big a win as one might like. Same goes for win32 profilers and
+     such. At some point someone's going to want to be spitting out PDB.
+
+   - The crate refcounting and symbol-cache is an additional cost.
+     Probably not a huge one, but costs add up.
+
+   - DWARF doesn't generally provide hashed access to symbols; while
+     it *does* provide hierarchical name crawling, it's possible you'll
+     wind up with a linear search in a substantially-wide namespace at
+     some point during a symbol import. System linkers tend to hash or
+     even pre-assign ordinals. And use IAT/IDT or PLT tables, which
+     are smaller and probably faster than our thunks.
+
+   - DWARF is a little complex to parse at runtime. Currently the runtime
+     library has a partial DWARF reader and I'm less certain than I was
+     that "any equivalent encoding of the runtime type signatures would
+     be equally cumbersome". There might be simpler encodings.
+
+   - Hot-loading probably means waiting for a domain to shut down and
+     kill its type descriptor caches and such anyways, and may well not
+     work properly if there are native resources involved. Plus you
+     will have to be very particular about data-type and code-pointer
+     identities between the loading crate and the loaded crate. It might
+     be a bit of an imaginary feature, not worth fighting to preserve
+     in current form.
+
+   - It seems that LLVM is likely to consider DWARF "freely discardable"
+     as it runs its optimizations. We might be able to mark a subset of
+     the DWARF as non-discardable, or that may inhibit optimizations.
+     We don't actually know how well the existing scheme will transplant.
+
+   - The runtime library and the compiler have a bit of a "special
+     relationship" in two ways: the use of C symbols for linkage --
+     at least *something* special needs to happen for startup and for
+     pulling in the all-other-symbols routine that the thunks target --
+     and the fact that they know about one another's data structures (a
+     bunch of structure offsets and ABI details need to be kept in sync
+     between the two). Moving responsibilities between compiler, rust,
+     and C++ runtime-library code tends to carry a heavy tax in terms of
+     amount of maintenance work involved.
+
+So .. I've been talking to others about an alternative model. I'll
+sketch it out here; there are obviously many details involved but I
+thought I'd at least give a broad picture and see if anyone thinks it'd
+be better:
+
+   - Let gas or someone else decide when PIC makes sense, and to write
+     our relocs for us when necessary.
+
+   - Use system linkage much more. We don't have overloaded names so we
+     don't *really* need mangled names for anything aside from glue; we
+     can just module-qualify user-provided names using "." as expected.
+
+   - Since symbols have no "global" cross-crate name in rust (the client
+     names the import-name root) we'd need to ensure two-level naming
+     (library -> symbol) works on all platforms. I *think* it does, but
+     it might be a bit of a challenge in some contexts (Anyone know what
+     to do on ELF, for example? GUID-prefix every name? This might sink
+     the whole idea).
+
+   - Give up on relying on DWARF. Use DWARF as much as we *can* on any
+     platform that supports it. emit PDB when and if we can on win32,
+     let LLVM discard what it needs to for the sake of optimization. Just
+     treat it as "debug info" as the name implies.
+
+   - Encode type signatures of crates using a custom encoding. Either
+     some kind of reflective system where the client calls into the
+     crate to make requests, or a fixed data structure it crawls, or
+     something. Make something minimal up to fit our needs.
+
+   - Give up on hot-reload in-process. Use the process-domain boundary
+     as the hot-reload boundary. Make runtime linkage effectively
+     "one way" like it typically is in C (you can dlclose(), but it's
+     unsafe, so .. generally don't).
+
+   - Possible: give up the concept of resource accounting at anything
+     less than a process-domain, use rlimits or such to enforce rather
+     than trying to funnel everything through an SPI (which won't catch
+     native resource consumption anyway).
+
+   - Possible: make a rust native-module ABI for C code in .bc files,
+     and teach the compiler to mix such LLVM bitcode into the crate it's
+     compiling. Modify the compiler to emit code in a more abstract form
+     consisting of lots of calls to runtime-library stuff that's known to
+     be inlined from C++-land (structure accesses, upcalls, glue and
+     such). Write more of the compiler support routines in C++, including
+     stuff that "has to run on the rust stack".
+
+   - Possible: permit compiling a crate to .bc so it can be "linked" to
+     another crate (with cross-crate inlining). Like, support this at a
+     compiler-driver level, as a different target flavour.
+
+I put the latter two points as "possible" because (a) it's not clear to
+me that they'd work and (b) they'd definitely not work with the existing
+x86 backend, or *any other* backend. We'd be quite wedded to LLVM if we
+relied on those; it'd make (for example) compiling the standard library
+with msvc or icc impossible, as we'd need parts of its LLVM bitcode
+mixed into the compiler output. But we could perhaps adopt those last
+two changes piecemeal, independent of the first several parts, once the
+self-hosted compiler is far enough along that LLVM is always an assumed
+part of the puzzle.
+
+Thoughts? Feelings? Such changes would involve a lot of shifting around
+with potentially not-much visible or immediate gain, so would soak up a
+lot of work; the implications would come later and be strangely
+distributed (some performance improvements, some maintenance and
+integration improvements, some improvements and also some degradations
+in flexibility and portability..)
+
+I also don't exactly know whether ELF is going to provide anything
+two-level-naming-ish to handle the proposed scenario. Any ideas on that?
+Mach-o and PE both provide such a system, ELF doesn't seem to.
+
+-Graydon
+
+From graydon at mozilla.com  Tue Aug  3 15:19:53 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 03 Aug 2010 15:19:53 -0700
+Subject: [rust-dev] freeze/thaw and the significance of state
+Message-ID: <4C589609.2000608@mozilla.com>
+
+Hi,
+
+Two interesting points in the details of state-handling converge to an 
+interesting question. Here are the issues:
+
+1. We can't really lie about 'state' the same way we permit authorized 
+lying about 'io' or 'unsafe'. There are plausible ways to make one's 
+'io' code pure in an operational sense (for example: io that always 
+sends to a harmless recipient) or to make 'unsafe' code operationally 
+safe (if it happens to use native resources in a way that is never bad); 
+but lying about 'state' will *always* cause the rust code that handles 
+allocation-and-freeing to crash. So it's just not a lie that can be made 
+harmless. It'd always cause harm. This argues still further for dealing 
+with the 'state' effect independent of the other 2 effects.
+
+2. We've known for a long while that we want to have some kind of 
+freeze/thaw operations, for "converting" mutable structures to immutable 
+and vice-versa. But there are difficulties in doing so. In particular: 
+if it's a simple "cast" operation, it'll be *very* unsafe even in 
+theory; given #1 it'll in fact *always* be unsafe and always crash. So 
+we can't just do a simple cast; it can be at best some kind of 
+shallow-copy of the existing immutable parts, with re-allocation of the 
+mutable parts. Or vice-versa.
+
+But there's a *further* difficulty with #2 in that we can't define an 
+automatic shallow copy that does anything sensible if it's involved in a 
+cycle. It has to fail. At the moment we make no distinction between 
+cyclic-mutable and acyclic-mutable at the type level. We did once, but 
+it was a lot of chattery type-annotation to propagate around, seemed 
+more harm than good. So we don't now; state implies maybe-cyclic.
+
+So .. in conversation with Froystig the possibility came up of defining 
+shallow-copy-based freeze/thaw operators that work when changing types 
+they know to be acyclic, but fail on those that can't be proven acyclic. 
+That is, for an opaque type parameter T with type-bound 'state', you 
+won't be able to freeze it to get a stateless T. But you can freeze a 
+vec[mutable T] into a vec[T] for a stateless T, for example. And you 
+won't be able to freeze a 'state fn()' into 'fn()' because we don't know 
+if the closure contains cyclic stuff.
+
+This seems like a ... *slightly* surprising fact to introduce as an 
+observable distinction between types. It's not indefensible, the 
+rationale is pretty clear and the distinction can be made 
+conservatively, statically.
+
+This *would* introduce a new distinction in types, between the 
+statically acyclic and the statically maybe-cyclic, orthogonal to (but 
+related to) statefulness: the stateless would all be statically acyclic. 
+This isn't presently a qualification we can apply to, say, a type 
+parameter. It's not like this is the *only* such distinction or 
+condition we check-but-can't-describe-in-type-terms; for example, you 
+can't define recursive types anywhere but in tags. And you can't define 
+a tag type that's infinite-sized. And you can't cross crate barriers in 
+the definition of a tag type. Etc. So it's not completely unique to have 
+"a type distinction or condition we check but you can't denote as a 
+qualifier". But acyclicality separate from statefulness is a novel one 
+to make observable, and I thought I'd mention it.
+
+The questions I have are these:
+
+   - Do you think this sort of freeze/thaw operator-pair would be useful?
+   - Do you think they'd be *enough* to cover majority freeze/thaw
+     scenarios? I.e. "not supporting maybe-cyclic cases"?
+   - Does a new non-denotable distinction between types bother you?
+   - Should it be denoteble? (i.e. f[state T]() vs. f[cyclic T]())?
+
+Any input on this would be great.
+
+-Graydon
+
+From jyasskin at gmail.com  Fri Aug  6 00:33:23 2010
+From: jyasskin at gmail.com (Jeffrey Yasskin)
+Date: Fri, 6 Aug 2010 00:33:23 -0700
+Subject: [rust-dev] freeze/thaw and the significance of state
+In-Reply-To: <4C589609.2000608@mozilla.com>
+References: <4C589609.2000608@mozilla.com>
+Message-ID: <AANLkTi=YvAYhC3ycBs2ajofYGsKXb6HMS-u+aS9oJUaG@mail.gmail.com>
+
+I'm still somewhat unclear on the difference between state and
+immutable types with respect to refcounting and gc. I have the vague
+impression that state types are gc'ed instead of refcounted because
+you can't prove them acyclic. Is there anything else preventing you
+from refcounting provably-acyclic mutable values? If not, it seems
+like the ability to denote that category would be useful, since it
+could let us put destructors on acyclic mutable values. It can also be
+useful to have cyclic immutable values (lazy[T], for an example), but
+clearly that introduces extra complexity that you'd probably rather
+avoid.
+
+Are freeze/thaw anything more than automatically-generated
+shallow-copy operations with a small change to the type?
+
+You could freeze a maybe-cyclic type by claiming at runtime that it in
+fact doesn't have cycles. This would imply a deep copy, which, if the
+object does have cycles, could allocate infinite memory or detect this
+and fail the task.
+
+On Tue, Aug 3, 2010 at 3:19 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+> Hi,
+>
+> Two interesting points in the details of state-handling converge to an
+> interesting question. Here are the issues:
+>
+> 1. We can't really lie about 'state' the same way we permit authorized lying
+> about 'io' or 'unsafe'. There are plausible ways to make one's 'io' code
+> pure in an operational sense (for example: io that always sends to a
+> harmless recipient) or to make 'unsafe' code operationally safe (if it
+> happens to use native resources in a way that is never bad); but lying about
+> 'state' will *always* cause the rust code that handles
+> allocation-and-freeing to crash. So it's just not a lie that can be made
+> harmless. It'd always cause harm. This argues still further for dealing with
+> the 'state' effect independent of the other 2 effects.
+>
+> 2. We've known for a long while that we want to have some kind of
+> freeze/thaw operations, for "converting" mutable structures to immutable and
+> vice-versa. But there are difficulties in doing so. In particular: if it's a
+> simple "cast" operation, it'll be *very* unsafe even in theory; given #1
+> it'll in fact *always* be unsafe and always crash. So we can't just do a
+> simple cast; it can be at best some kind of shallow-copy of the existing
+> immutable parts, with re-allocation of the mutable parts. Or vice-versa.
+>
+> But there's a *further* difficulty with #2 in that we can't define an
+> automatic shallow copy that does anything sensible if it's involved in a
+> cycle. It has to fail. At the moment we make no distinction between
+> cyclic-mutable and acyclic-mutable at the type level. We did once, but it
+> was a lot of chattery type-annotation to propagate around, seemed more harm
+> than good. So we don't now; state implies maybe-cyclic.
+>
+> So .. in conversation with Froystig the possibility came up of defining
+> shallow-copy-based freeze/thaw operators that work when changing types they
+> know to be acyclic, but fail on those that can't be proven acyclic. That is,
+> for an opaque type parameter T with type-bound 'state', you won't be able to
+> freeze it to get a stateless T. But you can freeze a vec[mutable T] into a
+> vec[T] for a stateless T, for example. And you won't be able to freeze a
+> 'state fn()' into 'fn()' because we don't know if the closure contains
+> cyclic stuff.
+>
+> This seems like a ... *slightly* surprising fact to introduce as an
+> observable distinction between types. It's not indefensible, the rationale
+> is pretty clear and the distinction can be made conservatively, statically.
+>
+> This *would* introduce a new distinction in types, between the statically
+> acyclic and the statically maybe-cyclic, orthogonal to (but related to)
+> statefulness: the stateless would all be statically acyclic. This isn't
+> presently a qualification we can apply to, say, a type parameter. It's not
+> like this is the *only* such distinction or condition we
+> check-but-can't-describe-in-type-terms; for example, you can't define
+> recursive types anywhere but in tags. And you can't define a tag type that's
+> infinite-sized. And you can't cross crate barriers in the definition of a
+> tag type. Etc. So it's not completely unique to have "a type distinction or
+> condition we check but you can't denote as a qualifier". But acyclicality
+> separate from statefulness is a novel one to make observable, and I thought
+> I'd mention it.
+>
+> The questions I have are these:
+>
+> ?- Do you think this sort of freeze/thaw operator-pair would be useful?
+> ?- Do you think they'd be *enough* to cover majority freeze/thaw
+> ? ?scenarios? I.e. "not supporting maybe-cyclic cases"?
+> ?- Does a new non-denotable distinction between types bother you?
+> ?- Should it be denoteble? (i.e. f[state T]() vs. f[cyclic T]())?
+>
+> Any input on this would be great.
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+From graydon at mozilla.com  Fri Aug  6 11:52:22 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Fri, 06 Aug 2010 11:52:22 -0700
+Subject: [rust-dev] freeze/thaw and the significance of state
+In-Reply-To: <AANLkTi=YvAYhC3ycBs2ajofYGsKXb6HMS-u+aS9oJUaG@mail.gmail.com>
+References: <4C589609.2000608@mozilla.com>
+	<AANLkTi=YvAYhC3ycBs2ajofYGsKXb6HMS-u+aS9oJUaG@mail.gmail.com>
+Message-ID: <4C5C59E6.7090001@mozilla.com>
+
+On 10-08-06 12:33 AM, Jeffrey Yasskin wrote:
+> I'm still somewhat unclear on the difference between state and
+> immutable types with respect to refcounting and gc. I have the vague
+> impression that state types are gc'ed instead of refcounted because
+> you can't prove them acyclic. Is there anything else preventing you
+> from refcounting provably-acyclic mutable values? If not, it seems
+> like the ability to denote that category would be useful, since it
+> could let us put destructors on acyclic mutable values. It can also be
+> useful to have cyclic immutable values (lazy[T], for an example), but
+> clearly that introduces extra complexity that you'd probably rather
+> avoid.
+
+Mutability is tracked also to ensure you're not sharing with another 
+task that's mutating data underfoot. But yes, stateful implies gc at 
+present since we assume "stateful might-be cyclic". And all gc memory is 
+*also* refcounted, so you still get early-release on it when it happens 
+to be acyclic.
+
+Tracking 'cyclic' at the type level would be even more complexity, yeah. 
+I guess I was asking about complexity-cost preferences; hoping to limit 
+the damage to just these operators and their special judgments (they'd 
+have to be special in other ways too: for example no freezing an obj or 
+closure, since those may contain code compiled under the assumption of 
+being-able-to-write, that will suddenly be modifying "immutable" stuff 
+underfoot from anyone you're sharing the frozen copy with; bad).
+
+> Are freeze/thaw anything more than automatically-generated
+> shallow-copy operations with a small change to the type?
+
+No. That's all we're talking about. They'd just be acting on a .. 
+slightly random subset of the full set of types.
+
+> You could freeze a maybe-cyclic type by claiming at runtime that it in
+> fact doesn't have cycles. This would imply a deep copy, which, if the
+> object does have cycles, could allocate infinite memory or detect this
+> and fail the task.
+
+Possibly. I'd prefer not to leave such things to runtime though.
+
+-Graydon
+
+From peterhull90 at gmail.com  Sat Aug 14 05:15:51 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Sat, 14 Aug 2010 13:15:51 +0100
+Subject: [rust-dev] Debugging on OS X
+Message-ID: <AANLkTi=ZvYBL=+p0PHA7ra7uoRMGUetA0FmBgQFi-PGt@mail.gmail.com>
+
+Dear All,
+Apologies if I've missed this information somewhere but, is it
+possible to debug a compiled rust program? I'm using OS X 10.6
+
+Specifically I wanted to see if I could figure out why lib-deque.x86
+was failing. I get
+rt: ---
+? more log lines ...
+rt: 939e:main:main:                       rust: test parameterized: taggy
+
+Program received signal EXC_BAD_ACCESS, Could not access memory.
+Reason: KERN_PROTECTION_FAILURE at address: 0x00000008
+0x00081ac9 in glue$copy$g2$nonesomeP ()
+
+and I can't get a backtrace.
+
+Pete
+ps
+the rate you guys are developing rust is amazing - it's hard to keep up!
+
+From graydon at mozilla.com  Sun Aug 15 23:13:29 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Sun, 15 Aug 2010 23:13:29 -0700
+Subject: [rust-dev] constants
+In-Reply-To: <4C58913A.8040707@mozilla.com>
+References: <4C58913A.8040707@mozilla.com>
+Message-ID: <4C68D709.5090705@mozilla.com>
+
+Related to the matter of linkage, I've been ruminating a bit on the 
+current limited support for compile-time constants.
+
+The "items" in a rust module are currently functions, iterators, types, 
+and sub-modules. These are constants, in a way, but they're not the sort 
+a lot of people think of. In particular there are no "value-like" 
+constant items such as numbers, strings, vectors, records, tuples. They 
+can only be dynamic values. If you want to produce one of these -- even 
+if it's always the same value -- you have to write a function that 
+returns it.
+
+This is not entirely pleasant. There is room for improvement:
+
+   - Things that *could* be compile-time constants can't be calculated
+     "once". We wind up putting code in the executable rather than
+     read-only data, and re-calculating repeatedly at runtime.
+
+   - Some values -- say, 0-ary tags -- wind up as functions even
+     though they'd make more sense as enum-like constant values.
+
+   - Constant-folding is left, at best, to optional compiler passes. It
+     might be nice to be able to guarantee a certain quantity of it to
+     language users, done in the front-end.
+
+Suppose, instead, that we have an item type
+
+       'const <ty> <ident> = <const-expr>;'
+
+and we recursively define a subset of the expr grammar as 
+const-ness-propagating. And we're careful to be sure we mean 
+*compile-time* constant, not initialization-time constant a la C. Then:
+
+   - The problems above are solved. Enum-like 0-ary tags turn into
+     consts. Big structured consts can be calculated at compile time
+     and stored read-only. Constant folding through arithmetic and such
+     can be guaranteed to some reasonable degree.
+
+   - A few syntactic contexts (linkage-names in native modules, say)
+     currently take literal values, but could be generalized to take
+     references to constants. This could potentially wind up as a sort
+     of "cheapest layer" of static metaprogramming (not getting into
+     actual AST-splicing or anything).
+
+   - We already have the concepts of immutability and pure functions,
+     it seems a bit of a shame not to permit their use at compile time
+     for complicated constants.
+
+Of course, there are also reasons to be wary of this:
+
+   - Read-only memory has the problem of not being very amenable to
+     refcounting. We could steal a tag-bit on pointers to read-only
+     values, but then we would not be tracking their refcount at all,
+     and this would further seal the fate of crate-loading as an
+     irrevocable action within a given process domain (see note on this
+     in previous email regarding linkage; we may be going that route
+     anyways).
+
+   - Value-level equality needs to be preserved and/or checked somehow
+     between compile-time and load-time, rather than just type
+     compatibility. Compiling a crate with math.pi = 3.14, then finding
+     you linked against a recompiled crate with math.pi = 3.15, is an
+     unwelcome situation. We'd need some kind of scheme to guard against
+     this, or make users somehow aware of the risks. Possibly just
+     require compilation-unit UUID-identity or CHF-identity if there's
+     been any constant folding? Or track the constants that were folded
+     and check equality at runtime link time? Awkward options, all...
+
+Any thoughts?
+
+-Graydon
+
+From tohava at gmail.com  Sun Aug 15 23:39:51 2010
+From: tohava at gmail.com (ori bar)
+Date: Mon, 16 Aug 2010 09:39:51 +0300
+Subject: [rust-dev] constants
+In-Reply-To: <4C68D709.5090705@mozilla.com>
+References: <4C58913A.8040707@mozilla.com>
+	<4C68D709.5090705@mozilla.com>
+Message-ID: <AANLkTik9B=vcAD1WYyZz_V_JjWQq1LXaN_mbO_-xJi9t@mail.gmail.com>
+
+> ?- Constant-folding is left, at best, to optional compiler passes. It
+> ? ?might be nice to be able to guarantee a certain quantity of it to
+> ? ?language users, done in the front-end.
+
+I always wondered about this, what is wrong with specifying in a
+language that if a function only consists of 'ret <const-expr>' then
+it is compiled as a constant? I know C++ started doing something like
+this with constexprs and I think it might be the good approach for
+this as well instead of adding another feature to the language (then
+again, the ability to differentiate between constants and function
+calls by looking at the code where the symbol is referred has an
+appeal of it's own).
+
+
+
+-- 
+1110101111111110 - it's a way of life
+
+From graydon at mozilla.com  Mon Aug 16 07:25:01 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 16 Aug 2010 07:25:01 -0700
+Subject: [rust-dev] constants
+In-Reply-To: <AANLkTik9B=vcAD1WYyZz_V_JjWQq1LXaN_mbO_-xJi9t@mail.gmail.com>
+References: <4C58913A.8040707@mozilla.com>	<4C68D709.5090705@mozilla.com>
+	<AANLkTik9B=vcAD1WYyZz_V_JjWQq1LXaN_mbO_-xJi9t@mail.gmail.com>
+Message-ID: <4C694A3D.8000000@mozilla.com>
+
+On 15/08/2010 11:39 PM, ori bar wrote:
+
+> I always wondered about this, what is wrong with specifying in a
+> language that if a function only consists of 'ret<const-expr>' then
+> it is compiled as a constant? I know C++ started doing something like
+> this with constexprs and I think it might be the good approach for
+> this as well instead of adding another feature to the language (then
+> again, the ability to differentiate between constants and function
+> calls by looking at the code where the symbol is referred has an
+> appeal of it's own).
+
+Hm. I'm not sure what you mean in terms of C++ doing this.
+
+You have to consider cases wherein the caller doesn't statically know 
+that the callee is constant. Indirect calls, intra-linkage-unit calls, 
+that sort of thing. In these cases, there needs to be code sitting 
+around to be-called, because the caller will have a call instruction 
+that needs to jump to some code.
+
+Some languages uniformly treat all values as callable (or "enterable") 
+thunks. Haskell for example. This treatment is, I think, somewhat 
+costly, and certainly unusual enough to present difficulties integrating 
+with debuggers, FFIs, or other tools with a more "static" view of data.
+
+While it's possible, I think I don't want to go down this sort of road. 
+I'd prefer to get to a place where being-read-only was a semantic 
+category. It's a guarantee programmers certainly know how to reason 
+about and, I think, like: knowing something has been compiled into 
+read-only memory means hardware memory protection against mutation, plus 
+you know startup costs will be "mmap + relocs", quite fast.
+
+(Aside: It would also force us to untangle any residual mess in the 
+effect system regarding lies-about-mutability. Obviously you can't cast 
+hardware-protected read-only memory to mutable and expect it to work!)
+
+(Aside #2: I do *not* want to get into a situation where we have .ctors 
+or any kind of global static initializers that have to run on startup. 
+That's a terrible botch. Relocs are one thing, but they should be the 
+limit!)
+
+-Graydon
+
+
+From graydon at mozilla.com  Mon Aug 16 16:26:24 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 16 Aug 2010 16:26:24 -0700
+Subject: [rust-dev] Debugging on OS X
+In-Reply-To: <AANLkTi=ZvYBL=+p0PHA7ra7uoRMGUetA0FmBgQFi-PGt@mail.gmail.com>
+References: <AANLkTi=ZvYBL=+p0PHA7ra7uoRMGUetA0FmBgQFi-PGt@mail.gmail.com>
+Message-ID: <4C69C920.6000608@mozilla.com>
+
+On 10-08-14 05:15 AM, Peter Hull wrote:
+> Dear All,
+> Apologies if I've missed this information somewhere but, is it
+> possible to debug a compiled rust program? I'm using OS X 10.6
+
+Generally, yes. No reason it won't work aside from bugs.
+
+Specifically, often not. Too many bugs in the output just now. Most 
+times it won't work for one reason or another. It's a bit better on 
+linux, and win32 ... depends a lot on where you got your gdb build :)
+
+> Program received signal EXC_BAD_ACCESS, Could not access memory.
+> Reason: KERN_PROTECTION_FAILURE at address: 0x00000008
+> 0x00081ac9 in glue$copy$g2$nonesomeP ()
+
+That's something! It's stopped in a glue function: the one that copies 
+an option type.
+
+> and I can't get a backtrace.
+
+Yeah. Um .. what's going on is we're emitting our own hand-generated 
+DWARF (debug info) and it's somehow not satisfactory to gdb. So for the 
+months before the publication I didn't really have access to enough gdb 
+people to figure out why (also apple's gdb is an ancient fork). But I'm 
+now in conversations with gdb people and they're informing me of 
+mistakes in the existing DWARF we're outputting. So I expect this will 
+get a bit better in the near future.
+
+Eventually, of course, we want perfect, flawless debugging info. But 
+it'll be a slow climb to get there. I can't say much more than "stay 
+tuned". We know it's not very good right now, and we're stuck having to 
+use it as well, so it'll get better at some point! Probably a lot better 
+once LLVM's doing the lower-level encoding, though we may have a few 
+complications convincing it to say what we need to.
+
+(This relates, actually, to the linkage post I made a while back. I'd 
+still welcome any opinions about exactly how close we ought to try to 
+get to the standard C linkage model. It's a subtle thing.)
+
+> the rate you guys are developing rust is amazing - it's hard to keep up!
+
+*Blush* thanks, it often feels slow from my perspective, but perhaps 
+only because it's been going on for a long time and there's so much left 
+to do.
+
+-Graydon
+
+From mike.capp at gmail.com  Mon Aug 16 17:54:55 2010
+From: mike.capp at gmail.com (Mike Capp)
+Date: Tue, 17 Aug 2010 01:54:55 +0100
+Subject: [rust-dev] Minor spec niggle re Ref.Type.Float
+Message-ID: <AANLkTinHGbS86dNdgQC-9T1C__bk++WPKQFwgNQuV=71@mail.gmail.com>
+
+In the 2010-07-08 draft, this begins:
+
+"The Rust type float is a machine-specific type equal to one of the
+supported Rust floating-
+point machine types (f32 or f64). It is the largest floating-point
+type that is directly
+supported by hardware on the target machine [...]"
+
+On first reading, these two statements struck me as contradictory -
+assuming x86 is the primary target architecture, the largest
+floating-point type directly supported by hardware is 80-bit extended
+precision.
+
+I'm assuming that the second sentence restricts "floating point types"
+to mean f32 and f64 only, but this seems like a shame. Loss of numeric
+precision with no corresponding gain is going to hurt some potential
+users; see for example William Kahan's classic paper,
+http://www.eecs.berkeley.edu/~wkahan/JAVAhurt.pdf
+
+Obviously, extended-precision support in Rust isn't going to be a
+priority anytime soon, but I wondered if this section could be written
+in a way that didn't specifically rule it out. For example:
+
+"The Rust type float is a machine-specific type. It is the largest
+floating-point type (supported by the compiler) that is directly
+supported by hardware on the target machine [...]"
+
+That would leave the door open for extended-precision (or even
+quad-precision some day, if and when hardware appears) without forcing
+it now when you have better things to do.
+
+Would anything else in the spec break if float was not guaranteed to
+be one of f32 or f64?
+
+cheers
+Mike
+
+From jws at csse.unimelb.edu.au  Mon Aug 16 19:13:16 2010
+From: jws at csse.unimelb.edu.au (Jeff Schultz)
+Date: Tue, 17 Aug 2010 12:13:16 +1000
+Subject: [rust-dev] Minor spec niggle re Ref.Type.Float
+In-Reply-To: <AANLkTinHGbS86dNdgQC-9T1C__bk++WPKQFwgNQuV=71@mail.gmail.com>
+References: <AANLkTinHGbS86dNdgQC-9T1C__bk++WPKQFwgNQuV=71@mail.gmail.com>
+Message-ID: <20100817021316.GA3627@mulga.csse.unimelb.edu.au>
+
+On Tue, Aug 17, 2010 at 01:54:55AM +0100, Mike Capp wrote:
+> "The Rust type float is a machine-specific type equal to one of the
+> supported Rust floating-
+> point machine types (f32 or f64). It is the largest floating-point
+> type that is directly
+> supported by hardware on the target machine [...]"
+
+> I'm assuming that the second sentence restricts "floating point types"
+> to mean f32 and f64 only, but this seems like a shame. Loss of numeric
+> precision with no corresponding gain is going to hurt some potential
+> users; see for example William Kahan's classic paper,
+> http://www.eecs.berkeley.edu/~wkahan/JAVAhurt.pdf
+
+> "The Rust type float is a machine-specific type. It is the largest
+> floating-point type (supported by the compiler) that is directly
+> supported by hardware on the target machine [...]"
+
+> That would leave the door open for extended-precision (or even
+> quad-precision some day, if and when hardware appears) without forcing
+> it now when you have better things to do.
+
+> Would anything else in the spec break if float was not guaranteed to
+> be one of f32 or f64?
+
+It wouldn't be nice if 'float' could sometimes be a type that couldn't
+be explicitly and portably mandated, so perhaps the solution is to
+reserve f80, f96, f128, and so on.  Even so, 'float' would probably
+still be f64 on any machine with a 64 bit fp unit regardless of
+availability of something like f80.  It might take a while to add
+software implementations of the bigger types, but reserving the
+keywords now looks the right step.
+
+
+    Jeff Schultz
+
+
+
+From graydon at mozilla.com  Mon Aug 16 20:15:48 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 16 Aug 2010 20:15:48 -0700
+Subject: [rust-dev] Minor spec niggle re Ref.Type.Float
+In-Reply-To: <20100817021316.GA3627@mulga.csse.unimelb.edu.au>
+References: <AANLkTinHGbS86dNdgQC-9T1C__bk++WPKQFwgNQuV=71@mail.gmail.com>
+	<20100817021316.GA3627@mulga.csse.unimelb.edu.au>
+Message-ID: <4C69FEE4.3070403@mozilla.com>
+
+On 16/08/2010 7:13 PM, Jeff Schultz wrote:
+
+>> Would anything else in the spec break if float was not guaranteed to
+>> be one of f32 or f64?
+>
+> It wouldn't be nice if 'float' could sometimes be a type that couldn't
+> be explicitly and portably mandated, so perhaps the solution is to
+> reserve f80, f96, f128, and so on.  Even so, 'float' would probably
+> still be f64 on any machine with a 64 bit fp unit regardless of
+> availability of something like f80.  It might take a while to add
+> software implementations of the bigger types, but reserving the
+> keywords now looks the right step.
+
+Reserving is harmless, sure. At very least lets people carve out 
+non-portable dialects, avoid collisions.
+
+I'm familiar with Kahan's arguments regarding FP, and I'm in no way 
+intending to go down the road of mandating "all FP runs in 
+strict/minimal/java 100%-reproducible mode" or anything like that. 
+There's a point beyond which you just have to let the 
+hardware/OS/platform do the best it can, and/or let the programmer 
+control matters if they know what they're doing.
+
+That said, I think the initial query here is a bit blurry. Aside from 
+the wording in the manual (which, sure, is a bit off as it implies x87 
+doesn't have an 80-bit mode, I'll fix that), there are three separable 
+concepts / issues here:
+
+   (1) 80-bit FP temporaries used within the FPU
+   (2) an 'f80' type that is defined to be 80 bits
+   (3) whether, if you have f80, float expands to f80 on x86
+
+Concept (1) occurs ... quite often in C code that just uses 64-bit 
+doubles. It's a mode the x87 is often set to. It strictly increases 
+precision of calculation, while still spitting out 64-bit values when 
+they're written back to (say) memory or 64-bit GPRs or whatever. This is 
+fine. I'm not going to try to prohibit user code from turning on this 
+mode when they happen to doing x87 codegen. That's assuming anyone 
+bothers wiring up LLVM's x87-codegen and making it a 
+thing-you-can-turn-on in rustc. Personally I'm unlikely to bother, I'll 
+just set it to SSE2 mode and be done with it. Modern codes *usually* 
+switch to SSE2 / 64-bit-only anyway, for speed, but whatever floats your 
+boat. Patches welcome. You want slower and more-accurate, implement and 
+turn on x87 codegen, and set that bit. Likewise the various rounding 
+modes or whatever. It's done by an FLDCW we can't really stop you from 
+issuing in some native call to C anyways.
+
+Note though that (1) is strictly a backend / codegen / library issue. 
+The user types involved are still all f64.
+
+Concept (2) is where we get into a putative f80 type. Like, a variable 
+type, not just a temporary type. It's certainly possible to implement 
+(once reserved). However, this concept is nowhere near as prevalent or 
+(I think) important as the first email is implying. You can get at it -- 
+sometimes! -- by writing 'long double' in C. Sometimes this might get 
+you 80 bits. Depending. On some platforms it'll turn into a synonym for 
+'double' (say, MSVC), on some platforms it'll go to 128 bit. On some 
+chips it turns into a weird-o non-IEEE FP format. Do a google code 
+search for it thought. It's like ... a few math libs and a bunch of 
+compatibility headers that people keep blindly copying around. It's rare.
+
+Since I'm not interested in supporting x87 codegen with my own sweat, 
+you can guess where my feelings about all the even-more-rare feature 
+goes :) Same bucket as the saturating-arithmetic modes in MMX and vector 
+bundles and all these sorts of things. Patches welcome so long as the 
+feature's clearly a platform extension and doesn't confuse programs that 
+aren't asking for it.
+
+Concept (3) is, well ... a bit of a matter of taste. But I think 
+probably an easy to explain one. Follow the supposed logic of doing (3): 
+you're on x86. So it has an x87. So float turns into f80. So now your 
+FPU behavior ... slows down *and* changes behavior on a 
+platform-by-platform basis. Accuracy is nice, but you want the default 
+to be "pick accuracy over speed and predictability"? I think this would 
+be undesirable. Most CPUs -- hell, even GPUs -- optimize for f64 these 
+days, and most support it. I want float to default to try to hit that 
+case (until f128 is as prevalent as f64, some magical day...)
+
+-Graydon
+
+From jyasskin at gmail.com  Tue Aug 17 02:23:58 2010
+From: jyasskin at gmail.com (Jeffrey Yasskin)
+Date: Tue, 17 Aug 2010 09:23:58 +0000
+Subject: [rust-dev] constants
+In-Reply-To: <4C68D709.5090705@mozilla.com>
+References: <4C58913A.8040707@mozilla.com> <4C68D709.5090705@mozilla.com>
+Message-ID: <AANLkTimCvqhQPJ_yA6u2SWDTm0GsvUm+YLwQiS==OLbh@mail.gmail.com>
+
+On Mon, Aug 16, 2010 at 6:13 AM, Graydon Hoare <graydon at mozilla.com> wrote:
+> Related to the matter of linkage, I've been ruminating a bit on the current
+> limited support for compile-time constants.
+>
+> The "items" in a rust module are currently functions, iterators, types, and
+> sub-modules. These are constants, in a way, but they're not the sort a lot
+> of people think of. In particular there are no "value-like" constant items
+> such as numbers, strings, vectors, records, tuples. They can only be dynamic
+> values. If you want to produce one of these -- even if it's always the same
+> value -- you have to write a function that returns it.
+>
+> This is not entirely pleasant. There is room for improvement:
+>
+> ?- Things that *could* be compile-time constants can't be calculated
+> ? ?"once". We wind up putting code in the executable rather than
+> ? ?read-only data, and re-calculating repeatedly at runtime.
+
+'Course, there's no reason you couldn't optimize the function to
+"return global_constant", but that still involves the call and
+refcounting overhead. If you figure out how to solve the rodata vs
+refcounting problem, you could skip the refcounting here too.
+
+> ?- Some values -- say, 0-ary tags -- wind up as functions even
+> ? ?though they'd make more sense as enum-like constant values.
+
+This is purely a syntactic issue, isn't it? You can compile either
+syntax to either implementation. IIRC, Ruby and D both allow one to
+call a 0-argument function without parentheses.
+
+> ?- Constant-folding is left, at best, to optional compiler passes. It
+> ? ?might be nice to be able to guarantee a certain quantity of it to
+> ? ?language users, done in the front-end.
+
+It wouldn't have to be done in the frontend even if the language
+guarantees it. You'd just have to run a couple passes even at -O0. It
+only needs to be done in the frontend if you allow these constants to
+be used as part of a type like C++ does.
+
+> Suppose, instead, that we have an item type
+>
+> ? ? ?'const <ty> <ident> = <const-expr>;'
+>
+> and we recursively define a subset of the expr grammar as
+> const-ness-propagating. And we're careful to be sure we mean *compile-time*
+> constant, not initialization-time constant a la C. Then:
+
+It's a la C++. C99 requires static initializers to be compile-time
+constant in 6.7.8p4.
+
+> ...
+>
+> ?- Value-level equality needs to be preserved and/or checked somehow
+> ? ?between compile-time and load-time, rather than just type
+> ? ?compatibility. Compiling a crate with math.pi = 3.14, then finding
+> ? ?you linked against a recompiled crate with math.pi = 3.15, is an
+> ? ?unwelcome situation. We'd need some kind of scheme to guard against
+> ? ?this, or make users somehow aware of the risks. Possibly just
+> ? ?require compilation-unit UUID-identity or CHF-identity if there's
+> ? ?been any constant folding? Or track the constants that were folded
+> ? ?and check equality at runtime link time? Awkward options, all...
+
+This bit is separable. I think it'd make sense to say that constants
+in one crate are runtime values from another crate. If you start
+inlining functions across crate boundaries, you can re-use the same
+checking mechanism to inline constants. You'd want a way to let the
+user control this in case they actually want the crate to be
+upgradeable without relinking.
+
+From peterhull90 at gmail.com  Tue Aug 17 04:11:58 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Tue, 17 Aug 2010 12:11:58 +0100
+Subject: [rust-dev] constants
+In-Reply-To: <AANLkTimCvqhQPJ_yA6u2SWDTm0GsvUm+YLwQiS==OLbh@mail.gmail.com>
+References: <4C58913A.8040707@mozilla.com> <4C68D709.5090705@mozilla.com>
+	<AANLkTimCvqhQPJ_yA6u2SWDTm0GsvUm+YLwQiS==OLbh@mail.gmail.com>
+Message-ID: <AANLkTimmHCVOYN_W-WKTcXxk2g1eycxv75TWZ5R34Z25@mail.gmail.com>
+
+On Tue, Aug 17, 2010 at 10:23 AM, Jeffrey Yasskin <jyasskin at gmail.com> wrote:
+> On Mon, Aug 16, 2010 at 6:13 AM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+>>  - Things that *could* be compile-time constants can't be calculated
+>>    "once". We wind up putting code in the executable rather than
+>>    read-only data, and re-calculating repeatedly at runtime.
+>
+> 'Course, there's no reason you couldn't optimize the function to
+> "return global_constant", but that still involves the call and
+> refcounting overhead. If you figure out how to solve the rodata vs
+> refcounting problem, you could skip the refcounting here too.
+
+I believe that CoreFoundation has 'magic refcounts' for read-only data
+(for example literal strings declared with CFSTR) These objects  have
+a certain (large) value for their refcount which retain/release check
+- if it equals the magic number they don't do anything. Would that be
+useful?
+
+
+>>  - Value-level equality needs to be preserved and/or checked somehow
+>>    between compile-time and load-time, rather than just type
+>>    compatibility. Compiling a crate with math.pi = 3.14, then finding
+>>    you linked against a recompiled crate with math.pi = 3.15, is an
+>>    unwelcome situation. We'd need some kind of scheme to guard against
+>>    this, or make users somehow aware of the risks. Possibly just
+>>    require compilation-unit UUID-identity or CHF-identity if there's
+>>    been any constant folding? Or track the constants that were folded
+>>    and check equality at runtime link time? Awkward options, all...
+>
+> This bit is separable. I think it'd make sense to say that constants
+> in one crate are runtime values from another crate. If you start
+> inlining functions across crate boundaries, you can re-use the same
+> checking mechanism to inline constants. You'd want a way to let the
+> user control this in case they actually want the crate to be
+> upgradeable without relinking.
+
+Is it possible to create a hash (SHA1 or whatever) from just the
+'interface' bit of a crate? All the constant values could be laid out
+in a contiguous block and hashed. Then a rust program could check that
+the crate's hash was still equal to what it had at link time. This
+could include the function signatures too if needed.
+
+Pete
+
+(sorry for the repeat JY; I forgot to reply-to-all)
+
+From mike.capp at gmail.com  Tue Aug 17 06:15:11 2010
+From: mike.capp at gmail.com (Mike Capp)
+Date: Tue, 17 Aug 2010 14:15:11 +0100
+Subject: [rust-dev] Minor spec niggle re Ref.Type.Float
+In-Reply-To: <4C69FEE4.3070403@mozilla.com>
+References: <AANLkTinHGbS86dNdgQC-9T1C__bk++WPKQFwgNQuV=71@mail.gmail.com>
+	<20100817021316.GA3627@mulga.csse.unimelb.edu.au>
+	<4C69FEE4.3070403@mozilla.com>
+Message-ID: <AANLkTim5q8cN8TQQAkY_Hp8h0=NG3SQDN3EYZ6O3r2Wm@mail.gmail.com>
+
+On 17 August 2010 04:15, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> Concept (3) is, well ... a bit of a matter of taste. But I think probably an
+> easy to explain one. Follow the supposed logic of doing (3): you're on x86.
+> So it has an x87. So float turns into f80. So now your FPU behavior ...
+> slows down *and* changes behavior on a platform-by-platform basis. Accuracy
+> is nice, but you want the default to be "pick accuracy over speed and
+> predictability"? I think this would be undesirable.
+
+Hypothetical: you're writing for two target platforms. Platform A only
+has hardware support for f32. Platform B has hardware support for both
+f32 and f64, but f64 is significantly slower. The current wording of
+Ref.Type.Float requires that float resolve to f32 on A and to f64 on
+B. That is, it precisely requires that "FPU behavior slows down *and*
+changes behavior on a platform-by-platform basis".
+
+You're right that my OP was blurry, and I'm absolutely not suggesting
+that anyone should implement f80 (though reserving it sounds eminently
+sensible). But I think that the existence of fast f64 on x86 - the
+ability to have your cake and eat it - is concealing a lack of clarity
+in this section. If I'm on x86 and I know it and I want fast
+predictable SSE2 mode, I'll declare as f64. If I declare something as
+float, it's precisely because I *want* to change behaviour on a
+platform-by-platform basis; I want the compiler to pick the "best"
+type available, and I'm accepting a loss of predictability as the
+price of that. The trouble is that, without a definition of "best",
+it's hard to know whether float will capture my intent or not.
+
+How about "The Rust type float [...] is the fastest supported
+floating-point type. If several types are equally fast, it is the
+largest of those types [...]" - would that capture the rationale
+behind your taste?
+
+- Mike
+
+From graydon at mozilla.com  Tue Aug 17 09:47:43 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 17 Aug 2010 09:47:43 -0700
+Subject: [rust-dev] Minor spec niggle re Ref.Type.Float
+In-Reply-To: <AANLkTim5q8cN8TQQAkY_Hp8h0=NG3SQDN3EYZ6O3r2Wm@mail.gmail.com>
+References: <AANLkTinHGbS86dNdgQC-9T1C__bk++WPKQFwgNQuV=71@mail.gmail.com>	<20100817021316.GA3627@mulga.csse.unimelb.edu.au>	<4C69FEE4.3070403@mozilla.com>
+	<AANLkTim5q8cN8TQQAkY_Hp8h0=NG3SQDN3EYZ6O3r2Wm@mail.gmail.com>
+Message-ID: <4C6ABD2F.5050501@mozilla.com>
+
+On 10-08-17 06:15 AM, Mike Capp wrote:
+
+> Hypothetical: you're writing for two target platforms. Platform A only
+> has hardware support for f32. Platform B has hardware support for both
+> f32 and f64, but f64 is significantly slower. The current wording of
+> Ref.Type.Float requires that float resolve to f32 on A and to f64 on
+> B. That is, it precisely requires that "FPU behavior slows down *and*
+> changes behavior on a platform-by-platform basis".
+
+Well, yeah. But that's not going to happen on *all x86 targets*! :)
+
+> You're right that my OP was blurry, and I'm absolutely not suggesting
+> that anyone should implement f80 (though reserving it sounds eminently
+> sensible).
+
+Ok. I'll cook up a reserved-tokens table in the lexer shortly then.
+
+> But I think that the existence of fast f64 on x86 - the
+> ability to have your cake and eat it - is concealing a lack of clarity
+> in this section.
+
+Indeed. The manual needs slightly sharper language. I'll pick one 
+more-obvious wording for now, but it shouldn't be assumed to be set in 
+stone. By the time it makes sense to refer to the manual as a "spec", 
+we'll probably have had far more people weigh in on such matters.
+
+> If I'm on x86 and I know it and I want fast
+> predictable SSE2 mode, I'll declare as f64.
+
+Unless you want it to turn into f128 when you get ported to SSE9 or 
+whatever :) Probably we'll wind up with a set of c9x-esque 
+types-by-intention in a system module somewhere: target.fast_float, 
+target.wide_float, etc.
+
+> If I declare something as
+> float, it's precisely because I *want* to change behaviour on a
+> platform-by-platform basis;  I want the compiler to pick the "best"
+> type available, and I'm accepting a loss of predictability as the
+> price of that. The trouble is that, without a definition of "best",
+> it's hard to know whether float will capture my intent or not.
+
+Yeah. And I guess this is where I get into discussing personal 
+preferences and making up reasons to justify them :) But it's not always 
+clear. I'd note also the number of times I've seen a project switch from 
+-O2 to -Os and back again. Speed/size tradeoffs are universal in 
+programming. It may be that switching to f80 (and thus rounding sizes up 
+to 128-bits-per-float, say) doubles memory use in your program because 
+it's FP-heavy! Who can say?
+
+> How about "The Rust type float [...] is the fastest supported
+> floating-point type. If several types are equally fast, it is the
+> largest of those types [...]" - would that capture the rationale
+> behind your taste?
+
+I suppose. It's possibly difficult to pin down a wording that captures 
+the emotional reaction I get to "default to x87". When arguing taste, 
+personal history figures into it: I've fixed numerous bugs over the 
+years of the form "somehow I'm stuck generating x87 when, of course, I 
+want SSE2". Users almost always ask for SSE2 when it's present on the 
+platform; I recall far fewer reports of anyone asking for x87, unless 
+they were targeting pre-KNI / PentiumPro generation.
+
+Sorry to have come off a bit harsh at first. Of course there's some 
+rationale for both, it's just a matter of picking good defaults. Which 
+-- owing to the likelihood of further manual-rewriting over the coming 
+months-to-years -- probably doesn't matter much at this point. We'll 
+pick a default that's clear (your wording above is fine) and wait for 
+someone with more knowledge or opinions pick something better.
+
+-Graydon
+
+From graydon at mozilla.com  Tue Aug 17 09:59:58 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 17 Aug 2010 09:59:58 -0700
+Subject: [rust-dev] constants
+In-Reply-To: <AANLkTimCvqhQPJ_yA6u2SWDTm0GsvUm+YLwQiS==OLbh@mail.gmail.com>
+References: <4C58913A.8040707@mozilla.com> <4C68D709.5090705@mozilla.com>
+	<AANLkTimCvqhQPJ_yA6u2SWDTm0GsvUm+YLwQiS==OLbh@mail.gmail.com>
+Message-ID: <4C6AC00E.1090400@mozilla.com>
+
+On 10-08-17 02:23 AM, Jeffrey Yasskin wrote:
+
+> 'Course, there's no reason you couldn't optimize the function to
+> "return global_constant", but that still involves the call and
+> refcounting overhead. If you figure out how to solve the rodata vs
+> refcounting problem, you could skip the refcounting here too.
+
+You could auto-const local calculations if you can prove they're pure, 
+yeah. Assuming you've compile-time access to the contributing functions, 
+and you're sure the user didn't lie about the purity of anything. Might 
+be risky. Maybe only do so when you're talking about built-in language 
+primitives?
+
+(This is part of the conversation about constants: do we want to go the 
+D route and say "the compiler will feel free to load and call 
+declared-pure functions at compile time when calculating anything it 
+feels is constant? Or *just* stick with language-provided pure things 
+like binops and value constructors?)
+
+> This is purely a syntactic issue, isn't it? You can compile either
+> syntax to either implementation. IIRC, Ruby and D both allow one to
+> call a 0-argument function without parentheses.
+
+Syntax often intersects with other matters (say, type inference):
+
+   type color = tag(red(), green(), blue());
+   auto c = red;
+
+Is c of type color, or type (fn () -> color)? Currently it's the latter. 
+I'll admit it's a minor detail, but one worth paying a touch of 
+attention to while deciding what to do here.
+
+> It wouldn't have to be done in the frontend even if the language
+> guarantees it. You'd just have to run a couple passes even at -O0. It
+> only needs to be done in the frontend if you allow these constants to
+> be used as part of a type like C++ does.
+
+Ah, but constrained types *do* support (at present) literal args to 
+constraints. Generalizing these to const-exprs is a natural step :)
+
+> It's a la C++. C99 requires static initializers to be compile-time
+> constant in 6.7.8p4.
+
+Ah, whoops. I always trip up on this sort of thing because of the VLA 
+support in C99. Makes me think they absorbed more than they did.
+
+> This bit is separable. I think it'd make sense to say that constants
+> in one crate are runtime values from another crate. If you start
+> inlining functions across crate boundaries, you can re-use the same
+> checking mechanism to inline constants. You'd want a way to let the
+> user control this in case they actually want the crate to be
+> upgradeable without relinking.
+
+Indeed so. I was mostly just wondering aloud which mechanisms felt 
+tasteful vs. distasteful to those reading. Ocaml for example uses a CHF 
+of the module signature (md5 I think) and ... I've heard zero users 
+complain, though at least *some* type theorists think it's an 
+abomination. C++ does name mangling but with nominal rather than 
+structural types, so it's the worst of both worlds (unsafe, yet 
+pretending to be brittle). Umm...
+
+There are a few options, of course :) I made the crate graph acyclic at 
+least in part to support CHF-based signature checking.
+
+-Graydon
+
+From graydon at mozilla.com  Tue Aug 17 10:21:29 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 17 Aug 2010 10:21:29 -0700
+Subject: [rust-dev] constants
+In-Reply-To: <AANLkTimmHCVOYN_W-WKTcXxk2g1eycxv75TWZ5R34Z25@mail.gmail.com>
+References: <4C58913A.8040707@mozilla.com>
+	<4C68D709.5090705@mozilla.com>	<AANLkTimCvqhQPJ_yA6u2SWDTm0GsvUm+YLwQiS==OLbh@mail.gmail.com>
+	<AANLkTimmHCVOYN_W-WKTcXxk2g1eycxv75TWZ5R34Z25@mail.gmail.com>
+Message-ID: <4C6AC519.9090602@mozilla.com>
+
+On 10-08-17 04:11 AM, Peter Hull wrote:
+
+> I believe that CoreFoundation has 'magic refcounts' for read-only data
+> (for example literal strings declared with CFSTR) These objects  have
+> a certain (large) value for their refcount which retain/release check
+> - if it equals the magic number they don't do anything. Would that be
+> useful?
+
+Yeah. The most-obvious way is to steal (unsigned)-1 or something as the 
+"I'm a constant" refcount, and do double-checking of that.
+
+However, our existing slot-evolution scheme has to null-set and 
+null-check box pointers before twiddling refcounts anyways; adding a 
+magic-refcount-check would make for More Checks. I'd be amenable to a 
+Same Number Of Checks, More Cleverness scheme that tries to combine the 
+null check with the const-ness check (say, tag the *pointers* rather 
+than picking magic refcounts, and make the pointers to constants have 
+tag=0), because whatever cost happens here will be quite heavily 
+replicated throughout resulting programs.
+
+A fair bit of this is implementation-specific. We could do N different 
+things, just need to be sure *one* of them can be done relatively 
+efficiently.
+
+> Is it possible to create a hash (SHA1 or whatever) from just the
+> 'interface' bit of a crate?
+
+Yeah. When I said CHF-identity this is what I meant. Cryptographic Hash 
+Function. Sorry for being opaque.
+
+To elaborate on the idea: CHFs have wonderful properties but a few 
+displeasing ones. I have ... a bit of history with this argument :)
+
+Pros:
+   - Changing even the smallest little detail is likely to be caught.
+
+   - O(1) checking of identity with delightful deep compositionality.
+
+   - Easy to produce, say, 2 or 3 different modes of comparison:
+       - CHF-of-names-and-types
+       - CHF-of-names-and-types-and-constant-values
+       - CHF-of-names-and-types-and-all-implementation-source-code
+       - CHF-of-entire-text-of-compilation-unit-and-build-env
+
+(Yes, there are probably a few users out there who want the latter. 
+People doing high-integrity stuff who need to re-test everything and 
+archive everything any time a single bit on the target system changes..)
+
+Cons:
+   - Identity is, strictly speaking, probabilistic. You will have some
+     users out there who complain bitterly about the possibility of
+     either accidental collision (astronomical odds) or malicious attacks
+     when the hash inevitably weakens (it's not a security system, but
+     users will treat it as such, Now You Have Two Problems)
+
+   - Tokens are un-ordered. If you want to say one version is "newer"
+     than another, you are SOL. Need to maintain external metadata.
+
+   - Possibly more unstable than you want: sometimes a 'trivial' change
+     winds up causing a CHF perturbation / incompatibility. You have more
+     leeway defining partial orders or equivalence classes via recursive
+     comparisons. Equality case can sometimes be mitigated by
+     normalization passes.
+
+There are various combinations, of course. UUIDs + CHFs get you over con 
+#1. Metadata tags + UUIDs + CHFs get you over 1 and 2... I'm willing to 
+fiddle with this a fair bit to get it maximally useful. Existing linkage 
+and tooling schemes are often really bad and make life miserable for 
+everyone (end-users, packagers, developers, sysadmins, support 
+engineers, ...)
+
+-Graydon
+
+From graydon at mozilla.com  Tue Aug 17 10:35:17 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 17 Aug 2010 10:35:17 -0700
+Subject: [rust-dev] Minor spec niggle re Ref.Type.Float
+In-Reply-To: <AANLkTi=3r4Yib9wu7aYsCPs=-w2V1pEvU8MiVjYCOyoT@mail.gmail.com>
+References: <AANLkTinHGbS86dNdgQC-9T1C__bk++WPKQFwgNQuV=71@mail.gmail.com>	<20100817021316.GA3627@mulga.csse.unimelb.edu.au>	<4C69FEE4.3070403@mozilla.com>	<AANLkTim5q8cN8TQQAkY_Hp8h0=NG3SQDN3EYZ6O3r2Wm@mail.gmail.com>	<4C6ABD2F.5050501@mozilla.com>
+	<AANLkTi=3r4Yib9wu7aYsCPs=-w2V1pEvU8MiVjYCOyoT@mail.gmail.com>
+Message-ID: <4C6AC855.2070906@mozilla.com>
+
+On 10-08-17 10:25 AM, Mike Capp wrote:
+
+>> Sorry to have come off a bit harsh at first.
+>
+> No problem at all. I'm new here, have no background in compiler
+> writing and will mostly just be lurking out of general interest, so
+> coming off a bit harsh will almost always be the correct default
+> response.
+
+Oh no! I very much want to maintain civility and a friendly tone. Hence 
+the code of conduct and such. One of the worst features of the internet 
+-- and mailing lists, programmer culture, etc. -- is the relentless push 
+to default-hostility.
+
+We should aim for good manners, and remind one another when failing :)
+
+-Graydon
+
+From peterhull90 at gmail.com  Tue Aug 17 14:07:00 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Tue, 17 Aug 2010 22:07:00 +0100
+Subject: [rust-dev] Debugging on OS X
+In-Reply-To: <4C69C920.6000608@mozilla.com>
+References: <AANLkTi=ZvYBL=+p0PHA7ra7uoRMGUetA0FmBgQFi-PGt@mail.gmail.com>
+	<4C69C920.6000608@mozilla.com>
+Message-ID: <AANLkTikm9DMejF9h-O8JWRQUunKO27CvQyT2--2ZpUit@mail.gmail.com>
+
+On Tue, Aug 17, 2010 at 12:26 AM, Graydon Hoare <graydon at mozilla.com> wrote:
+> On 10-08-14 05:15 AM, Peter Hull wrote:
+
+> Eventually, of course, we want perfect, flawless debugging info. But it'll
+> be a slow climb to get there. I can't say much more than "stay tuned". We
+> know it's not very good right now, and we're stuck having to use it as well,
+> so it'll get better at some point! Probably a lot better once LLVM's doing
+> the lower-level encoding, though we may have a few complications convincing
+> it to say what we need to.
+I read that the LLVM people are having trouble with Apple's old gdb,
+too. Presumably LLDB would be a better choice when the LLVM backend is
+working as well as the native one?
+>
+On my specific problem with lib-deque.rs the best I could do at the
+moment is to give you the output with RUST_LOG=all, but I presume you
+have that anyway. I could trace quite a way into the code but not to
+the point where the fault occurs, and it'll take me a while to
+understand the rt code!
+
+Pete
+
+From igor at mir2.org  Tue Aug 17 14:45:15 2010
+From: igor at mir2.org (Igor Bukanov)
+Date: Tue, 17 Aug 2010 23:45:15 +0200
+Subject: [rust-dev] Minor spec niggle re Ref.Type.Float
+In-Reply-To: <4C6ABD2F.5050501@mozilla.com>
+References: <AANLkTinHGbS86dNdgQC-9T1C__bk++WPKQFwgNQuV=71@mail.gmail.com>
+	<20100817021316.GA3627@mulga.csse.unimelb.edu.au>
+	<4C69FEE4.3070403@mozilla.com>
+	<AANLkTim5q8cN8TQQAkY_Hp8h0=NG3SQDN3EYZ6O3r2Wm@mail.gmail.com>
+	<4C6ABD2F.5050501@mozilla.com>
+Message-ID: <AANLkTin1oxB3p3k_06mUhoZKCPNxBpsg4Sr7B7Pxt3JC@mail.gmail.com>
+
+On 17 August 2010 18:47, Graydon Hoare <graydon at mozilla.com> wrote:
+>> If I'm on x86 and I know it and I want fast
+>> predictable SSE2 mode, I'll declare as f64.
+>
+> Unless you want it to turn into f128 when you get ported to SSE9 or whatever
+> :) Probably we'll wind up with a set of c9x-esque types-by-intention in a
+> system module somewhere: target.fast_float, target.wide_float, etc.
+
+This questions IMO the need for a platform-specific float type. From
+my experience with numerical programming in C/C++ some years ago (and
+friends told me that this became even more important now)  one really
+needs to be sure about precision guarantees and adherence to
+semantics. The speed is less important. One also needs a control over
+the size of floating point numbers when code creates a lot of them.
+This leads to using, say, f32 for storage and something like
+target.the_most_precise_float_that_at_least_64_bit for lengthy
+intermediate calculations. On the other hand I suppose for game
+development one probably wants something like
+target.the_fastest_float.
+
+So there is no common ground that can be covered with one
+platform-specific float type. This is rather different from integer
+types as they do not have precision and typically it does not matter
+if int ends at 2^31 or 2^63. So having int to denote the fastest
+platform integer type is very useful especially given the assumption
+that everybody makes that int is at least 32 bit.
+
+From peterhull90 at gmail.com  Tue Aug 24 03:06:45 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Tue, 24 Aug 2010 11:06:45 +0100
+Subject: [rust-dev] Shootout examples
+Message-ID: <AANLkTin6N3dJM1tcOZA6pvN4dJ8s1DeNEcy-uDtbFHm4@mail.gmail.com>
+
+I notice that in the test directory there are a couple of examples
+from the The Computer Language
+Benchmarks Game site (http://shootout.alioth.debian.org/). I was
+thinking I might try and implement a few more myself - more for
+practice in rust syntax rather than to see what the actual benchmark
+times are at this stage!
+Is this a good idea? Is anyone else doing it already?
+
+Pete
+
+From graydon at mozilla.com  Tue Aug 24 07:37:25 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 24 Aug 2010 07:37:25 -0700
+Subject: [rust-dev] Shootout examples
+In-Reply-To: <AANLkTin6N3dJM1tcOZA6pvN4dJ8s1DeNEcy-uDtbFHm4@mail.gmail.com>
+References: <AANLkTin6N3dJM1tcOZA6pvN4dJ8s1DeNEcy-uDtbFHm4@mail.gmail.com>
+Message-ID: <4C73D925.1010407@mozilla.com>
+
+On 24/08/2010 3:06 AM, Peter Hull wrote:
+> I notice that in the test directory there are a couple of examples
+> from the The Computer Language
+> Benchmarks Game site (http://shootout.alioth.debian.org/). I was
+> thinking I might try and implement a few more myself - more for
+> practice in rust syntax rather than to see what the actual benchmark
+> times are at this stage!
+> Is this a good idea? Is anyone else doing it already?
+
+Feel free. The main thing you'll likely notice at this point is that 
+there's no FP support in rustboot, so a lot of the examples simply can't 
+be coded. If you narrow things down to the integer tests some quantity 
+of them can probably be done (though: expect epic slowness and crashiness).
+
+-Graydon
+
+From peterhull90 at gmail.com  Tue Aug 24 08:02:38 2010
+From: peterhull90 at gmail.com (Peter Hull)
+Date: Tue, 24 Aug 2010 16:02:38 +0100
+Subject: [rust-dev] Shootout examples
+In-Reply-To: <4C73D925.1010407@mozilla.com>
+References: <AANLkTin6N3dJM1tcOZA6pvN4dJ8s1DeNEcy-uDtbFHm4@mail.gmail.com>
+	<4C73D925.1010407@mozilla.com>
+Message-ID: <AANLkTi=LcbyRC=dJEn7JVwznVHSVzu0o3_3=OOY3oJg8@mail.gmail.com>
+
+On Tue, Aug 24, 2010 at 3:37 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+>
+> Feel free. The main thing you'll likely notice at this point is that there's
+> no FP support in rustboot, so a lot of the examples simply can't be coded.
+I did notice that - took a while before the penny dropped and I looked
+at the ocaml code.
+I started on 'fasta' which does use FP but I'm using integer percents
+for now. It probably won't give exactly the same result but can be
+changed to floats when ready.
+
+Pete
+
+From tohava at gmail.com  Tue Aug 24 11:35:20 2010
+From: tohava at gmail.com (ori bar)
+Date: Tue, 24 Aug 2010 21:35:20 +0300
+Subject: [rust-dev] The 'any' type
+Message-ID: <AANLkTimtbwh8X6mzosctSmjNLXxqGHqtCQ-TNhwJ4doZ@mail.gmail.com>
+
+I've tried searching trans.ml for code which implements assignments
+for the 'any' type and haven't found any, have I missed something? Or
+is the 'any' type mostly unimplemented? If so, where should one start
+to implement it and/or is there someone already working on it?
+
+
+
+-- 
+1110101111111110 - it's a way of life
+
+From graydon at mozilla.com  Tue Aug 24 11:40:48 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 24 Aug 2010 11:40:48 -0700
+Subject: [rust-dev] The 'any' type
+In-Reply-To: <AANLkTimtbwh8X6mzosctSmjNLXxqGHqtCQ-TNhwJ4doZ@mail.gmail.com>
+References: <AANLkTimtbwh8X6mzosctSmjNLXxqGHqtCQ-TNhwJ4doZ@mail.gmail.com>
+Message-ID: <4C741230.6020304@mozilla.com>
+
+On 10-08-24 11:35 AM, ori bar wrote:
+> I've tried searching trans.ml for code which implements assignments
+> for the 'any' type and haven't found any, have I missed something? Or
+> is the 'any' type mostly unimplemented? If so, where should one start
+> to implement it and/or is there someone already working on it?
+
+Unimplemented. Feel free, if you like.
+
+Though I'm hesitant to encourage you on this, as I think we've proven to 
+ourselves that it'll be reasonably easy to do in theory (pointer-to-box 
++ pointer-to-type-descriptor) and I suspect we can get rustc running 
+without it.
+
+(Perhaps I should go through the tracker and mark off bugs that seem 
+likely to be rustc-blocking? I bet that'd be a good use of time.)
+
+-Graydon
+
+From tohava at gmail.com  Tue Aug 24 11:46:03 2010
+From: tohava at gmail.com (ori bar)
+Date: Tue, 24 Aug 2010 21:46:03 +0300
+Subject: [rust-dev] The 'any' type
+In-Reply-To: <4C741230.6020304@mozilla.com>
+References: <AANLkTimtbwh8X6mzosctSmjNLXxqGHqtCQ-TNhwJ4doZ@mail.gmail.com>
+	<4C741230.6020304@mozilla.com>
+Message-ID: <AANLkTikZHmwWUBT9pDWgtwzHLYRn7XfDZAh+SvoF_zw1@mail.gmail.com>
+
+Do you have any recommendation about a bug/feature that would be
+better use of my rust coding time? I would be glad to know which.
+
+On Tue, Aug 24, 2010 at 9:40 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+> On 10-08-24 11:35 AM, ori bar wrote:
+>>
+>> I've tried searching trans.ml for code which implements assignments
+>> for the 'any' type and haven't found any, have I missed something? Or
+>> is the 'any' type mostly unimplemented? If so, where should one start
+>> to implement it and/or is there someone already working on it?
+>
+> Unimplemented. Feel free, if you like.
+>
+> Though I'm hesitant to encourage you on this, as I think we've proven to
+> ourselves that it'll be reasonably easy to do in theory (pointer-to-box +
+> pointer-to-type-descriptor) and I suspect we can get rustc running without
+> it.
+>
+> (Perhaps I should go through the tracker and mark off bugs that seem likely
+> to be rustc-blocking? I bet that'd be a good use of time.)
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+
+
+-- 
+1110101111111110 - it's a way of life
+
+From graydon at mozilla.com  Tue Aug 24 15:29:40 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 24 Aug 2010 15:29:40 -0700
+Subject: [rust-dev] The 'any' type
+In-Reply-To: <AANLkTikZHmwWUBT9pDWgtwzHLYRn7XfDZAh+SvoF_zw1@mail.gmail.com>
+References: <AANLkTimtbwh8X6mzosctSmjNLXxqGHqtCQ-TNhwJ4doZ@mail.gmail.com>	<4C741230.6020304@mozilla.com>
+	<AANLkTikZHmwWUBT9pDWgtwzHLYRn7XfDZAh+SvoF_zw1@mail.gmail.com>
+Message-ID: <4C7447D4.5030607@mozilla.com>
+
+On 10-08-24 11:46 AM, ori bar wrote:
+> Do you have any recommendation about a bug/feature that would be
+> better use of my rust coding time? I would be glad to know which.
+
+I've marked a preliminary set of bugs in the bug tracker with the tag 
+'self'. You can see them via this search:
+
+http://github.com/graydon/rust/issues/labels/self
+
+This is in no way complete, but I think most of those are either 
+actually-blocking or sufficiently annoying that we're very likely to 
+have to fix them if we're going to make much progress on rustc.
+
+Unfortunately, none of them are particularly easy :(
+
+-Graydon
+
+From tohava at gmail.com  Tue Aug 24 16:14:22 2010
+From: tohava at gmail.com (ori bar)
+Date: Wed, 25 Aug 2010 02:14:22 +0300
+Subject: [rust-dev] The 'any' type
+In-Reply-To: <4C7447D4.5030607@mozilla.com>
+References: <AANLkTimtbwh8X6mzosctSmjNLXxqGHqtCQ-TNhwJ4doZ@mail.gmail.com>
+	<4C741230.6020304@mozilla.com>
+	<AANLkTikZHmwWUBT9pDWgtwzHLYRn7XfDZAh+SvoF_zw1@mail.gmail.com>
+	<4C7447D4.5030607@mozilla.com>
+Message-ID: <AANLkTimYNrYRyZ37LMmBZ+e8RCGvdRnW1fFqa9Wxms=h@mail.gmail.com>
+
+Two of these caught my interest and seem a bit easier:
+- type parameter interference
+- breaking out of for each loops
+
+I will try to handle them.
+
+On Wed, Aug 25, 2010 at 1:29 AM, Graydon Hoare <graydon at mozilla.com> wrote:
+> On 10-08-24 11:46 AM, ori bar wrote:
+>>
+>> Do you have any recommendation about a bug/feature that would be
+>> better use of my rust coding time? I would be glad to know which.
+>
+> I've marked a preliminary set of bugs in the bug tracker with the tag
+> 'self'. You can see them via this search:
+>
+> http://github.com/graydon/rust/issues/labels/self
+>
+> This is in no way complete, but I think most of those are either
+> actually-blocking or sufficiently annoying that we're very likely to have to
+> fix them if we're going to make much progress on rustc.
+>
+> Unfortunately, none of them are particularly easy :(
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+
+
+-- 
+1110101111111110 - it's a way of life
+
+From sebastian.sylvan at gmail.com  Sat Aug 28 14:33:19 2010
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Sat, 28 Aug 2010 22:33:19 +0100
+Subject: [rust-dev] Implicit environment capture for closures - a compromise?
+Message-ID: <AANLkTikEuOCn+pv5TeJbJF+Qrga6SoJ-97Hzew=OCuag@mail.gmail.com>
+
+Hi,
+
+Let me first say that the only reason I write this is because I really like
+Rust. It seems to get a lot of things really right, and I'd like it to
+become successful! With that said, here's one issue. I have more, and I may
+write more about that later, but I figured I start with this one because it
+actually ends with a suggestion!
+
+IMO implicit capture of the environment for closures is crucial, and punches
+above its weight because it allows the user to write his own control flow,
+as well as scope-based resource control (without RAII). This can only happen
+if the lambda looks very much like any other scope (which requires extremely
+light weight syntax - possibly influencing all other syntax to make this
+happen, but it also requires that we implicitly get access to the
+environment, just like any other scope).
+
+For just one example of why we need lambdas for scope-based resource control
+(and not just the kludge of RAII), you can imagine some kind of optimistic
+concurrency for a transactional store doing something like (pseudo code,
+don't know Rust well enough yet to write anything with it):
+
+void with_transaction( db, Func<Transaction,Void> body )
+{
+
+   // try running the body in a transaction a few times
+   for( int i = 0; i < NUM_RETRIES; ++i )
+   {
+        try{
+          Transaction t = db.startTransaction();
+          body(t);
+          return; // all is well, return early
+        }
+        catch( TransactionFailed ex )
+        {
+           continue; // benign error, let's just try again...
+        }
+        finally{
+           t.close();
+        }
+   }
+
+   // couldn't co-exist with others
+   // so take a global lock instead
+   try {
+     Transaction t = db.takeBigLock();
+     body(t);
+   }
+   finally{
+      t.close();
+   }
+
+}
+
+And then the client code could use this like so:
+
+with_transaction( thedb, (auto t){
+    auto x = t.getVar("x");
+    t.putVar( "x", foo(x) );
+}
+
+Now, a few things to notice here. First, the code actually implementing the
+resource management is a single function, so it's easy to write and maintain
+- it's not arbitrarily split up into a constructor/destructor, with any data
+flowing between the two having to be stored away somewhere in the instance
+data of some dummy data structure. Second, it has first-class access to the
+body of the code actually using the resource, which in this case means it
+can retry the body several times, and do all sorts of other logic you can
+imagine, something which wouldn't be possible with C++ style RAII. Third,
+the user code doesn't need to create some (named) "dummy" object which
+doesn't actually have any real value, but is only used as a means of
+hijacking the constructor/destructor mechanism for RAII. Fourth, the client
+code makes it extremely clear that a scope isn't just any old scope, it's
+explicitly and very clearly attached to the resource-introducing function
+"with_transaction", whereas with C++ style RAII this is a bit more
+hidden/implicit because RAII objects just look like any other object, so who
+can really say that one of those objects takes a lock, for example, and its
+scope must therefore be minimized? Closure-based scope control is easier to
+write and maintain, more flexible and powerful, and clearer at the use
+site.
+
+So that's a partial argument for why lambdas and higher order functions are
+superior to constructors/destructors for scope-based resource control (at
+least for some things), but that's only *one* example of why lambdas with
+environment capture are good stuff. All sorts of other things can be done
+much simpler  (e.g. control flow constructs like for_each, events systems,
+etc.). In short, the usefulness of lambdas require environment capture,
+without it they offer very little over simple function pointer and become
+severely crippled.
+
+Now, here's the question/proposal (I would prefer if the whole thing was
+just changed so it worked like normal closures, but since that probably
+won't happen...). Could we not do some kind of compromise where lambdas that
+are passed by aliases implicitly capture their environment by aliasing? In
+other words, for things like with_transaction above, where we use the lambda
+immediately, rather than storing it away, we can use it as if it was any
+other scope, and therefore write a lot of simple resource management and
+flow control code. All the usual alias restrictions would apply. The idea is
+that you wouldn't need to worry about actually storing anything in a
+closure, since you don't have to worry about the receiver of the lambda
+actually storing the lambda anywhere (it can only access it within the scope
+of the function call, since it's an alias).
+
+Would this work? Seems like some (perhaps even the majority?) of the cases
+where "real" lambdas are needed could still be satisfied, without having to
+worry about most of the issues listed in the FAQ since the lambda can't
+survive the function call it's passed to.
+
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20100828/b77371d9/attachment.html>
+
+From graydon at mozilla.com  Mon Aug 30 11:06:44 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 30 Aug 2010 11:06:44 -0700
+Subject: [rust-dev] Implicit environment capture for closures - a
+	compromise?
+In-Reply-To: <AANLkTikEuOCn+pv5TeJbJF+Qrga6SoJ-97Hzew=OCuag@mail.gmail.com>
+References: <AANLkTikEuOCn+pv5TeJbJF+Qrga6SoJ-97Hzew=OCuag@mail.gmail.com>
+Message-ID: <4C7BF334.6080503@mozilla.com>
+
+On 10-08-28 02:33 PM, Sebastian Sylvan wrote:
+
+> Let me first say that the only reason I write this is because I really like
+> Rust. It seems to get a lot of things really right, and I'd like it to
+> become successful! With that said, here's one issue. I have more, and I may
+> write more about that later, but I figured I start with this one because it
+> actually ends with a suggestion!
+
+Hi,
+
+First, I'd like to remind you of the conduct guidelines for this 
+community. While not quite venturing into the "abusive" or "flaming" 
+category, for an introductory post/proposal your tone is needlessly 
+provocative and filled with loaded terminology ("hijacking", "kludge", 
+"severely crippled"). We aim for decorum here, please try to respect 
+that. I had to rewrite my response a few times to ensure that I was not 
+escalating the tone, and I don't enjoy spending work hours on such 
+exercises.
+
+With respect to the technical feasibility of your proposal: it may be 
+possible -- it's similar to how we currently translate foreach blocks, 
+for example -- and I'll add a note about this proposal to the existing 
+bug (issue #6) that's a work-item for a "lambda" short-form of anonymous 
+function immediate. If anyone wants to take the time to work out how 
+your proposal interacts with Rust semantics in more detail and ensure 
+it'd be safe, I'd be happy to entertain that conversation. Such 
+alias-based, scoped capture would have the pleasant additional benefit 
+of being faster than function bindings (no heap allocation), so I'm sure 
+nobody would object to trying to fit them in.
+
+Finally, I should clarify some misconceptions in your post. When I speak 
+in the collective voice "we" here, I am referring to myself mainly as 
+well as some opinions I believe to be shared with others who have worked 
+on the Rust design. Please, others, speak up if you disagree:
+
+   - Comprehensibility is an important design goal in Rust, so we're not
+     terribly interested in appeals to "many" kinds of additional control
+     flow abstraction. Control flow is a notorious comprehension hazard
+     in code at the best of times. We may be interested in handling some
+     well-motivated cases we currently do poorly (at the moment, for
+     example, parallel iteration can't be done easily) as well as general
+     abstractions that support >1 of those. Hypothetical use-cases, much
+     less so.
+
+   - Rust has very few nonlocal control mechanisms already. Catchable
+     exceptions as outlined in your example are not something we consider
+     particularly plausible in Rust, due to custom typestate predicates
+     (there's a FAQ entry). Currently there is no such feature. Aside
+     from termination-semantics failure and loop-break / loop-continue,
+     there are no other nonlocal jumps, and (at the moment) not much
+     interest expressed in adding any.
+
+   - Destructors and RAII are not a "kludge", and try/finally blocks are
+     not a particularly good replacement for them. Destructors and RAII
+     encapsulate the initialization state of a resource and its
+     sub-resources, such that only those resources acquired wind up being
+     released. To mimic this in try/finally blocks is verbose and
+     error-prone: you need a boolean "tracking variable" for each
+     acquired resource that you set immediately after the resource is
+     acquired, as well as logic at the finally-side to conditionally
+     release only those resources acquired (and such logic is
+     order-sensitive, and needs its own try/finally blocks in order to be
+     as robust as a good destructor system). This is particularly
+     error-prone since you only notice coding errors in such paths in the
+     (rare) cases of exceptions actually being thrown; more likely, only
+     non-throwing case is exercised and the errors are shipped
+     un-noticed.
+
+     In addition, destructors and RAII generalize to handle resources
+     that outlive a control frame, without any change to the underlying
+     resource-manager object. Our feeling is therefore that destructors
+     and RAII are, on balance, a more-desirable feature than try/finally
+     blocks would be (if we had them).
+
+If you have further concrete suggestions about changes to Rust, we'd be 
+happy to hear some of them as well, but please try to keep the tone 
+respectful and constructive. The (relatively interesting, reasonable) 
+proposal in your post was almost lost amid the paragraphs of additional 
+critique.
+
+Thanks,
+
+-Graydon
+
+From sebastian.sylvan at gmail.com  Mon Aug 30 11:29:27 2010
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Mon, 30 Aug 2010 19:29:27 +0100
+Subject: [rust-dev] Implicit environment capture for closures - a
+	compromise?
+In-Reply-To: <4C7BF334.6080503@mozilla.com>
+References: <AANLkTikEuOCn+pv5TeJbJF+Qrga6SoJ-97Hzew=OCuag@mail.gmail.com>
+	<4C7BF334.6080503@mozilla.com>
+Message-ID: <AANLkTikQNKnugn5jVfxRTV7bVXU5FTW7bUrHYyMRrcKE@mail.gmail.com>
+
+On Mon, Aug 30, 2010 at 7:06 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> On 10-08-28 02:33 PM, Sebastian Sylvan wrote:
+>
+>  Let me first say that the only reason I write this is because I really
+>> like
+>> Rust. It seems to get a lot of things really right, and I'd like it to
+>> become successful! With that said, here's one issue. I have more, and I
+>> may
+>> write more about that later, but I figured I start with this one because
+>> it
+>> actually ends with a suggestion!
+>>
+>
+> Hi,
+>
+> First, I'd like to remind you of the conduct guidelines for this community.
+> While not quite venturing into the "abusive" or "flaming" category, for an
+> introductory post/proposal your tone is needlessly provocative and filled
+> with loaded terminology ("hijacking", "kludge", "severely crippled"). We aim
+> for decorum here, please try to respect that. I had to rewrite my response a
+> few times to ensure that I was not escalating the tone, and I don't enjoy
+> spending work hours on such exercises.
+>
+
+I apologize if I came off abrasive, that certainly wasn't my intent, and not
+the "tone" I was going for. I was trying to be clear and direct, not
+provocative.
+
+As I said, I really quite like Rust, and there's only a few things I would
+do differently, so I'm in no way trying to be hostile or overly critical.
+
+I realise written dialogue sometimes comes across differently to the reader
+than was intended by the writer. I shall try harder.
+
+
+W.r.t. the "kludge" comment, I was really intending to refer only to when
+RAII is used for generic scope-control, rather than managing resources. E.g.
+it's common for people to use RAII to take locks for the duration of a
+scope, which means that they have to create a dummy object on the stack that
+actually holds no resources but is used purely a mechanism for getting some
+custom code to run at the beginning and end of a scope. In practice this
+leads to situations where variables get named things like "dummy" (or even
+writing C preprocessor macros to auto-generate a name using __COUNTER__).
+That seems to be beyond the spirit of RAII, and hurts readability IMO.
+
+I have no beef with constructors/destructors for, e.g., allocating and
+deallocating resources that actually belong to that object.
+
+ Destructors and RAII
+>    encapsulate the initialization state of a resource and its
+>    sub-resources, such that only those resources acquired wind up being
+>    released. To mimic this in try/finally blocks is verbose and
+>    error-prone
+>
+
+You may want to consider a "scope" feature like D has, which allows you to
+put code at the end of the current scope (regardless of how it leaves it).
+My "transaction" example would work just as well, better actually,  and
+would certainly be a lot cleaner than with the try/finally stuff in there.
+
+
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20100830/c533b72e/attachment.html>
+
+From graydon at mozilla.com  Mon Aug 30 12:56:49 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 30 Aug 2010 12:56:49 -0700
+Subject: [rust-dev] Implicit environment capture for closures - a
+	compromise?
+In-Reply-To: <AANLkTikQNKnugn5jVfxRTV7bVXU5FTW7bUrHYyMRrcKE@mail.gmail.com>
+References: <AANLkTikEuOCn+pv5TeJbJF+Qrga6SoJ-97Hzew=OCuag@mail.gmail.com>	<4C7BF334.6080503@mozilla.com>
+	<AANLkTikQNKnugn5jVfxRTV7bVXU5FTW7bUrHYyMRrcKE@mail.gmail.com>
+Message-ID: <4C7C0D01.5070703@mozilla.com>
+
+On 10-08-30 11:29 AM, Sebastian Sylvan wrote:
+
+> I realise written dialogue sometimes comes across differently to the reader
+> than was intended by the writer. I shall try harder.
+
+Thanks. A small bit of tone-effort applied early and often does wonders 
+for preventing nightmarish threads of anger and misunderstanding, in my 
+experience. A bit like brushing teeth :)
+
+> In practice this
+> leads to situations where variables get named things like "dummy" (or even
+> writing C preprocessor macros to auto-generate a name using __COUNTER__).
+> That seems to be beyond the spirit of RAII, and hurts readability IMO.
+
+Oh? The uses I've seen in C++ are usually somewhat descriptive, say:
+
+{
+     Mutex guard(some_lock);
+     do_stuff();
+}
+
+Reads ok to me. I don't imagine it being made much shorter or more 
+succinct via lambdas. in Rust it'd look like so (assuming locking some 
+external resource, since of course, inter-thread locking isn't quite a 
+standard consideration in Rust code :) :
+
+{
+     auto guard = mutex(some_lock);
+     do_stuff();
+}
+
+A bit longer than C++, but then, also no potential parse ambiguity. And 
+I think still clear. What's the putative lambda-like form?
+
+   with_mutex(some_lock,
+              fn() {
+                  do_stuff();
+              })
+
+Now we're just getting into aesthetics, where I usually err on the side 
+of vertical / statement code orientation over "more nested expressions". 
+But either way, we're not talking orders of magnitude, just shuffling a 
+similar cost around. That alone wouldn't motivate the feature, I think.
+
+Permitting tidy solutions to parallel iteration, or other existing 
+control features .. or simply being much faster than a heap-allocated 
+binding for capturing a local; *those* are compelling arguments :)
+
+> You may want to consider a "scope" feature like D has, which allows you to
+> put code at the end of the current scope (regardless of how it leaves it).
+> My "transaction" example would work just as well, better actually,  and
+> would certainly be a lot cleaner than with the try/finally stuff in there.
+
+It's not the association-with-a-scope-exit aspect that's hard to get 
+right. It's the initialization-status-tracking. Here's my point. Suppose 
+I write this:
+
+thing x;
+try {
+    a();
+    x = acquire();
+    b();
+} finally {
+    // This is likely a bug.
+    release(x);
+}
+
+That's likely incorrect code; I don't know if I can safely release x in 
+the finally block, because I don't know it was acquired. The a() call 
+might have failed. The code's only correct with some kind of resource 
+that never gets upset with unbalanced release calls. That's not a 
+universal quality of managed resources. To be correct in general, I need 
+to write this instead:
+
+
+thing x;
+bool x_was_acquired = false;
+try {
+    a();
+    x = acquire();
+    x_was_acquired = true;
+    b();
+} finally {
+    if (x_was_acquired) { release(x); }
+}
+
+and I have to do this recursively (with relatively awkward nesting 
+try/finally blocks and additional staged flags indicating 
+initialized-ness) any time the acquisition itself is non-atomic and/or x 
+has substructure. It can be a challenge to emulate RAII convincingly 
+with try/finally. It's possible, but also easier to get wrong and ship 
+code that has buggy cleanup paths.
+
+The RAII style composes better and always -- only -- releases the stuff 
+that was successfully acquired. The language has rules to track 
+initialization status and those rules are recycled for tracking "when to 
+call which destructor". RAII-on-scopes is not some misfeature that 
+should be replaced with try/finally; C++ knew about try/finally and 
+picked RAII because it was considered better. It's one of the more 
+useful innovations of C++. See the designer's note:
+
+   http://www2.research.att.com/~bs/bs_faq2.html#finally
+
+-Graydon
+
+From dherman at mozilla.com  Mon Aug 30 14:07:30 2010
+From: dherman at mozilla.com (David Herman)
+Date: Mon, 30 Aug 2010 14:07:30 -0700
+Subject: [rust-dev] Implicit environment capture for closures - a
+	compromise?
+In-Reply-To: <4C7BF334.6080503@mozilla.com>
+References: <AANLkTikEuOCn+pv5TeJbJF+Qrga6SoJ-97Hzew=OCuag@mail.gmail.com>
+	<4C7BF334.6080503@mozilla.com>
+Message-ID: <B2C2AA42-CC73-48C8-9151-4EDF4A3520B0@mozilla.com>
+
+In principle, I'd prefer to have a lambda form that can implicitly bind upvars, although I think I'd look at this from a slightly different direction than Sebastian. I think RAII has a lot of good things going for it, and try/finally is weak tea. But I don't think lambda is just about RAII. In particular, I think a very common use case for lambda is for event-driven programming, a style I'd expect to come up often in Rust programs. Requiring programmers to name their functions and place them out-of-band breaks up the flow of the programming and just makes it a little harder to read. Or from the other direction: being able to pass an event handler directly inline as an anonymous lambda makes it immediately clear to the reader that the relevance of the function doesn't extend beyond this one place.
+
+Graydon, Re: control flow complexity, I'm not sure whether lambda adds too much control-flow complexity, given that we already have higher-order constructs with |bind| and objects. Primarily, I see it as a lightweight notational convenience for a common pattern, which you can already express using helpers.
+
+But all that said, nobody's thought through Rust's control flow as deeply as Graydon, and I wouldn't swear to it that there isn't some deal-breaker I haven't thought of. Here are a few thoughts about what seem like some of the tricky issues:
+
+- Exteriors:
+
+I wouldn't think we'd want to allow lambda-functions to close over stack-allocated locals. Stack locals are not meant to outlive their frame, and lambda-functions are. IIRC, Apple's GCD wantonly lets you do so, with C's usual "it's undefined" as the semantics of referring to a dead upvar. That's obviously not an option. Java achieves safety by forcing you to either const-declare variables that have upvar references, so they can be copied, or else effectively box/heap-allocate them by placing them in objects or one-element arrays.
+
+We can do better than Java, though, since we have a really lightweight and natural way of saying a local variable could outlive the stack frame -- "@". :)
+
+Long story short, I'm suggesting we could restrict lambdas to only be allowed to refer to @-typed variables.
+
+- Propagating typestate constraints to lambdas
+
+When you use an explicitly declared helper function, you can propagate typestate constraints to make a program type check:
+
+    fn helper(@mutable int x) : prime(x) { ... }
+    ...
+    let @mutable int x = 17;
+    check prime(x);
+    ... helper(x) ...
+    frobPrimeNumber(x);
+
+If we turn that helper into a lambda with an upvar, we don't have a type constraint to propagate the predicate:
+
+    let @mutable int x = 17;
+    check prime(x);
+    ... lambda() { ... x = 12; ... } ...
+    frobPrimeNumber(x); // the lambda may have ruined prime-ness!
+
+One approach would be to restrict upvars to be read-only. I *think* this would be sound, since the helper wouldn't be able to violate the typestate of a variable. And you could still get the mutable version using |bind|:
+
+    let @mutable int x = 17;
+    check prime(x);
+    ... bind (lambda (@mutable int x) : prime(x) {
+                  ...
+                  x = 12;
+                  check prime(x);
+                  ...
+              })(x) ...
+    frobPrimeNumber(x);
+
+In order to make that type-check, the programmer is forced to put the explicit constraint on the parameter x.
+
+But you could also take this a step further and just allow programmers to specify constraints on a lambda's upvars, alleviating the need for the manual closure conversion:
+
+    let @mutable int x = 17;
+    check prime(x);
+    ... (lambda () : prime(x) {
+             ...
+             x = 12;
+             check prime(x);
+             ...
+         }) ...
+    frobPrimeNumber(x);
+
+You can just view this as syntactic sugar for the one above. (BTW, I'm not trying to propose exact concrete syntaxes, just looking for an existence proof that it's possible to propagate typestate constraints into lambdas.)
+
+That's just my current thinking, anyway. Graydon, does any of this sound plausible?
+
+Dave
+
+On Aug 30, 2010, at 11:06 AM, Graydon Hoare wrote:
+
+> On 10-08-28 02:33 PM, Sebastian Sylvan wrote:
+> 
+>> Let me first say that the only reason I write this is because I really like
+>> Rust. It seems to get a lot of things really right, and I'd like it to
+>> become successful! With that said, here's one issue. I have more, and I may
+>> write more about that later, but I figured I start with this one because it
+>> actually ends with a suggestion!
+> 
+> Hi,
+> 
+> First, I'd like to remind you of the conduct guidelines for this community. While not quite venturing into the "abusive" or "flaming" category, for an introductory post/proposal your tone is needlessly provocative and filled with loaded terminology ("hijacking", "kludge", "severely crippled"). We aim for decorum here, please try to respect that. I had to rewrite my response a few times to ensure that I was not escalating the tone, and I don't enjoy spending work hours on such exercises.
+> 
+> With respect to the technical feasibility of your proposal: it may be possible -- it's similar to how we currently translate foreach blocks, for example -- and I'll add a note about this proposal to the existing bug (issue #6) that's a work-item for a "lambda" short-form of anonymous function immediate. If anyone wants to take the time to work out how your proposal interacts with Rust semantics in more detail and ensure it'd be safe, I'd be happy to entertain that conversation. Such alias-based, scoped capture would have the pleasant additional benefit of being faster than function bindings (no heap allocation), so I'm sure nobody would object to trying to fit them in.
+> 
+> Finally, I should clarify some misconceptions in your post. When I speak in the collective voice "we" here, I am referring to myself mainly as well as some opinions I believe to be shared with others who have worked on the Rust design. Please, others, speak up if you disagree:
+> 
+>  - Comprehensibility is an important design goal in Rust, so we're not
+>    terribly interested in appeals to "many" kinds of additional control
+>    flow abstraction. Control flow is a notorious comprehension hazard
+>    in code at the best of times. We may be interested in handling some
+>    well-motivated cases we currently do poorly (at the moment, for
+>    example, parallel iteration can't be done easily) as well as general
+>    abstractions that support >1 of those. Hypothetical use-cases, much
+>    less so.
+> 
+>  - Rust has very few nonlocal control mechanisms already. Catchable
+>    exceptions as outlined in your example are not something we consider
+>    particularly plausible in Rust, due to custom typestate predicates
+>    (there's a FAQ entry). Currently there is no such feature. Aside
+>    from termination-semantics failure and loop-break / loop-continue,
+>    there are no other nonlocal jumps, and (at the moment) not much
+>    interest expressed in adding any.
+> 
+>  - Destructors and RAII are not a "kludge", and try/finally blocks are
+>    not a particularly good replacement for them. Destructors and RAII
+>    encapsulate the initialization state of a resource and its
+>    sub-resources, such that only those resources acquired wind up being
+>    released. To mimic this in try/finally blocks is verbose and
+>    error-prone: you need a boolean "tracking variable" for each
+>    acquired resource that you set immediately after the resource is
+>    acquired, as well as logic at the finally-side to conditionally
+>    release only those resources acquired (and such logic is
+>    order-sensitive, and needs its own try/finally blocks in order to be
+>    as robust as a good destructor system). This is particularly
+>    error-prone since you only notice coding errors in such paths in the
+>    (rare) cases of exceptions actually being thrown; more likely, only
+>    non-throwing case is exercised and the errors are shipped
+>    un-noticed.
+> 
+>    In addition, destructors and RAII generalize to handle resources
+>    that outlive a control frame, without any change to the underlying
+>    resource-manager object. Our feeling is therefore that destructors
+>    and RAII are, on balance, a more-desirable feature than try/finally
+>    blocks would be (if we had them).
+> 
+> If you have further concrete suggestions about changes to Rust, we'd be happy to hear some of them as well, but please try to keep the tone respectful and constructive. The (relatively interesting, reasonable) proposal in your post was almost lost amid the paragraphs of additional critique.
+> 
+> Thanks,
+> 
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From sebastian.sylvan at gmail.com  Mon Aug 30 14:10:37 2010
+From: sebastian.sylvan at gmail.com (Sebastian Sylvan)
+Date: Mon, 30 Aug 2010 22:10:37 +0100
+Subject: [rust-dev] Implicit environment capture for closures - a
+	compromise?
+In-Reply-To: <4C7C0D01.5070703@mozilla.com>
+References: <AANLkTikEuOCn+pv5TeJbJF+Qrga6SoJ-97Hzew=OCuag@mail.gmail.com>
+	<4C7BF334.6080503@mozilla.com>
+	<AANLkTikQNKnugn5jVfxRTV7bVXU5FTW7bUrHYyMRrcKE@mail.gmail.com>
+	<4C7C0D01.5070703@mozilla.com>
+Message-ID: <AANLkTikDZV2wL+4cfQu7mxwcMuWit56FmvmjBQ=q2hLV@mail.gmail.com>
+
+On Mon, Aug 30, 2010 at 8:56 PM, Graydon Hoare <graydon at mozilla.com> wrote:
+
+> Oh? The uses I've seen in C++ are usually somewhat descriptive, say:
+>
+> {
+>    Mutex guard(some_lock);
+>    do_stuff();
+> }
+>
+> Reads ok to me. I don't imagine it being made much shorter or more succinct
+> via lambdas. in Rust it'd look like so (assuming locking some external
+> resource, since of course, inter-thread locking isn't quite a standard
+> consideration in Rust code :) :
+>
+> {
+>    auto guard = mutex(some_lock);
+>    do_stuff();
+> }
+>
+> A bit longer than C++, but then, also no potential parse ambiguity. And I
+> think still clear. What's the putative lambda-like form?
+>
+>  with_mutex(some_lock,
+>             fn() {
+>                 do_stuff();
+>             })
+>
+
+I'd prefer this last option because it makes it very clear that the scope is
+"attached" to the mutex, so people will hopefully not add extra stuff to
+that scope by accident (since it's extremely important that the scope is
+kept minimal if you're holding a lock). Plus, it doesn't require declaring a
+dummy variable (you call it "guard", others call it "dummy", or "locker").
+Also, you get more control over that lambda, e.g. you could declare, by its
+type, that it needs to be pure (for things like parallel_for).
+
+I guess the reason I dislike RAII for this type of things is partly that it
+adds an extra name that's not needed for anything to the namespace which
+just feels untidy, and that it looks like just another variable. You'd have
+to be very careful to understand that this variable is actually "special".
+With a lambda it's clear that you're passing that whole block of code to
+some *other* function declared elsewhere and that you should probably look
+up what that function does with your lambda before you add stuff to it
+willy-nilly.
+
+Anywyay, aesthetics of RAII-like constructs isn't really the main point, it
+was only ever intended as one example. You can have the *ability* to write
+the latter form and choose not to use it if you don't like it. There would
+still be plenty of other cases where having the ability to use lambdas as a
+"first class scope" is useful even if you opt out of one specific case (as
+I'm sure your nearest Lisper will be all to happy to tell you!).
+
+
+ You may want to consider a "scope" feature like D has, which allows you to
+>> put code at the end of the current scope (regardless of how it leaves it).
+>> My "transaction" example would work just as well, better actually,  and
+>> would certainly be a lot cleaner than with the try/finally stuff in there.
+>>
+>
+> It's not the association-with-a-scope-exit aspect that's hard to get right.
+> It's the initialization-status-tracking.
+>
+
+I'm not 100% sure, my D book is at work and I'm not, but I believe the scope
+statement (incredibly hard to search for, btw!) only applies once you've
+actually hit that point of execution. So it's only once you hit the "scope"
+statement that it gets "activated". Which means you'd put it right after the
+initialization of something to indicate that it's going to be cleaned up at
+the end of the scope. E.g.
+
+foo();
+bar();
+some_lock.lock();
+scope (exit) some_lock.unlock();
+baz();
+
+If execution fails in foo, or bar (or even in the some_lock.lock()) nothing
+happens at the end of the scope, only if it fails in baz does it actually
+unlock the lock.
+
+In this particular case we didn't even bother creating a "with_lock"
+function but could still attach arbitrary cleanup code to the end of the
+scope, which is quite convenient for all the times you just need some quick
+custom code to run at the end of the scope. Having to introduce a new class,
+and a new variable for that is a bit burdensome IMO.
+
+I realise I'm arguing for a brand new feature here though, which is
+obviously a cardinal sin :-)
+I'm not entirely sold on the scope feature in D, btw, but I can see its
+usefulness in that it alleviates some of the burden associated with
+scope-based resource management that you get with RAII.
+
+
+-- 
+Sebastian Sylvan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20100830/d389ff01/attachment.html>
+
+From graydon at mozilla.com  Mon Aug 30 14:53:59 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 30 Aug 2010 14:53:59 -0700
+Subject: [rust-dev] Implicit environment capture for closures - a
+	compromise?
+In-Reply-To: <AANLkTikDZV2wL+4cfQu7mxwcMuWit56FmvmjBQ=q2hLV@mail.gmail.com>
+References: <AANLkTikEuOCn+pv5TeJbJF+Qrga6SoJ-97Hzew=OCuag@mail.gmail.com>	<4C7BF334.6080503@mozilla.com>	<AANLkTikQNKnugn5jVfxRTV7bVXU5FTW7bUrHYyMRrcKE@mail.gmail.com>	<4C7C0D01.5070703@mozilla.com>
+	<AANLkTikDZV2wL+4cfQu7mxwcMuWit56FmvmjBQ=q2hLV@mail.gmail.com>
+Message-ID: <4C7C2877.7050502@mozilla.com>
+
+On 10-08-30 02:10 PM, Sebastian Sylvan wrote:
+
+> I'd prefer this last option because it makes it very clear that the scope is
+> "attached" to the mutex, so people will hopefully not add extra stuff to
+> that scope by accident (since it's extremely important that the scope is
+> kept minimal if you're holding a lock)
+
+Fair. As I said though, this is turning into more of an aesthetic 
+argument. We're going to keep some kind of destructor-y thing for 
+long-lived objects -- or clean-up lists, or something! -- so let's focus 
+on discussing down-lambdas for other uses, for now.
+
+> Also, you get more control over that lambda, e.g. you could declare, by its
+> type, that it needs to be pure (for things like parallel_for).
+
+Yes, absolutely. I'm not denying the potential for other things that 
+happen to make use of down-lambdas. We seem to have got a bit 
+side-tracked on the RAII topic :)
+
+Maybe it'd be helpful to open an emacs buffer and write down some 
+use-cases for purely down-lambdas, see what would work and how. I'll 
+post a bit more on this momentarily as there's a crossed-wires thing 
+going on here with what dherman's proposing. Not bad, just different.
+
+> I'm not 100% sure, my D book is at work and I'm not, but I believe the scope
+> statement (incredibly hard to search for, btw!) only applies once you've
+> actually hit that point of execution. So it's only once you hit the "scope"
+> statement that it gets "activated". Which means you'd put it right after the
+> initialization of something to indicate that it's going to be cleaned up at
+> the end of the scope. E.g.
+>
+> foo();
+> bar();
+> some_lock.lock();
+> scope (exit) some_lock.unlock();
+> baz();
+>
+> If execution fails in foo, or bar (or even in the some_lock.lock()) nothing
+> happens at the end of the scope, only if it fails in baz does it actually
+> unlock the lock.
+
+Ah, then this is like the 'defer' statement in Go (or the 'rescue' 
+blocks of its ancestor language, Alef). Sorry, I should study D more; I 
+know it's got more to teach me than I've given it attention. I have 
+looked at it a *bit* ... but not lately, and not deep enough or in light 
+of the past few years of Rust hacking.
+
+> I realise I'm arguing for a brand new feature here though, which is
+> obviously a cardinal sin :-)
+
+Sure. Though of course these can be simulated in library code if you 
+have RAII and closures:
+
+   {
+     auto exit = cleanup();
+     foo();
+     bar();
+     some_lock.lock();
+     exit.add(bind fn(lock lk) { lk.unlock(); }(some_lock));
+     baz();
+   }
+
+Though this is plainly not the tidiest code sample we've tossed back and 
+forth today. I accept that if we're going to lean on function literals 
+hard for helper-y things, we're going to have to spend some time making 
+them less chatty. See next email exchange with dherman :)
+
+-Graydon
+
+From dherman at mozilla.com  Mon Aug 30 16:14:41 2010
+From: dherman at mozilla.com (David Herman)
+Date: Mon, 30 Aug 2010 16:14:41 -0700
+Subject: [rust-dev] Implicit environment capture for closures - a
+	compromise?
+In-Reply-To: <B2C2AA42-CC73-48C8-9151-4EDF4A3520B0@mozilla.com>
+References: <AANLkTikEuOCn+pv5TeJbJF+Qrga6SoJ-97Hzew=OCuag@mail.gmail.com>
+	<4C7BF334.6080503@mozilla.com>
+	<B2C2AA42-CC73-48C8-9151-4EDF4A3520B0@mozilla.com>
+Message-ID: <BFF9FFA0-7979-4A74-9DF7-253615A11BCF@mozilla.com>
+
+A follow-up to my previous email: there's one possible unsoundness depending on how our typestate works (betraying my ignorance, sorry). If it's possible to invalidate a typestate, then dealing with closures would have to be tightened so that whatever constraints a lambda requires of an upvar have to be upheld forever once the closure is created. Otherwise you could have, e.g.:
+
+    let @mutable int x = 17;
+    check prime(x);
+    auto f = lambda() : prime(x) { frobPrimeNumber(x); };
+    x = 12;
+    f(); // crash
+
+On a separate note, I agree that "down-lambdas" and "heap-lambdas" are two potentially different kinds of constructs with pretty different uses. There are lots of useful things about both. Down-lambdas are good for registering clean-up code for a scope, as we mentioned before, but they're also prevalent in a lot of functional patterns: map/forEach/fold, for example, all take down-lambda arguments. And a local recursive algorithm that is immediately applied is a very common functional pattern.
+
+(But I do think arbitrary-lifetime lambdas are good for usability, since they come up so much in event-based programming. If they can be made to work, of course.)
+
+Dave
+
+On Aug 30, 2010, at 2:07 PM, David Herman wrote:
+
+> In principle, I'd prefer to have a lambda form that can implicitly bind upvars, although I think I'd look at this from a slightly different direction than Sebastian. I think RAII has a lot of good things going for it, and try/finally is weak tea. But I don't think lambda is just about RAII. In particular, I think a very common use case for lambda is for event-driven programming, a style I'd expect to come up often in Rust programs. Requiring programmers to name their functions and place them out-of-band breaks up the flow of the programming and just makes it a little harder to read. Or from the other direction: being able to pass an event handler directly inline as an anonymous lambda makes it immediately clear to the reader that the relevance of the function doesn't extend beyond this one place.
+> 
+> Graydon, Re: control flow complexity, I'm not sure whether lambda adds too much control-flow complexity, given that we already have higher-order constructs with |bind| and objects. Primarily, I see it as a lightweight notational convenience for a common pattern, which you can already express using helpers.
+> 
+> But all that said, nobody's thought through Rust's control flow as deeply as Graydon, and I wouldn't swear to it that there isn't some deal-breaker I haven't thought of. Here are a few thoughts about what seem like some of the tricky issues:
+> 
+> - Exteriors:
+> 
+> I wouldn't think we'd want to allow lambda-functions to close over stack-allocated locals. Stack locals are not meant to outlive their frame, and lambda-functions are. IIRC, Apple's GCD wantonly lets you do so, with C's usual "it's undefined" as the semantics of referring to a dead upvar. That's obviously not an option. Java achieves safety by forcing you to either const-declare variables that have upvar references, so they can be copied, or else effectively box/heap-allocate them by placing them in objects or one-element arrays.
+> 
+> We can do better than Java, though, since we have a really lightweight and natural way of saying a local variable could outlive the stack frame -- "@". :)
+> 
+> Long story short, I'm suggesting we could restrict lambdas to only be allowed to refer to @-typed variables.
+> 
+> - Propagating typestate constraints to lambdas
+> 
+> When you use an explicitly declared helper function, you can propagate typestate constraints to make a program type check:
+> 
+>    fn helper(@mutable int x) : prime(x) { ... }
+>    ...
+>    let @mutable int x = 17;
+>    check prime(x);
+>    ... helper(x) ...
+>    frobPrimeNumber(x);
+> 
+> If we turn that helper into a lambda with an upvar, we don't have a type constraint to propagate the predicate:
+> 
+>    let @mutable int x = 17;
+>    check prime(x);
+>    ... lambda() { ... x = 12; ... } ...
+>    frobPrimeNumber(x); // the lambda may have ruined prime-ness!
+> 
+> One approach would be to restrict upvars to be read-only. I *think* this would be sound, since the helper wouldn't be able to violate the typestate of a variable. And you could still get the mutable version using |bind|:
+> 
+>    let @mutable int x = 17;
+>    check prime(x);
+>    ... bind (lambda (@mutable int x) : prime(x) {
+>                  ...
+>                  x = 12;
+>                  check prime(x);
+>                  ...
+>              })(x) ...
+>    frobPrimeNumber(x);
+> 
+> In order to make that type-check, the programmer is forced to put the explicit constraint on the parameter x.
+> 
+> But you could also take this a step further and just allow programmers to specify constraints on a lambda's upvars, alleviating the need for the manual closure conversion:
+> 
+>    let @mutable int x = 17;
+>    check prime(x);
+>    ... (lambda () : prime(x) {
+>             ...
+>             x = 12;
+>             check prime(x);
+>             ...
+>         }) ...
+>    frobPrimeNumber(x);
+> 
+> You can just view this as syntactic sugar for the one above. (BTW, I'm not trying to propose exact concrete syntaxes, just looking for an existence proof that it's possible to propagate typestate constraints into lambdas.)
+> 
+> That's just my current thinking, anyway. Graydon, does any of this sound plausible?
+> 
+> Dave
+> 
+> On Aug 30, 2010, at 11:06 AM, Graydon Hoare wrote:
+> 
+>> On 10-08-28 02:33 PM, Sebastian Sylvan wrote:
+>> 
+>>> Let me first say that the only reason I write this is because I really like
+>>> Rust. It seems to get a lot of things really right, and I'd like it to
+>>> become successful! With that said, here's one issue. I have more, and I may
+>>> write more about that later, but I figured I start with this one because it
+>>> actually ends with a suggestion!
+>> 
+>> Hi,
+>> 
+>> First, I'd like to remind you of the conduct guidelines for this community. While not quite venturing into the "abusive" or "flaming" category, for an introductory post/proposal your tone is needlessly provocative and filled with loaded terminology ("hijacking", "kludge", "severely crippled"). We aim for decorum here, please try to respect that. I had to rewrite my response a few times to ensure that I was not escalating the tone, and I don't enjoy spending work hours on such exercises.
+>> 
+>> With respect to the technical feasibility of your proposal: it may be possible -- it's similar to how we currently translate foreach blocks, for example -- and I'll add a note about this proposal to the existing bug (issue #6) that's a work-item for a "lambda" short-form of anonymous function immediate. If anyone wants to take the time to work out how your proposal interacts with Rust semantics in more detail and ensure it'd be safe, I'd be happy to entertain that conversation. Such alias-based, scoped capture would have the pleasant additional benefit of being faster than function bindings (no heap allocation), so I'm sure nobody would object to trying to fit them in.
+>> 
+>> Finally, I should clarify some misconceptions in your post. When I speak in the collective voice "we" here, I am referring to myself mainly as well as some opinions I believe to be shared with others who have worked on the Rust design. Please, others, speak up if you disagree:
+>> 
+>> - Comprehensibility is an important design goal in Rust, so we're not
+>>   terribly interested in appeals to "many" kinds of additional control
+>>   flow abstraction. Control flow is a notorious comprehension hazard
+>>   in code at the best of times. We may be interested in handling some
+>>   well-motivated cases we currently do poorly (at the moment, for
+>>   example, parallel iteration can't be done easily) as well as general
+>>   abstractions that support >1 of those. Hypothetical use-cases, much
+>>   less so.
+>> 
+>> - Rust has very few nonlocal control mechanisms already. Catchable
+>>   exceptions as outlined in your example are not something we consider
+>>   particularly plausible in Rust, due to custom typestate predicates
+>>   (there's a FAQ entry). Currently there is no such feature. Aside
+>>   from termination-semantics failure and loop-break / loop-continue,
+>>   there are no other nonlocal jumps, and (at the moment) not much
+>>   interest expressed in adding any.
+>> 
+>> - Destructors and RAII are not a "kludge", and try/finally blocks are
+>>   not a particularly good replacement for them. Destructors and RAII
+>>   encapsulate the initialization state of a resource and its
+>>   sub-resources, such that only those resources acquired wind up being
+>>   released. To mimic this in try/finally blocks is verbose and
+>>   error-prone: you need a boolean "tracking variable" for each
+>>   acquired resource that you set immediately after the resource is
+>>   acquired, as well as logic at the finally-side to conditionally
+>>   release only those resources acquired (and such logic is
+>>   order-sensitive, and needs its own try/finally blocks in order to be
+>>   as robust as a good destructor system). This is particularly
+>>   error-prone since you only notice coding errors in such paths in the
+>>   (rare) cases of exceptions actually being thrown; more likely, only
+>>   non-throwing case is exercised and the errors are shipped
+>>   un-noticed.
+>> 
+>>   In addition, destructors and RAII generalize to handle resources
+>>   that outlive a control frame, without any change to the underlying
+>>   resource-manager object. Our feeling is therefore that destructors
+>>   and RAII are, on balance, a more-desirable feature than try/finally
+>>   blocks would be (if we had them).
+>> 
+>> If you have further concrete suggestions about changes to Rust, we'd be happy to hear some of them as well, but please try to keep the tone respectful and constructive. The (relatively interesting, reasonable) proposal in your post was almost lost amid the paragraphs of additional critique.
+>> 
+>> Thanks,
+>> 
+>> -Graydon
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+> 
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+
+
+From graydon at mozilla.com  Mon Aug 30 19:05:00 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 30 Aug 2010 19:05:00 -0700
+Subject: [rust-dev] Implicit environment capture for closures - a
+	compromise?
+In-Reply-To: <B2C2AA42-CC73-48C8-9151-4EDF4A3520B0@mozilla.com>
+References: <AANLkTikEuOCn+pv5TeJbJF+Qrga6SoJ-97Hzew=OCuag@mail.gmail.com>
+	<4C7BF334.6080503@mozilla.com>
+	<B2C2AA42-CC73-48C8-9151-4EDF4A3520B0@mozilla.com>
+Message-ID: <4C7C634C.400@mozilla.com>
+
+On 10-08-30 02:07 PM, David Herman wrote:
+> In principle, I'd prefer to have a lambda form that can implicitly bind upvars, although I think I'd look at this from a slightly different direction than Sebastian.
+
+I think we may have a divergence of topic here. Not an unhealthy one -- 
+we should discuss both at a little length, given the importance attached 
+to these matters -- but let's be clear on what Sebastian proposed and 
+what you're talking about. There are two kinds of relatively different 
+lambdas here:
+
+   - Down-Lambdas (I'll call them this for now) which can't outlive their
+     current scope, and thereby alias the environment they're in by
+     frame pointer, directly and at minimal cost, about the same as
+     the current foreach blocks do.
+
+   - Heap-Lambdas (again, hope this isn't offputting) which you're
+     describing. These are an expression form of our local fn items
+     that can be placed in a bind expression. Or perhaps bypass a bind
+     expression altogether.
+
+Sebastian is proposing down-lambdas as an addition so that we can 
+support a few pass-custom-logic-in idioms (presumably parallel-iter, 
+also the obvious like map and filter). We need to get aliasing rules 
+right here, which are complex on params and possibly fatal on the 
+closure value itself, but it seems *plausible*.
+
+In contrast, you're proposing we try to come up with rules by which 
+heap-lambdas can be made to safely capture their environment, merely 
+lowering the syntax barriers to using the current bind / local-fn combo.
+
+I'm sympathetic to both proposals and interested in working details of 
+both or either out (ideally combining them tastefully, or doing them 
+separately if not). Though I'd caution that there *are* serious hazards 
+involved; I'm an old lisper too, in terms of personal history, but this 
+is a language aiming for a slightly different sweet spot.
+
+> But I don't think lambda is just about RAII.
+
+Indeed not. Didn't mean to imply that.
+
+> In particular, I think a very common use case for lambda is for event-driven programming, a style I'd expect to come up often in Rust programs. Requiring programmers to name their functions and place them out-of-band breaks up the flow of the programming and just makes it a little harder to read. Or from the other direction: being able to pass an event handler directly inline as an anonymous lambda makes it immediately clear to the reader that the relevance of the function doesn't extend beyond this one place.
+
+Fair points.
+
+> Graydon, Re: control flow complexity, I'm not sure whether lambda adds too much control-flow complexity, given that we already have higher-order constructs with |bind| and objects.
+
+Nope, I don't think it adds any control-flow complexity. I was 
+mentioning control-flow complexity wrt. Sebastian's example, that used 
+catchable-exceptions and an implied nonlocal control transfer (which we 
+don't have).
+
+ > Primarily, I see it as a lightweight notational convenience for 
+common pattern, which you can already express using helpers.
+
+Yup. Issue 6 is open, right? I'm not going to reject a patch that 
+implements a fn-expression form. I just want to be careful with what it 
+*means*, particularly as far as any implied capture :)
+
+> I wouldn't think we'd want to allow lambda-functions to close over stack-allocated locals.
+
+Probably not if the closure escapes to heap. Not unless making one 
+implies a copy at the point of capture. That's a possibility. Not an 
+appealing one to me, or not by absolute-most-common default, but a 
+possibility.
+
+> Long story short, I'm suggesting we could restrict lambdas to only be allowed to refer to @-typed variables.
+
+Sneaky but possible. Let's consider this further...
+
+> One approach would be to restrict upvars to be read-only.
+
+Yeah. It's a bit random-feeling though. Users will certainly complain.
+
+> You can just view this as syntactic sugar for the one above. (BTW, I'm not trying to propose exact concrete syntaxes, just looking for an existence proof that it's possible to propagate typestate constraints into lambdas.)
+
+Yeah. I think that proof has been achieved. Let's consider concrete 
+proposals.
+
+> That's just my current thinking, anyway. Graydon, does any of this sound plausible?
+
+Yeah, it does.
+
+Let me toss a few design considerations into the stew here. We're 
+obviously getting into brainstorming mode for a few emails. Just try to 
+keep it focused on the existing semantic categories and runtime 
+vocabulary. Considering these points:
+
+   - The hard part: if we're going to capture by aliasing-fp, we have
+     to come up with some way of prohibiting the formation of a copy
+     of the down-fn. It has to have a non-copyable type. Otherwise
+     you can copy to the heap, and then everything explodes. This
+     is currently design problem #1 for down-lambdas. If we can't solve
+     this, the remainder of down-lambdas is doomed. In foreach loops, at
+     present, there's no such problem because the inner fn isn't named.
+
+   - I don't see a strong reason to add "lambda" to the language, as a
+     syntactic keyword, when we've got the shorter "fn" already. So for
+     sketching sake, let's restrict to that. If we are really aiming to
+     shave syntax we can even play the smalltalk game and move the params
+     inside the block: "{(x, y) foo(x+y); }"
+
+   - If you're going to start providing methods for environment capture,
+     it is worth considering whether to keep "bind" at all. It gives you
+     something like currying, but the argument about redundancy cuts both
+     ways: "bind f(10, _)" can be written "fn(int x) { f(10, x); }". It
+     depends a lot on the relative frequency of currying vs. capture. Now
+     that we're down to just two slot modes, it might make sense to call
+     the "bind" game off. It might not be paying for itself.
+
+   - I'm still somewhat concerned with allowing the programmer to specify
+     clearly which variables are being captured, when it makes sense.
+     I'll admit that there are enough cases in which it is an annoyance,
+     but if you have a large body of logic, it's a comprehension hazard
+     to have a closure copying something to the heap and/or retaining a
+     reference without a reader noticing. It's good to be able to be
+     explicit when you want to be. Rust's design has tried to keep in the
+     foreground the fact that when working on a large codebase, the
+     programmer wants to fasten seatbelts because they don't trust
+     *themselves* to get things right, and want double-checks to occur.
+
+   - You still need something like an argument-list to indicate which
+     arguments you want the resulting function to accept. What its type
+     is. So you need to indicate stuff about the captures *and* the
+     residual arguments. This is why it gets chatty.
+
+   - I don't want to get into inferring function types or type-param
+     capture. Too much effort, those subsystems are already overloaded.
+     So I want to keep a result-type in there too.
+
+   - C++ capture clauses have two forms, one in which they explicitly
+     list the variables captured and one in which they capture
+     "everything" by mentioned in the body. I wonder if we can follow
+     their lead here.
+
+Suppose we do this:
+
+   - use the "fn" keyword.
+
+   - permit fn-expressions, only for monomorphic functions.
+
+   - Permit an optional capture clause between "fn" and its params in
+     expression context.
+
+   - The capture clause can be @ or & followed by an optional list of
+     captured vars (just their names), or omitted to indicate "inspect
+     the function to figure out the captures". Assuming we figure out
+     a way to prohibit copying down-lambdas. If not, just @.
+
+   - Remove "bind". Having shipped in Sather is not exactly a huge
+     sales pitch, and the haskell/ML people are the only ones who will
+     even think to use currying. Everyone else won't notice its absence.
+
+This is essentially the C++-0x-lambdas approach, just adapted to our 
+current syntax and semantics a touch. So we'd get:
+
+   - "fn &(a,b) (int x) -> int { ... }" -- alias a, b; fn takes one int.
+   - "fn @(a,b) (int x) -> int { ... }" -- box a,b; fn takes one int.
+   - "fn & (int x) -> int { ... }" -- alias everything mentioned in fn.
+   - "fn @ (int x) -> int { ... }" -- box everything mentioned in fn.
+   - "fn (int x) -> int { ... }" -- no capture at all.
+
+To C++'s credit here, their scheme gives programmers the option to 
+choose to be lazy and capture stuff implicitly, if they feel safe doing 
+so, or the ability to be more-precise and capture only what they mention.
+
+Anyway, as I say above, I think there's at least one hard semantic 
+problem here (how to prohibit escape of a down-lambda) along with a few 
+syntax considerations. Thoughts welcome on how to overcome the former. 
+Proceeding with the heap-capture variant is possible, if everyone's able 
+to accept losing currying and by-name "bind" expressions.
+
+-Graydon
+
+From tohava at gmail.com  Mon Aug 30 20:43:00 2010
+From: tohava at gmail.com (ori bar)
+Date: Tue, 31 Aug 2010 06:43:00 +0300
+Subject: [rust-dev] break
+Message-ID: <AANLkTimqc_Q+ovGXtOgdi4DHjm389YOfzrnfNcfr8RoT@mail.gmail.com>
+
+I've just uploaded an implementation of break to tohava/rust. This
+implementation only implements break for while-loops. While I think
+this implementation is mostly complete, I am not sure how it should
+interact with typestate. If anyone cares to explain (admittedly I
+don't know the typestate code very good, I only know the basic idea of
+using check() to make sure a predicate is true and being able to know
+in compile-time it's true afterwards) how break interacts with the
+typestate mechanism it would be very helpful.
+
+Regards, Ori.
+
+-- 
+1110101111111110 - it's a way of life
+
+From graydon at mozilla.com  Tue Aug 31 16:48:10 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Tue, 31 Aug 2010 16:48:10 -0700
+Subject: [rust-dev] break
+In-Reply-To: <AANLkTimqc_Q+ovGXtOgdi4DHjm389YOfzrnfNcfr8RoT@mail.gmail.com>
+References: <AANLkTimqc_Q+ovGXtOgdi4DHjm389YOfzrnfNcfr8RoT@mail.gmail.com>
+Message-ID: <4C7D94BA.3030105@mozilla.com>
+
+On 10-08-30 08:43 PM, ori bar wrote:
+> I've just uploaded an implementation of break to tohava/rust. This
+> implementation only implements break for while-loops. While I think
+> this implementation is mostly complete, I am not sure how it should
+> interact with typestate. If anyone cares to explain (admittedly I
+> don't know the typestate code very good, I only know the basic idea of
+> using check() to make sure a predicate is true and being able to know
+> in compile-time it's true afterwards) how break interacts with the
+> typestate mechanism it would be very helpful.
+
+The typestate interaction is that 'break' causes an edge to be added to 
+the control flow graph in the typestate calculator from the point of the 
+break to the end of the loop. Similarly 'continue' adds an edge back to 
+the loop header. Wiring these in is a matter of adding some cases to the 
+graph_special_block_structure_building_visitor in typestate.ml.
+
+I'll do this if you prefer to leave it where you've already taken it. 
+The work you have here is definitely the hard part, thanks!
+
+-Graydon
+
+From tohava at gmail.com  Tue Aug 31 17:23:37 2010
+From: tohava at gmail.com (ori bar)
+Date: Wed, 1 Sep 2010 03:23:37 +0300
+Subject: [rust-dev] break
+In-Reply-To: <4C7D94BA.3030105@mozilla.com>
+References: <AANLkTimqc_Q+ovGXtOgdi4DHjm389YOfzrnfNcfr8RoT@mail.gmail.com>
+	<4C7D94BA.3030105@mozilla.com>
+Message-ID: <AANLkTikrSmf_xZE8kTRy1gz-Q97JTM-2r66YcoEpSsY=@mail.gmail.com>
+
+Doesn't sound too difficult, after some skimming through I can
+probably handle it myself. However, I might only be able to commit the
+changes in Sunday/Monday due to some real life taking over, so if you
+feel it is urgent to handle this then you are welcomed to continue
+where I left.
+
+On Wed, Sep 1, 2010 at 2:48 AM, Graydon Hoare <graydon at mozilla.com> wrote:
+> On 10-08-30 08:43 PM, ori bar wrote:
+>>
+>> I've just uploaded an implementation of break to tohava/rust. This
+>> implementation only implements break for while-loops. While I think
+>> this implementation is mostly complete, I am not sure how it should
+>> interact with typestate. If anyone cares to explain (admittedly I
+>> don't know the typestate code very good, I only know the basic idea of
+>> using check() to make sure a predicate is true and being able to know
+>> in compile-time it's true afterwards) how break interacts with the
+>> typestate mechanism it would be very helpful.
+>
+> The typestate interaction is that 'break' causes an edge to be added to the
+> control flow graph in the typestate calculator from the point of the break
+> to the end of the loop. Similarly 'continue' adds an edge back to the loop
+> header. Wiring these in is a matter of adding some cases to the
+> graph_special_block_structure_building_visitor in typestate.ml.
+>
+> I'll do this if you prefer to leave it where you've already taken it. The
+> work you have here is definitely the hard part, thanks!
+>
+> -Graydon
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+
+
+
+-- 
+1110101111111110 - it's a way of life
+

@@ -1,0 +1,230 @@
+From jwalker at mozilla.com  Sat Jan  1 04:38:55 2011
+From: jwalker at mozilla.com (Joe Walker)
+Date: Sat, 1 Jan 2011 12:38:55 +0000
+Subject: [rust-dev] directions
+Message-ID: <AANLkTi=cv4YbZiNQh4t-zaO50qa-9EUwXEkdAr4Wc7yq@mail.gmail.com>
+
+I've been playing around with rust over the holiday a bit mostly by digging
+around in src/test/run-pass. In addition to the main doc, I think that might
+be one of the best way to learn how things work right now?
+
+I wondered if it made sense to have a document that gave someone an ordered
+list of files to look at. It shouldn't be too much work to create and could
+help a lot of the thrashing around that I've done, plus it shouldn't be hard
+to keep up to date as the language evolves. Something like this:
+
+----
+A list of rust files to help you understand how things work:
+
+hello.rs: Note rust's unix-like affinity for short names. fn==function.
+bool-not.rs: check is a compiler understood assert allowing the compiler to
+make assumptions about the code that follows.
+bitwise.rs: Node use of ^=, ~ and _
+while-and-do-while.rs, const.rs: Familiar constructs
+char.rs, cast.rs: Note types of 'X', "X" and 'X' as u8
+append-units.rs:
+while-flow-graph.rs:
+alt-pattern-simple.rs, alt-type-simple.rs:
+fn-lval.rs:
+...
+etc
+----
+
+Does that make sense?
+
+Joe.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20110101/aa3d20f2/attachment.html>
+
+From graydon at mozilla.com  Mon Jan  3 15:26:34 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Mon, 03 Jan 2011 15:26:34 -0800
+Subject: [rust-dev] directions
+In-Reply-To: <AANLkTi=cv4YbZiNQh4t-zaO50qa-9EUwXEkdAr4Wc7yq@mail.gmail.com>
+References: <AANLkTi=cv4YbZiNQh4t-zaO50qa-9EUwXEkdAr4Wc7yq@mail.gmail.com>
+Message-ID: <4D225B2A.7030603@mozilla.com>
+
+On 11-01-01 04:38 AM, Joe Walker wrote:
+> I've been playing around with rust over the holiday a bit mostly by digging
+> around in src/test/run-pass. In addition to the main doc, I think that might
+> be one of the best way to learn how things work right now?
+
+It's a way to browse through bits of the language in ... digestible 
+pieces anyway. Yeah. Though some of them are just simple regression 
+tests. Honestly the test directory is a bit disorganized. It could do 
+with someone building out systematic tests for each aspect of the 
+language (and removing duplicates). It's quite ad-hoc presently.
+
+> I wondered if it made sense to have a document that gave someone an ordered
+> list of files to look at. It shouldn't be too much work to create and could
+> help a lot of the thrashing around that I've done, plus it shouldn't be hard
+> to keep up to date as the language evolves. Something like this:
+
+It's possible, yeah. The manual needs a tutorial section too. I'm not 
+opposed to any of this, just a bit time-thin when it comes to doing so 
+myself, still trying to coax rustc into bootstrapping. Will probably be 
+doing so for a few more months.
+
+So er .. I know this is the classic open-source response but I think 
+"doc patches welcome" is the best I can say for now. Sorry!
+
+-Graydon
+
+From respindola at mozilla.com  Tue Jan  4 12:25:36 2011
+From: respindola at mozilla.com (=?ISO-8859-1?Q?Rafael_=C1vila_de_Esp=EDndola?=)
+Date: Tue, 04 Jan 2011 15:25:36 -0500
+Subject: [rust-dev] Why do we have 'closed' objects?
+Message-ID: <4D238240.9050809@mozilla.com>
+
+While working on a patch I noticed that I had to write things like
+
+_vec.len(the_vec)
+
+instead of just the_vec.len() or len(the_vec). I don't expect us to 
+change this before getting a bootstrap compiler, but I decided to write 
+this so that we don't forget.
+
+Having to type "_vec." is a small inconvenience since the type is 
+present in many lines if I then decide to switch to another structure.
+
+More interesting maybe is if I want to write a generic function 
+total_length that sums the length of every element in a vector. How 
+would that be done in rust? Something like
+
+----------------------
+fn total_length[t](vec[t] v) -> int {
+   auto total = 0u;
+   for (e in v) {
+     total += e.len();
+   }
+   ret total;
+}
+---------------------
+
+I suppose. But then, how do I pass a vector of vectors of integers? I 
+would have to create a wrapper like
+
+obj vec_with_length(vec[int] x) {
+	fn len() -> uint {
+		ret _vec.len(x);
+	}
+}
+
+Might not look like a big issue, but it involves creating a new object 
+which unless I am mistaken can have exactly the same representation as 
+the original one.
+
+Since, unlike java or c++, in rust we need a vtable per implemented 
+interface, there wouldn't be much to be lost by dropping the requirement 
+that all functions in the vtable be declared in one place.
+
+One way to do this is something like go where methods are declared out 
+of objects:
+
+obj foo(int state);
+method bar(foo @this) {...}
+...
+
+auto x = foo(4)
+x.bar()... // or bar(x), but that looks a bit more confusing to me.
+
+and a user can then easily declare a 'zed' method that can be used where 
+it would normally be in context:
+
+import ...foo;
+
+mod x {
+	method zed(foo @this) {...}
+	....
+	auto y = foo();
+	y.zed(); // OK
+	...
+}
+
+...
+	auto y = foo();
+	y.zed(); // not OK, no method zed found.
+
+Comments?
+
+Cheers,
+Rafael
+
+From graydon at mozilla.com  Wed Jan 26 16:31:23 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Wed, 26 Jan 2011 16:31:23 -0800
+Subject: [rust-dev] Status update and roadmap
+Message-ID: <4D40BCDB.1010900@mozilla.com>
+
+Hi,
+
+It's been a little quiet over the past month (partly due to the holidays 
+and my moving homes -- I've had to take several days off -- and partly 
+due to everyone being heads-down and working). I thought I'd update 
+everyone on what's been going on, as a few people on IRC expressed interest.
+
+  - In case anyone missed it, Rafael ?vila de Esp?ndola joined Mozilla 
+corp. in December and has been working away on Rust since his arrival. 
+I'm very pleased to have him onboard and excited with the work he's been 
+doing: so far he's focused on the name resolution system and processing 
+imports in rustc, as well as working out an LLVM-compatible way to do 
+linkage and version management.
+
+  - Patrick Walton did an incredible sprint on the parametric type 
+system in rustc, leaving it *almost* complete by the time he got pulled 
+away to do a little more work on Firefox 4; this is nice for me because 
+I got to do almost none of the hard work and appear to take credit when 
+I made a couple "finishing touch" enabling commits and parametric types 
+started working a couple weeks ago. There are still missing corners, of 
+course, but this was one of the big risk items on getting rustc up and 
+running, and we seem to be over the hump.
+
+  - I got the basics of objects and closures working in rustc, though 
+like parametric types, there remain many details to fill in.
+
+After some conversation on IRC I realized there wasn't quite enough 
+pubic visibility of the roadmap, nor instruction on what to do to 
+contribute. I apologize for falling behind on this. I've updated the 
+wiki with a more clearly-stated development roadmap[1] (I'd be thrilled 
+if this covered anything less than the remainder of 2011) and updated 
+the "Getting Started"[2] page and the README files embedded in the 
+source repository. Getting started now has some hints about things to do 
+on rustc. I'm now going through the issue tracker WONTFIX'ing the things 
+associated with "completing" features in rustboot and filing new issues 
+to cover feature work on rustc.
+
+Please let me know if you have time and are interested in helping out 
+getting rustc to bootstrap. It's mature enough at this point that 
+meaningful pieces can be broken off and attacked independently 
+(typically on a testcase-by-testcase basis). I'll post again when I have 
+the issue tracker brought up to date with some discrete 'easy'-sized 
+tasks for new contributors.
+
+-Graydon
+
+[1] https://github.com/graydon/rust/wiki/Roadmap
+[2] https://github.com/graydon/rust/wiki/Getting-started
+
+From graydon at mozilla.com  Thu Jan 27 16:08:30 2011
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 27 Jan 2011 16:08:30 -0800
+Subject: [rust-dev] Issue tracker updates
+Message-ID: <4D4208FE.7020009@mozilla.com>
+
+Hi,
+
+Along with being negligent on the roadmap sort of things, I fell behind 
+keeping the issue tracker updated. I've now gone through and WONTFIX'ed 
+anything unnecessary in rustboot, adjusted text of bugs that have 
+changed, closed those that have been fixed but not otherwise closed, 
+shifted bugs that apply equally to the two to rustc, and filed a bunch 
+of new feature work on rustc.
+
+If you want to focus on things required for bootstrapping (aside from 
+driving your work off the testsuite and/or 'make self'), take a look at 
+the bugs tagged [rustc] and [self]. Self in particular, since those are 
+the ones actually blocking self-compilation.
+
+-Graydon
+

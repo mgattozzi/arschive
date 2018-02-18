@@ -1,0 +1,206 @@
+From graydon at mozilla.com  Thu Jul 29 12:28:43 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 29 Jul 2010 12:28:43 -0700
+Subject: [rust-dev] test
+Message-ID: <4C51D66B.3060609@mozilla.com>
+
+hello.
+
+From graydon at mozilla.com  Thu Jul 29 18:57:04 2010
+From: graydon at mozilla.com (Graydon Hoare)
+Date: Thu, 29 Jul 2010 18:57:04 -0700
+Subject: [rust-dev] linkage
+Message-ID: <4C523170.6050005@mozilla.com>
+
+Hi,
+
+I wanted to go over some of the options facing us regarding the linkage 
+model in rust, and get feedback on people's different preferences. It 
+turns out this kind of thing effects a lot of code, in somewhat subtle ways.
+
+How Things Are Presently in rustboot:
+(warning: kinda surprising)
+
+   - All code is compiled PIC.
+     - There are no relocs.
+     - Actual-pointers are derived programmatically.
+
+   - Object-file symbols are used only minimally.
+     - Symbols from libc.so and librustrt.so use normal
+       C ld.so-style dynamic linkage.
+     - On some platforms we emit local mangled symbols for rust items
+       and glue functions within a crate. These are just to help with
+       debugging. They serve no functional role.
+     - 'rust_crate' is the only extern symbol a crate exposes to ld.so.
+     - 'rust_crate' points to a descriptor that points
+       to the DWARF sections .debug_abbrev and .debug_info
+
+   - All further linkage is driven lazily by thunks inside a crate.
+     - Calling a native C library thunks to librustrt.so which calls
+       dlopen() and dlsym() on the C library, caches the result.
+     - Calling a 'use'd function in a rust library thunks to
+       librustrt.so which calls dlopen() on the C library, grabs
+       'rust_crate', crawls the DWARF to navigate the module structure,
+       and caches the result. Lookup is scoped to the crate's module
+       namespace, with the import prefix stripped off.
+
+   - Crate-dependency is acyclic. A crate can't depend on itself.
+
+   - We present an "SPI" for embeddings to use, on the theory that an
+     embedding might wish to load a rust crate in-process and spin up
+     a thread domain to interact with the environment. We funnel all
+     environment-interactions (logging, malloc/free, signals etc.)
+     through this SPI. Or we should. That's the aim anyway. At the moment
+     we don't always succeed.
+
+This scheme sounds a bit ad-hoc, but it's based on a few specific goals 
+and observations:
+
+   - The ability to refcount a crate (and everything we pull out of it)
+     such that it can be unloaded and a replacement reloaded at runtime.
+     Hot-reloading, in other words. Also REPL-ing and such.
+
+   - The ability to get type information -- including type abbreviations
+     imported at compile time -- out of a crate's DWARF without separate
+     'include' files or anything. We pull type info out of the same DWARF
+     we drive the linkage itself off. Figured there was no point
+     duplicating the information.
+
+   - Crates are acyclic *anyways* because I didn't want to permit
+     recursive type definitions crossing crate boundaries; module
+     systems that support separate compilation of mutually-recursive
+     types exist but they're pretty exotic and involve a lot of
+     machinery.
+
+Now, personally I like and am still interested in some aspects of this 
+model, but I realize there are a lot of pressures working against it and 
+it might be time to revisit. It has shortcomings and the goals might be 
+achieved differently. Here are some issues:
+
+   - This scheme means that the crate structure is the last word on the
+     runtime linkage boundaries. If you realize you actually want two
+     crates combined into a single loadable unit, you can't exactly
+     statically link or combine LLVM .bc files or anything. This is
+     solvable to some extent if you're combining a rust crate with
+     another rust crate (just include one .rc file in the other, should
+     work plus or minus some plumbing) but it won't get you far if you
+     want to inline a bunch of C code into rust by mixing LLVM .bc files.
+
+   - "Always having DWARF" is a nice side-effect of the existing scheme,
+     but the visual studio debugger doesn't speak DWARF. You have to use
+     gdb (or the forthcoming LLDB I guess) on win32. So not necessarily
+     as big a win as one might like. Same goes for win32 profilers and
+     such. At some point someone's going to want to be spitting out PDB.
+
+   - The crate refcounting and symbol-cache is an additional cost.
+     Probably not a huge one, but costs add up.
+
+   - DWARF doesn't generally provide hashed access to symbols; while
+     it *does* provide hierarchical name crawling, it's possible you'll
+     wind up with a linear search in a substantially-wide namespace at
+     some point during a symbol import. System linkers tend to hash or
+     even pre-assign ordinals. And use IAT/IDT or PLT tables, which
+     are smaller and probably faster than our thunks.
+
+   - DWARF is a little complex to parse at runtime. Currently the runtime
+     library has a partial DWARF reader and I'm less certain than I was
+     that "any equivalent encoding of the runtime type signatures would
+     be equally cumbersome". There might be simpler encodings.
+
+   - Hot-loading probably means waiting for a domain to shut down and
+     kill its type descriptor caches and such anyways, and may well not
+     work properly if there are native resources involved. Plus you
+     will have to be very particular about data-type and code-pointer
+     identities between the loading crate and the loaded crate. It might
+     be a bit of an imaginary feature, not worth fighting to preserve
+     in current form.
+
+   - It seems that LLVM is likely to consider DWARF "freely discardable"
+     as it runs its optimizations. We might be able to mark a subset of
+     the DWARF as non-discardable, or that may inhibit optimizations.
+     We don't actually know how well the existing scheme will transplant.
+
+   - The runtime library and the compiler have a bit of a "special
+     relationship" in two ways: the use of C symbols for linkage --
+     at least *something* special needs to happen for startup and for
+     pulling in the all-other-symbols routine that the thunks target --
+     and the fact that they know about one another's data structures (a
+     bunch of structure offsets and ABI details need to be kept in sync
+     between the two). Moving responsibilities between compiler, rust,
+     and C++ runtime-library code tends to carry a heavy tax in terms of
+     amount of maintenance work involved.
+
+So .. I've been talking to others about an alternative model. I'll 
+sketch it out here; there are obviously many details involved but I 
+thought I'd at least give a broad picture and see if anyone thinks it'd 
+be better:
+
+   - Let gas or someone else decide when PIC makes sense, and to write
+     our relocs for us when necessary.
+
+   - Use system linkage much more. We don't have overloaded names so we
+     don't *really* need mangled names for anything aside from glue; we
+     can just module-qualify user-provided names using "." as expected.
+
+   - Since symbols have no "global" cross-crate name in rust (the client
+     names the import-name root) we'd need to ensure two-level naming
+     (library -> symbol) works on all platforms. I *think* it does, but
+     it might be a bit of a challenge in some contexts (Anyone know what
+     to do on ELF, for example? GUID-prefix every name? This might sink
+     the whole idea).
+
+   - Give up on relying on DWARF. Use DWARF as much as we *can* on any
+     platform that supports it. emit PDB when and if we can on win32,
+     let LLVM discard what it needs to for the sake of optimization. Just
+     treat it as "debug info" as the name implies.
+
+   - Encode type signatures of crates using a custom encoding. Either
+     some kind of reflective system where the client calls into the
+     crate to make requests, or a fixed data structure it crawls, or
+     something. Make something minimal up to fit our needs.
+
+   - Give up on hot-reload in-process. Use the process-domain boundary
+     as the hot-reload boundary. Make runtime linkage effectively
+     "one way" like it typically is in C (you can dlclose(), but it's
+     unsafe, so .. generally don't).
+
+   - Possible: give up the concept of resource accounting at anything
+     less than a process-domain, use rlimits or such to enforce rather
+     than trying to funnel everything through an SPI (which won't catch
+     native resource consumption anyway).
+
+   - Possible: make a rust native-module ABI for C code in .bc files,
+     and teach the compiler to mix such LLVM bitcode into the crate it's
+     compiling. Modify the compiler to emit code in a more abstract form
+     consisting of lots of calls to runtime-library stuff that's known to
+     be inlined from C++-land (structure accesses, upcalls, glue and
+     such). Write more of the compiler support routines in C++, including
+     stuff that "has to run on the rust stack".
+
+   - Possible: permit compiling a crate to .bc so it can be "linked" to
+     another crate (with cross-crate inlining). Like, support this at a
+     compiler-driver level, as a different target flavour.
+
+I put the latter two points as "possible" because (a) it's not clear to 
+me that they'd work and (b) they'd definitely not work with the existing 
+x86 backend, or *any other* backend. We'd be quite wedded to LLVM if we 
+relied on those; it'd make (for example) compiling the standard library 
+with msvc or icc impossible, as we'd need parts of its LLVM bitcode 
+mixed into the compiler output. But we could perhaps adopt those last 
+two changes piecemeal, independent of the first several parts, once the 
+self-hosted compiler is far enough along that LLVM is always an assumed 
+part of the puzzle.
+
+Thoughts? Feelings? Such changes would involve a lot of shifting around 
+with potentially not-much visible or immediate gain, so would soak up a 
+lot of work; the implications would come later and be strangely 
+distributed (some performance improvements, some maintenance and 
+integration improvements, some improvements and also some degradations 
+in flexibility and portability..)
+
+I also don't exactly know whether ELF is going to provide anything 
+two-level-naming-ish to handle the proposed scenario. Any ideas on that? 
+Mach-o and PE both provide such a system, ELF doesn't seem to.
+
+-Graydon
+

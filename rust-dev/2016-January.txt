@@ -1,0 +1,461 @@
+From johan.tibell at gmail.com  Wed Jan 27 16:18:24 2016
+From: johan.tibell at gmail.com (Johan Tibell)
+Date: Wed, 27 Jan 2016 17:18:24 +0100
+Subject: [rust-dev] How are negative int/float literals handled during
+	lexing/parsing?
+Message-ID: <CAK-tuPYco=0Qx1_XQafWDAgsJyHBtY7yPcazreOnj-9NUS8W5g@mail.gmail.com>
+
+Hi!
+
+I'm trying to read the compiler code (mostly because I'm curious) and right
+now I'm trying to understand the handling of negative integer/float
+literals.
+
+In token.rs we have:
+
+    pub enum Lit {
+        ...
+        Integer(ast::Name),
+        Float(ast::Name),
+        ...
+    }
+
+So at this stage these literals are still just (interned) strings. In lexer/
+mod.rs we can see that the lexer doesn't consume any plus/minus sign, so
+the above tokens don't contain them.
+
+In ast.rs we have:
+
+    pub enum Expr_ {
+        ...
+        /// A literal (For example: `1u8`, `"foo"`)
+        ExprLit(P<Lit>),
+        ...
+    }
+
+    pub enum Lit_ {
+        ...
+        /// An integer literal (`1u8`)
+        LitInt(u64, LitIntType),
+        /// A float literal (`1f64` or `1E10f64`)
+        LitFloat(InternedString, FloatTy),
+        /// A float literal without a suffix (`1.0 or 1.0E10`)
+        LitFloatUnsuffixed(InternedString),
+        ...
+    }
+
+    pub enum Sign {
+        Minus,
+        Plus
+    }
+
+    pub enum LitIntType {
+        SignedIntLit(IntTy, Sign),
+        UnsignedIntLit(UintTy),
+        UnsuffixedIntLit(Sign)
+    }
+
+I'd expect that somewhere in the code we'd construct e.g. an SignedIntLit
+with a Minus in it, but I cannot find a single place that does this after
+looking for all uses of ast::Minus ast::SignedIntLit, etc.
+
+So my question is, *since the sign isn't lexed together with the literal,
+how is it eventually added to the literal that's stored in in e.g.
+ast::LitInt?*
+
+-- Johan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20160127/1f942dce/attachment.html>
+
+From kennethadammiller at gmail.com  Wed Jan 27 16:41:42 2016
+From: kennethadammiller at gmail.com (Kenneth Adam Miller)
+Date: Wed, 27 Jan 2016 11:41:42 -0500
+Subject: [rust-dev] How are negative int/float literals handled during
+	lexing/parsing?
+In-Reply-To: <CAK-tuPYco=0Qx1_XQafWDAgsJyHBtY7yPcazreOnj-9NUS8W5g@mail.gmail.com>
+References: <CAK-tuPYco=0Qx1_XQafWDAgsJyHBtY7yPcazreOnj-9NUS8W5g@mail.gmail.com>
+Message-ID: <CAK7rcp8VpMA19yZf2+YhXzvzCbf=4geVc5y5Rx=jp3JYNKNX_A@mail.gmail.com>
+
+Hey,
+
+Without answering your question, I think you might be better off posting
+your question at reddit.com/r/rust because this mailing list has very low
+participation.
+
+On Wed, Jan 27, 2016 at 11:18 AM, Johan Tibell <johan.tibell at gmail.com>
+wrote:
+
+> Hi!
+>
+> I'm trying to read the compiler code (mostly because I'm curious) and
+> right now I'm trying to understand the handling of negative integer/float
+> literals.
+>
+> In token.rs we have:
+>
+>     pub enum Lit {
+>         ...
+>         Integer(ast::Name),
+>         Float(ast::Name),
+>         ...
+>     }
+>
+> So at this stage these literals are still just (interned) strings. In
+> lexer/mod.rs we can see that the lexer doesn't consume any plus/minus
+> sign, so the above tokens don't contain them.
+>
+> In ast.rs we have:
+>
+>     pub enum Expr_ {
+>         ...
+>         /// A literal (For example: `1u8`, `"foo"`)
+>         ExprLit(P<Lit>),
+>         ...
+>     }
+>
+>     pub enum Lit_ {
+>         ...
+>         /// An integer literal (`1u8`)
+>         LitInt(u64, LitIntType),
+>         /// A float literal (`1f64` or `1E10f64`)
+>         LitFloat(InternedString, FloatTy),
+>         /// A float literal without a suffix (`1.0 or 1.0E10`)
+>         LitFloatUnsuffixed(InternedString),
+>         ...
+>     }
+>
+>     pub enum Sign {
+>         Minus,
+>         Plus
+>     }
+>
+>     pub enum LitIntType {
+>         SignedIntLit(IntTy, Sign),
+>         UnsignedIntLit(UintTy),
+>         UnsuffixedIntLit(Sign)
+>     }
+>
+> I'd expect that somewhere in the code we'd construct e.g. an SignedIntLit
+> with a Minus in it, but I cannot find a single place that does this after
+> looking for all uses of ast::Minus ast::SignedIntLit, etc.
+>
+> So my question is, *since the sign isn't lexed together with the literal,
+> how is it eventually added to the literal that's stored in in e.g.
+> ast::LitInt?*
+>
+> -- Johan
+>
+>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20160127/dd9b27f1/attachment.html>
+
+From starbuck at modwiz.com  Wed Jan 27 16:42:53 2016
+From: starbuck at modwiz.com (Starbuck Johnson)
+Date: Wed, 27 Jan 2016 16:42:53 +0000
+Subject: [rust-dev] How are negative int/float literals handled during
+	lexing/parsing?
+In-Reply-To: <CAK7rcp8VpMA19yZf2+YhXzvzCbf=4geVc5y5Rx=jp3JYNKNX_A@mail.gmail.com>
+References: <CAK-tuPYco=0Qx1_XQafWDAgsJyHBtY7yPcazreOnj-9NUS8W5g@mail.gmail.com>
+	<CAK7rcp8VpMA19yZf2+YhXzvzCbf=4geVc5y5Rx=jp3JYNKNX_A@mail.gmail.com>
+Message-ID: <CAPeFTMmmMLivgu7fVpUya9f1c4oVh4a9BtjKnEeRwO+hGBM=ZQ@mail.gmail.com>
+
+If you do make a post please post the link to the mailing list. I would
+like to know the answer to this question too.
+
+On Wed, Jan 27, 2016, 10:41 AM Kenneth Adam Miller <
+kennethadammiller at gmail.com> wrote:
+
+> Hey,
+>
+> Without answering your question, I think you might be better off posting
+> your question at reddit.com/r/rust because this mailing list has very low
+> participation.
+>
+> On Wed, Jan 27, 2016 at 11:18 AM, Johan Tibell <johan.tibell at gmail.com>
+> wrote:
+>
+>> Hi!
+>>
+>> I'm trying to read the compiler code (mostly because I'm curious) and
+>> right now I'm trying to understand the handling of negative integer/float
+>> literals.
+>>
+>> In token.rs we have:
+>>
+>>     pub enum Lit {
+>>         ...
+>>         Integer(ast::Name),
+>>         Float(ast::Name),
+>>         ...
+>>     }
+>>
+>> So at this stage these literals are still just (interned) strings. In
+>> lexer/mod.rs we can see that the lexer doesn't consume any plus/minus
+>> sign, so the above tokens don't contain them.
+>>
+>> In ast.rs we have:
+>>
+>>     pub enum Expr_ {
+>>         ...
+>>         /// A literal (For example: `1u8`, `"foo"`)
+>>         ExprLit(P<Lit>),
+>>         ...
+>>     }
+>>
+>>     pub enum Lit_ {
+>>         ...
+>>         /// An integer literal (`1u8`)
+>>         LitInt(u64, LitIntType),
+>>         /// A float literal (`1f64` or `1E10f64`)
+>>         LitFloat(InternedString, FloatTy),
+>>         /// A float literal without a suffix (`1.0 or 1.0E10`)
+>>         LitFloatUnsuffixed(InternedString),
+>>         ...
+>>     }
+>>
+>>     pub enum Sign {
+>>         Minus,
+>>         Plus
+>>     }
+>>
+>>     pub enum LitIntType {
+>>         SignedIntLit(IntTy, Sign),
+>>         UnsignedIntLit(UintTy),
+>>         UnsuffixedIntLit(Sign)
+>>     }
+>>
+>> I'd expect that somewhere in the code we'd construct e.g. an SignedIntLit
+>> with a Minus in it, but I cannot find a single place that does this after
+>> looking for all uses of ast::Minus ast::SignedIntLit, etc.
+>>
+>> So my question is, *since the sign isn't lexed together with the
+>> literal, how is it eventually added to the literal that's stored in in e.g.
+>> ast::LitInt?*
+>>
+>> -- Johan
+>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+> _______________________________________________
+> Rust-dev mailing list
+> Rust-dev at mozilla.org
+> https://mail.mozilla.org/listinfo/rust-dev
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20160127/7317712a/attachment.html>
+
+From johan.tibell at gmail.com  Wed Jan 27 16:43:24 2016
+From: johan.tibell at gmail.com (Johan Tibell)
+Date: Wed, 27 Jan 2016 17:43:24 +0100
+Subject: [rust-dev] How are negative int/float literals handled during
+	lexing/parsing?
+In-Reply-To: <CAK7rcp8VpMA19yZf2+YhXzvzCbf=4geVc5y5Rx=jp3JYNKNX_A@mail.gmail.com>
+References: <CAK-tuPYco=0Qx1_XQafWDAgsJyHBtY7yPcazreOnj-9NUS8W5g@mail.gmail.com>
+	<CAK7rcp8VpMA19yZf2+YhXzvzCbf=4geVc5y5Rx=jp3JYNKNX_A@mail.gmail.com>
+Message-ID: <CAK-tuPZGGE+iuc=nZTq_BmRns46X1Q+9UXANhdQr0uEiZfmDuQ@mail.gmail.com>
+
+I posted it to http://discuss.rust-lang.org/. Thanks!
+
+On Wed, Jan 27, 2016 at 5:41 PM, Kenneth Adam Miller <
+kennethadammiller at gmail.com> wrote:
+
+> Hey,
+>
+> Without answering your question, I think you might be better off posting
+> your question at reddit.com/r/rust because this mailing list has very low
+> participation.
+>
+> On Wed, Jan 27, 2016 at 11:18 AM, Johan Tibell <johan.tibell at gmail.com>
+> wrote:
+>
+>> Hi!
+>>
+>> I'm trying to read the compiler code (mostly because I'm curious) and
+>> right now I'm trying to understand the handling of negative integer/float
+>> literals.
+>>
+>> In token.rs we have:
+>>
+>>     pub enum Lit {
+>>         ...
+>>         Integer(ast::Name),
+>>         Float(ast::Name),
+>>         ...
+>>     }
+>>
+>> So at this stage these literals are still just (interned) strings. In
+>> lexer/mod.rs we can see that the lexer doesn't consume any plus/minus
+>> sign, so the above tokens don't contain them.
+>>
+>> In ast.rs we have:
+>>
+>>     pub enum Expr_ {
+>>         ...
+>>         /// A literal (For example: `1u8`, `"foo"`)
+>>         ExprLit(P<Lit>),
+>>         ...
+>>     }
+>>
+>>     pub enum Lit_ {
+>>         ...
+>>         /// An integer literal (`1u8`)
+>>         LitInt(u64, LitIntType),
+>>         /// A float literal (`1f64` or `1E10f64`)
+>>         LitFloat(InternedString, FloatTy),
+>>         /// A float literal without a suffix (`1.0 or 1.0E10`)
+>>         LitFloatUnsuffixed(InternedString),
+>>         ...
+>>     }
+>>
+>>     pub enum Sign {
+>>         Minus,
+>>         Plus
+>>     }
+>>
+>>     pub enum LitIntType {
+>>         SignedIntLit(IntTy, Sign),
+>>         UnsignedIntLit(UintTy),
+>>         UnsuffixedIntLit(Sign)
+>>     }
+>>
+>> I'd expect that somewhere in the code we'd construct e.g. an SignedIntLit
+>> with a Minus in it, but I cannot find a single place that does this after
+>> looking for all uses of ast::Minus ast::SignedIntLit, etc.
+>>
+>> So my question is, *since the sign isn't lexed together with the
+>> literal, how is it eventually added to the literal that's stored in in e.g.
+>> ast::LitInt?*
+>>
+>> -- Johan
+>>
+>>
+>> _______________________________________________
+>> Rust-dev mailing list
+>> Rust-dev at mozilla.org
+>> https://mail.mozilla.org/listinfo/rust-dev
+>>
+>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20160127/c953a511/attachment.html>
+
+From johan.tibell at gmail.com  Wed Jan 27 16:43:53 2016
+From: johan.tibell at gmail.com (Johan Tibell)
+Date: Wed, 27 Jan 2016 17:43:53 +0100
+Subject: [rust-dev] How are negative int/float literals handled during
+	lexing/parsing?
+In-Reply-To: <CAK-tuPZGGE+iuc=nZTq_BmRns46X1Q+9UXANhdQr0uEiZfmDuQ@mail.gmail.com>
+References: <CAK-tuPYco=0Qx1_XQafWDAgsJyHBtY7yPcazreOnj-9NUS8W5g@mail.gmail.com>
+	<CAK7rcp8VpMA19yZf2+YhXzvzCbf=4geVc5y5Rx=jp3JYNKNX_A@mail.gmail.com>
+	<CAK-tuPZGGE+iuc=nZTq_BmRns46X1Q+9UXANhdQr0uEiZfmDuQ@mail.gmail.com>
+Message-ID: <CAK-tuPYu4OE4NWgOEC5TOZTCGGbdMRZ=hDXMkBpu0r5pST-LRg@mail.gmail.com>
+
+Posted move to
+http://internals.rust-lang.org/t/how-are-negative-int-float-literals-handled-during-lexing-parsing/3120
+as per this mailing list's auto reply instructions.
+
+On Wed, Jan 27, 2016 at 5:43 PM, Johan Tibell <johan.tibell at gmail.com>
+wrote:
+
+> I posted it to http://discuss.rust-lang.org/. Thanks!
+>
+> On Wed, Jan 27, 2016 at 5:41 PM, Kenneth Adam Miller <
+> kennethadammiller at gmail.com> wrote:
+>
+>> Hey,
+>>
+>> Without answering your question, I think you might be better off posting
+>> your question at reddit.com/r/rust because this mailing list has very
+>> low participation.
+>>
+>> On Wed, Jan 27, 2016 at 11:18 AM, Johan Tibell <johan.tibell at gmail.com>
+>> wrote:
+>>
+>>> Hi!
+>>>
+>>> I'm trying to read the compiler code (mostly because I'm curious) and
+>>> right now I'm trying to understand the handling of negative integer/float
+>>> literals.
+>>>
+>>> In token.rs we have:
+>>>
+>>>     pub enum Lit {
+>>>         ...
+>>>         Integer(ast::Name),
+>>>         Float(ast::Name),
+>>>         ...
+>>>     }
+>>>
+>>> So at this stage these literals are still just (interned) strings. In
+>>> lexer/mod.rs we can see that the lexer doesn't consume any plus/minus
+>>> sign, so the above tokens don't contain them.
+>>>
+>>> In ast.rs we have:
+>>>
+>>>     pub enum Expr_ {
+>>>         ...
+>>>         /// A literal (For example: `1u8`, `"foo"`)
+>>>         ExprLit(P<Lit>),
+>>>         ...
+>>>     }
+>>>
+>>>     pub enum Lit_ {
+>>>         ...
+>>>         /// An integer literal (`1u8`)
+>>>         LitInt(u64, LitIntType),
+>>>         /// A float literal (`1f64` or `1E10f64`)
+>>>         LitFloat(InternedString, FloatTy),
+>>>         /// A float literal without a suffix (`1.0 or 1.0E10`)
+>>>         LitFloatUnsuffixed(InternedString),
+>>>         ...
+>>>     }
+>>>
+>>>     pub enum Sign {
+>>>         Minus,
+>>>         Plus
+>>>     }
+>>>
+>>>     pub enum LitIntType {
+>>>         SignedIntLit(IntTy, Sign),
+>>>         UnsignedIntLit(UintTy),
+>>>         UnsuffixedIntLit(Sign)
+>>>     }
+>>>
+>>> I'd expect that somewhere in the code we'd construct e.g. an
+>>> SignedIntLit with a Minus in it, but I cannot find a single place that does
+>>> this after looking for all uses of ast::Minus ast::SignedIntLit, etc.
+>>>
+>>> So my question is, *since the sign isn't lexed together with the
+>>> literal, how is it eventually added to the literal that's stored in in e.g.
+>>> ast::LitInt?*
+>>>
+>>> -- Johan
+>>>
+>>>
+>>> _______________________________________________
+>>> Rust-dev mailing list
+>>> Rust-dev at mozilla.org
+>>> https://mail.mozilla.org/listinfo/rust-dev
+>>>
+>>>
+>>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mail.mozilla.org/pipermail/rust-dev/attachments/20160127/5c8fad11/attachment.html>
+
