@@ -3,7 +3,7 @@ language: rust
 os:
   - linux
 rust:
-  - stable
+  - nightly
 script:
 - cargo build
 - cargo test
