@@ -1,6 +1,6 @@
 FROM rustlang/rust:nightly
 
-EXPOSE 8080
+EXPOSE 80
 WORKDIR /usr/src/arschive
 COPY . .
 RUN cargo install
