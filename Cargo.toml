@@ -1,5 +1,5 @@
 [package]
-name = "arschive"
+name = "chronicle_rs"
 version = "0.1.0"
 authors = ["Michael Gattozzi <mgattozzi@gmail.com>"]
 description = "Documenting and archiving Rust's history and community"

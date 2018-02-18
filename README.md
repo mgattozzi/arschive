@@ -1,4 +1,4 @@
-# arschive
+# chronicle.rs
 
 The code that powers the site documenting Rust's history.
 
