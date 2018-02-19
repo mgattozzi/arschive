@@ -20,6 +20,7 @@ fn main() {
                 index,
                 mailing_list,
                 contact,
+                well_known,
                 // Info page handlers
                 mailing_list_item,
                 // Handlers to get the site working
@@ -44,6 +45,12 @@ fn mailing_list() -> Option<Template> {
 #[get("/contact")]
 fn contact() -> Option<Template> {
     Some(Template::render("contact", Nav::new(2)))
+}
+
+// Needed to generate ssl certs
+#[get("/.well-known/<file..>")]
+fn well_known(file: PathBuf) -> Option<NamedFile>{
+    NamedFile::open(Path::new(".well-known").join(file)).ok()
 }
 
 // Calls for non navbar pages but still contain data to look at
