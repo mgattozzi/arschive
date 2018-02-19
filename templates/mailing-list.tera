@@ -1,0 +1,223 @@
+{% extends "base" %}
+{% block content %}
+<div>
+  <h1>rust-dev Mailing Lists</h1>
+    <p>
+      Below are all the mailing lists from rust-dev. They contain discussions for Rust and it's
+      development from before we had the Internals forum. Around the time of Rust 1.0 (May 2015) the
+      conversation shifted from the mailing list to there for discussion on Rust's development.
+      Ocasionally though the mailing list gets an email or two to this day, but is redirected to
+      where conversation now occurs
+    </p>
+    <ul>
+
+      <li><a href="/mailing-list/2010/July">
+        July 2010
+      </a></li>
+      <li><a href="/mailing-list/2010/August">
+        August 2010
+      </a></li>
+      <li><a href="/mailing-list/2010/September">
+        September 2010
+      </a></li>
+      <li><a href="/mailing-list/2010/October">
+        October 2010
+      </a></li>
+      <li><a href="/mailing-list/2010/November">
+        November 2010
+      </a></li>
+      <li><a href="/mailing-list/2010/December">
+        December 2010
+      </a></li>
+
+      <li><a href="/mailing-list/2011/January">
+        January 2011
+      </a></li>
+      <li><a href="/mailing-list/2011/February">
+        February 2011
+      </a></li>
+      <li><a href="/mailing-list/2011/March">
+        March 2011
+      </a></li>
+      <li><a href="/mailing-list/2011/April">
+        April 2011
+      </a></li>
+      <li><a href="/mailing-list/2011/May">
+        May 2011
+      </a></li>
+      <li><a href="/mailing-list/2011/June">
+        June 2011
+      </a></li>
+      <li><a href="/mailing-list/2011/July">
+        July 2011
+      </a></li>
+      <li><a href="/mailing-list/2011/August">
+        August 2011
+      </a></li>
+      <li><a href="/mailing-list/2011/September">
+        September 2011
+      </a></li>
+      <li><a href="/mailing-list/2011/October">
+        October 2011
+      </a></li>
+      <li><a href="/mailing-list/2011/November">
+        November 2011
+      </a></li>
+      <li><a href="/mailing-list/2011/December">
+        December 2011
+      </a></li>
+
+      <li><a href="/mailing-list/2012/January">
+        January 2012
+      </a></li>
+      <li><a href="/mailing-list/2012/February">
+        February 2012
+      </a></li>
+      <li><a href="/mailing-list/2012/March">
+        March 2012
+      </a></li>
+      <li><a href="/mailing-list/2012/April">
+        April 2012
+      </a></li>
+      <li><a href="/mailing-list/2012/May">
+        May 2012
+      </a></li>
+      <li><a href="/mailing-list/2012/June">
+        June 2012
+      </a></li>
+      <li><a href="/mailing-list/2012/July">
+        July 2012
+      </a></li>
+      <li><a href="/mailing-list/2012/August">
+        August 2012
+      </a></li>
+      <li><a href="/mailing-list/2012/September">
+        September 2012
+      </a></li>
+      <li><a href="/mailing-list/2012/October">
+        October 2012
+      </a></li>
+      <li><a href="/mailing-list/2012/November">
+        November 2012
+      </a></li>
+      <li><a href="/mailing-list/2012/December">
+        December 2012
+      </a></li>
+
+      <li><a href="/mailing-list/2013/January">
+        January 2013
+      </a></li>
+      <li><a href="/mailing-list/2013/February">
+        February 2013
+      </a></li>
+      <li><a href="/mailing-list/2013/March">
+        March 2013
+      </a></li>
+      <li><a href="/mailing-list/2013/April">
+        April 2013
+      </a></li>
+      <li><a href="/mailing-list/2013/May">
+        May 2013
+      </a></li>
+      <li><a href="/mailing-list/2013/June">
+        June 2013
+      </a></li>
+      <li><a href="/mailing-list/2013/July">
+        July 2013
+      </a></li>
+      <li><a href="/mailing-list/2013/August">
+        August 2013
+      </a></li>
+      <li><a href="/mailing-list/2013/September">
+        September 2013
+      </a></li>
+      <li><a href="/mailing-list/2013/October">
+        October 2013
+      </a></li>
+      <li><a href="/mailing-list/2013/November">
+        November 2013
+      </a></li>
+      <li><a href="/mailing-list/2013/December">
+        December 2013
+      </a></li>
+
+      <li><a href="/mailing-list/2014/January">
+        January 2014
+      </a></li>
+      <li><a href="/mailing-list/2014/February">
+        February 2014
+      </a></li>
+      <li><a href="/mailing-list/2014/March">
+        March 2014
+      </a></li>
+      <li><a href="/mailing-list/2014/April">
+        April 2014
+      </a></li>
+      <li><a href="/mailing-list/2014/May">
+        May 2014
+      </a></li>
+      <li><a href="/mailing-list/2014/June">
+        June 2014
+      </a></li>
+      <li><a href="/mailing-list/2014/July">
+        July 2014
+      </a></li>
+      <li><a href="/mailing-list/2014/August">
+        August 2014
+      </a></li>
+      <li><a href="/mailing-list/2014/September">
+        September 2014
+      </a></li>
+      <li><a href="/mailing-list/2014/October">
+        October 2014
+      </a></li>
+      <li><a href="/mailing-list/2014/November">
+        November 2014
+      </a></li>
+      <li><a href="/mailing-list/2014/December">
+        December 2014
+      </a></li>
+
+      <li><a href="/mailing-list/2015/January">
+        January 2015
+      </a></li>
+      <li><a href="/mailing-list/2015/February">
+        February 2015
+      </a></li>
+      <li><a href="/mailing-list/2015/April">
+        April 2015
+      </a></li>
+      <li><a href="/mailing-list/2015/May">
+        May 2015
+      </a></li>
+      <li><a href="/mailing-list/2015/August">
+        August 2015
+      </a></li>
+      <li><a href="/mailing-list/2015/September">
+        September 2015
+      </a></li>
+      <li><a href="/mailing-list/2015/November">
+        November 2015
+      </a></li>
+
+      <li><a href="/mailing-list/2016/January">
+        January 2016
+      </a></li>
+      <li><a href="/mailing-list/2016/March">
+        March 2016
+      </a></li>
+
+      <li><a href="/mailing-list/2017/October">
+        October 2017
+      </a></li>
+      <li><a href="/mailing-list/2017/December">
+        December 2017
+      </a></li>
+
+      <li><a href="/mailing-list/2018/January">
+        January 2018
+      </a></li>
+
+    </ul>
+</div>
+{% endblock content %}

@@ -1,0 +1,66 @@
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>chronicle.rs</title>
+
+  <!-- Scale Properly for devices -->
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+
+  <!-- Latest compiled and minified CSS -->
+  <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/css/bootstrap-theme.min.css">
+  <link rel="stylesheet" href="/static/css/base.css"></link>
+  <script src="/static/js/jquery.min.js"></script>
+  <script src="/static/js/bootstrap.min.js"></script>
+</head>
+<header>
+  <nav class="navbar navbar-default">
+    <div class="container-fluid">
+      <div class="navbar-header">
+          <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#nav-top-data">
+            <span class="sr-only">Toggle navigation</span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </button>
+          <a href="/" class="navbar-brand">chronicle.rs</a>
+      </div>
+      <div class="collapse navbar-collapse" id="nav-top-data">
+          <ul class="nav navbar-nav">
+            <li>
+              <a href="/mailing-list" active-class="active">
+              {% if url == 1 %}
+                <div class="glyphicon glyphicon-envelope selected"></div>
+                <div class="nav-bar-text selected">
+              {% else %}
+                <div class="glyphicon glyphicon-envelope"></div>
+                <div class="nav-bar-text">
+              {% endif %}
+                  &nbsp;Mailing List
+                </div>
+              </a>
+            </li>
+            <li>
+              <a href="/contact" active-class="active">
+              {% if url == 2 %}
+                <div class="glyphicon glyphicon-pencil selected"></div>
+                <div class="nav-bar-text selected">
+              {% else %}
+                <div class="glyphicon glyphicon-pencil"></div>
+                <div class="nav-bar-text">
+              {% endif %}
+                      &nbsp;Contact
+                </div>
+              </a>
+            </li>
+          </ul>
+      </div>
+    </div>
+  </nav>
+</header>
+<body>
+  <div class="content">
+    {% block content %}
+    {% endblock content %}
+  </div>
+</body>

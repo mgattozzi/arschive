@@ -1,0 +1,6 @@
+{% extends "base" %}
+{% block content %}
+  <div class="mailing-list-item">
+  {{ data }}
+  </div>
+{% endblock content %}

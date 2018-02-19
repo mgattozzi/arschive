@@ -1,0 +1,29 @@
+{% extends "base" %}
+{% block content %}
+<div>
+  <p>
+    Welcome! In this day and age history on the web comes and goes quickly. We don't think much
+    about how comments and discussion around things shapes decisions. Some things don't even happen
+    online and important decisions are made offline. Programming language communities are the same.
+    They come and they go, but the people who make it shape it's culture, community, and code. Rust
+    is no different. In an effort to preserve the here and now, as well as what has already come
+    before, this site will collect all of that for others to look at and learn from. In general this
+    means:
+  </p>
+  <ul>
+    <li> We'll try to get interviews with those in the community as a primary source </li>
+    <li> We'll chronicle existing sources of text such as git repos and issues</li>
+    <li> We'll chronicle RFCs and the discussions surrounding them</li>
+    <li> We'll chronicle jokes and all the conversations that happen in "unofficial" places</li>
+    <li> We'll chronicle big events as they occur and document previous ones </li>
+    <li> We'll chronicle interesting things and provide articles like, "Why are libraries named
+         crates?"
+    </li>
+  </ul>
+  <p>
+    This and more will be the main goal of this site. To preserve the fleeting moments of now for
+    future users, to answer the interesting questions of why certain things were done, and as a
+    way for people to learn from it.
+  </p>
+</div>
+{% endblock content %}
