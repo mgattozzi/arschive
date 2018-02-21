@@ -1,3 +1,20 @@
+html {
+  height: 100%;
+  box-sizing: border-box;
+}
+*,
+*:before,
+*:after {
+  box-sizing: inherit;
+}
+
+body {
+  position: relative;
+  margin: 0;
+  padding-bottom: 6rem;
+  min-height: 100%;
+}
+
 blockquote {
   background: #f9f9f9;
   border-left: 10px solid #FF0000;
@@ -56,4 +73,18 @@ blockquote p {
 .mailing-list-item {
   font-family: Helvetica,Arial, sans-serif;
   white-space: pre-wrap;
+}
+
+.footer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 1rem;
+  background-color:#efefef;
+  text-align: center;
+}
+
+.clever-cloud {
+  max-height: 22px;
 }
