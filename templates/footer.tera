@@ -1,0 +1,7 @@
+{# Footers for the entire site #}
+<footer class="footer">
+  Proudly hosted on
+  <a href="https://clever-cloud.com">
+    <img src="/static/images/clever-cloud.svg" class="clever-cloud">
+  </a>
+</footer>
