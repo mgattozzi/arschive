@@ -1,14 +1,28 @@
 {% extends "base" %}
 {% block content %}
-<div>
+<article>
   <p>
-    Welcome! In this day and age history on the web comes and goes quickly. We don't think much
+    <img src="/static/images/logo.svg" alt="chronicle.rs logo" class="logo" />
+  </p>
+  <h1>
+    Welcome to Chronicle.rs!
+  </h1>
+  <p class="subtitle">
+    In this day and age history on the web comes and goes quickly.
+  </p>
+  <p>
+    We don't think much
     about how comments and discussion around things shapes decisions. Some things don't even happen
-    online and important decisions are made offline. Programming language communities are the same.
+    online and important decisions are made offline.
+  </p>
+  <p>
+    Programming language communities are the same.
     They come and they go, but the people who make it shape it's culture, community, and code. Rust
     is no different. In an effort to preserve the here and now, as well as what has already come
-    before, this site will collect all of that for others to look at and learn from. In general this
-    means:
+    before, this site will collect all of that for others to look at and learn from.
+  </p>
+  <p>
+    In general this means:
   </p>
   <ul>
     <li> We'll try to get interviews with those in the community as a primary source </li>
@@ -25,5 +39,5 @@
     future users, to answer the interesting questions of why certain things were done, and as a
     way for people to learn from it.
   </p>
-</div>
+</article>
 {% endblock content %}
