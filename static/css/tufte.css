@@ -28,7 +28,8 @@
              font-style: normal; }
 
 /* Tufte CSS styles */
-html { font-size: 15px; background-color: #fffff8; }
+html { font-size: 15px; }
+body { background-color: #fffff8; }
 
 main { width: 87.5%;
        margin-left: auto;
