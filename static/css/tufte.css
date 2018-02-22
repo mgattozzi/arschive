@@ -32,12 +32,12 @@ html { font-size: 15px; }
 body { background-color: #fffff8; }
 
 main { width: 87.5%;
+       max-width: 44em;
        margin-left: auto;
        margin-right: auto;
        font-family: et-book, Palatino, "Palatino Linotype", "Palatino LT STD", "Book Antiqua", Georgia, serif;
        font-size: 18px;
        color: #111;
-       max-width: 1400px;
        counter-reset: sidenote-counter; }
 
 main h1 { font-weight: 400;
