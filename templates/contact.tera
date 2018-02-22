@@ -1,7 +1,7 @@
 {% extends "base" %}
 {% block content %}
 <div>
-  There are a couple of different ways you can reach out to provide material or ask questions:
+  <p>There are a couple of different ways you can reach out to provide material or ask questions:</p>
   <ul>
     <li>Email:
       <a href="mailto:michael@gattozzi.com" target="_top"> mgattozzi@gmail.com</a>
@@ -11,9 +11,11 @@
     <li><a href="https://github.com/mgattozzi/chronicle.rs">chronicle.rs GitHub Repo</a></li>
   </ul>
 
+  <p>
   If you need to contact me securely you can use my public PGP key
   to encrypt your message. You can find it and proofs of my identity
   on keybase.io <a href="https://keybase.io/mgattozzi">here</a>.
+  </p>
   <pre class="center-block pgp"><code class="pgp">
 -----BEGIN PGP PUBLIC KEY BLOCK-----
 

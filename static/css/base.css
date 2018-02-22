@@ -15,27 +15,6 @@ body {
   min-height: 100%;
 }
 
-blockquote {
-  background: #f9f9f9;
-  border-left: 10px solid #FF0000;
-  margin: 1.5em 10px;
-  padding: 0.5em 10px;
-  quotes: "\201C""\201D""\2018""\2019";
-}
-
-blockquote:before {
-  color: #ccc;
-  content: open-quote;
-  font-size: 4em;
-  line-height: 0.1em;
-  margin-right: 0.25em;
-  vertical-align: -0.4em;
-}
-
-blockquote p {
-  display: inline;
-}
-
 .navbar-nav > li > a {
   max-height: 129px;
 }
@@ -47,14 +26,8 @@ blockquote p {
 }
 
 .content {
-  font-family: Georgia, Serif;
-  line-height 1.5;
   hyphens: auto;
-  webkit-hyphens: auto;
-  font-size: 16px;
-  max-width: 44em;
-  margin: 0 auto;
-  padding: 0 1em;
+  -webkit-hyphens: auto;
 }
 
 .pgp {
@@ -71,7 +44,7 @@ blockquote p {
 }
 
 .mailing-list-item {
-  font-family: Helvetica,Arial, sans-serif;
+  font-size: 18px;
   white-space: pre-wrap;
 }
 
@@ -87,4 +60,10 @@ blockquote p {
 
 .clever-cloud {
   max-height: 22px;
+}
+
+main .logo {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
 }
