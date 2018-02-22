@@ -2,6 +2,8 @@
 
 The code that powers the site documenting Rust's history.
 
+![](static/images/logo.svg)
+
 ## Contributing
 See [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
 
