@@ -7,7 +7,9 @@
           <span class="icon-bar"></span>
           <span class="icon-bar"></span>
         </button>
-        <a href="/" class="navbar-brand">chronicle.rs</a>
+        <a href="/" class="navbar-brand">
+          <img src="/static/images/chronicle-rs.svg" alt="chronicle.rs" />
+        </a>
     </div>
     <div class="collapse navbar-collapse" id="nav-top-data">
         <ul class="nav navbar-nav">
