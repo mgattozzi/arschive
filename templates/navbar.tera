@@ -39,6 +39,19 @@
               </div>
             </a>
           </li>
+          <li>
+            <a href="/stories" active-class="active">
+              {% if url == 3 %}
+              <div class="glyphicon glyphicon-book selected"></div>
+              <div class="nav-bar-text selected">
+              {% else %}
+              <div class="glyphicon glyphicon-book"></div>
+              <div class="nav-bar-text">
+              {% endif %}
+                &nbsp;Stories
+              </div>
+            </a>
+          </li>
         </ul>
     </div>
   </div>

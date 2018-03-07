@@ -1,0 +1,20 @@
+{% extends "base" %}
+{% block content %}
+<div>
+  <h1>Stories</h1>
+    <p>
+      Below are collections of stories from the people who were there themselves. Often collected
+      from various forums or comments, sometimes through asking, but they paint a bit more context
+      to things beyond the code they worked on and help provide context and insight to the decisions
+      made during the project's timeline, as well as the experiences of those working on it.
+    </p>
+    <ul>
+      <li><a href="/stories/why-do-we-have-a-coc">
+        Why do we have a Code of Conduct?
+      </a></li>
+      <li><a href="/stories/the-rust-books-history">
+        The Rust Book's History
+      </a></li>
+    </ul>
+</div>
+{% endblock content %}
