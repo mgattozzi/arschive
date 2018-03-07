@@ -2,10 +2,13 @@
 #![plugin(rocket_codegen)]
 
 #[macro_use] extern crate serde_derive;
-extern crate serde;
+
+extern crate comrak;
 extern crate rocket;
 extern crate rocket_contrib;
+extern crate serde;
 
+use comrak::{ ComrakOptions, markdown_to_html };
 use rocket::response::NamedFile;
 use rocket_contrib::Template;
 
@@ -17,12 +20,14 @@ fn main() {
     rocket::ignite()
            .mount("/", routes![
                 // Navbar handlers
+                contact,
                 index,
                 mailing_list,
-                contact,
+                stories,
                 well_known,
                 // Info page handlers
                 mailing_list_item,
+                stories_item,
                 // Handlers to get the site working
                 static_files,
                 // External API handlers
@@ -45,6 +50,24 @@ fn mailing_list() -> Option<Template> {
 #[get("/contact")]
 fn contact() -> Option<Template> {
     Some(Template::render("contact", Nav::new(2)))
+}
+
+#[get("/stories")]
+fn stories() -> Option<Template>{
+    Some(Template::render("stories", Nav::new(3)))
+}
+
+#[get("/stories/<file..>")]
+fn stories_item(mut file: PathBuf) -> Result<Template, Error>{
+    file.set_extension("md");
+    let file = Path::new("stories").join(file);
+    println!("{:?}", file);
+    let file = NamedFile::open(file)?;
+    let mut buffer = String::new();
+    let mut reader = BufReader::new(file);
+    reader.read_to_string(&mut buffer)?;
+    let story = Story::new(markdown_to_html(&buffer, &ComrakOptions::default()));
+    Ok(Template::render("stories-item", story))
 }
 
 // Needed to generate ssl certs
@@ -84,6 +107,18 @@ pub struct Nav {
 impl Nav {
     pub fn new(url: i32) -> Self {
         Self { url }
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct Story {
+    data: String,
+    url: i32,
+}
+
+impl Story {
+    pub fn new(data: String) -> Self {
+        Self { data, url: -1 }
     }
 }
 

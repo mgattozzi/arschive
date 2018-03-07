@@ -9,6 +9,7 @@ rocket = "*"
 rocket_codegen = "*"
 serde = "*"
 serde_derive = "*"
+comrak = "*"
 
 [dependencies.rocket_contrib]
 version = "*"
