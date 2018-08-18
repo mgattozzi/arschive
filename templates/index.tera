@@ -39,5 +39,10 @@
     future users, to answer the interesting questions of why certain things were done, and as a
     way for people to learn from it.
   </p>
+
+  <h2>We need your help!</h2>
+  <p>This is a big project and we can't do it alone! You can find out how to
+    help out by visiting our <a href="https://github.com/mgattozzi/chronicle.rs">GitHub repository</a>
+    and reading our <a href="https://github.com/mgattozzi/chronicle.rs/blob/master/CONTRIBUTING.md">contributing guide</a></p>
 </article>
 {% endblock content %}
