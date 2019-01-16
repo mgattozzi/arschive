@@ -1,16 +1,14 @@
-#![feature(plugin)]
-#![plugin(rocket_codegen)]
+#![feature(proc_macro_hygiene, decl_macro)]
 
 #[macro_use] extern crate serde_derive;
-
+#[macro_use] extern crate rocket;
 extern crate comrak;
-extern crate rocket;
 extern crate rocket_contrib;
 extern crate serde;
 
 use comrak::{ ComrakOptions, markdown_to_html };
 use rocket::response::NamedFile;
-use rocket_contrib::Template;
+use rocket_contrib::templates::Template;
 
 use std::io::{ BufReader, Error, Read };
 use std::path::{ Path, PathBuf };

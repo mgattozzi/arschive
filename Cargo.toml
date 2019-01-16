@@ -6,7 +6,6 @@ description = "Documenting and archiving Rust's history and community"
 
 [dependencies]
 rocket = "*"
-rocket_codegen = "*"
 serde = "*"
 serde_derive = "*"
 comrak = "*"
